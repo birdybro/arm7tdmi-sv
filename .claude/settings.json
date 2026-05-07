@@ -1,0 +1,6 @@
+{
+  "enabledPlugins": {
+    "learning-output-style@claude-plugins-official": true,
+    "explanatory-output-style@claude-plugins-official": true
+  }
+}
