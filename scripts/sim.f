@@ -11,6 +11,7 @@
 ../rtl/arm7tdmis_debug_pkg.sv
 
 ../rtl/datapath/arm7tdmis_regfile.sv
+../rtl/datapath/arm7tdmis_shifter.sv
 ../rtl/core/arm7tdmis_psr.sv
 ../rtl/core/arm7tdmis_reset_sync.sv
 
