@@ -1,30 +1,34 @@
 // 31-entry GPR bank with mode banking per TRM §2.7 / TASKS.md §3.
 //
-// Storage layout — flat 31-deep array; bank_index() maps (reg_num, mode) to
-// the right slot:
+// PC (r15) does NOT live in this module — it's owned by the integrating
+// core, which feeds its current value in via `pc_in`. Rationale: the
+// regfile has one write port; the core's writeback path is busy with the
+// instruction's Rd. If r15 were stored here, advancing PC on every
+// instruction would conflict with Rd writes for non-r15 destinations.
+// Keeping PC in the core lets `pc_q` advance independently while the
+// regfile write port commits Rd.
+//
+// Regfile responsibilities for r15:
+//   - Reads of reg_num=15 return `pc_in + offset` (8 in ARM, 4 in Thumb)
+//     — that's what software sees, two instructions ahead of the actual
+//     fetch address.
+//   - Writes with wa_addr=15 are NOT applied to internal storage; the
+//     `pc_written` output signals the core that this instruction wants
+//     to update PC, and the core updates its `pc_q` from `wa_data`.
+//
+// Storage layout for r0..r14 (with banking) is unchanged from §3:
 //
 //   [0..7]   r0..r7        always shared
 //   [8..12]  r8..r12       User/System/IRQ/SVC/ABT/UND view (FIQ uses 16..20)
 //   [13..14] r13_user, r14_user
-//   [15]     r15 (PC)
+//   [15]     unused        (was r15 — now in core; entry kept to avoid
+//                           reindexing bank_index)
 //   [16..20] r8_fiq..r12_fiq
 //   [21..22] r13_fiq, r14_fiq
 //   [23..24] r13_irq, r14_irq
 //   [25..26] r13_svc, r14_svc
 //   [27..28] r13_abt, r14_abt
 //   [29..30] r13_und, r14_und
-//
-// PC read offset: r15 reads return stored PC + (8 in ARM, 4 in Thumb), per
-// TRM §2.4 / instr_pkg PC_AHEAD_*. The stored PC is the actual fetch
-// address; the +offset reflects what software sees (two instructions ahead
-// because of the prefetch pipeline).
-//
-// PC write: any write to r15 raises pc_written this cycle so the pipeline
-// (§16) can flush + refill. PC update commits at the next clock edge.
-//
-// force_user_bank overrides the bank-select with User mode for both reads
-// and writes. Used by LDM with the ^ flag (§11) to access the User register
-// set from a privileged mode. Tie LOW for normal data-processing instructions.
 
 module arm7tdmis_regfile
     import arm7tdmis_types_pkg::*;
@@ -38,6 +42,9 @@ module arm7tdmis_regfile
     input  logic [4:0]  mode,
     input  logic        t_bit,
 
+    // Live PC value from the core, used for r15 reads
+    input  logic [31:0] pc_in,
+
     // Three read ports (Rn / Rm / Rs)
     input  logic [3:0]  ra_addr,
     input  logic [3:0]  rb_addr,
@@ -46,7 +53,8 @@ module arm7tdmis_regfile
     output logic [31:0] rb_data,
     output logic [31:0] rc_data,
 
-    // Write port
+    // Write port (commits Rd; r15 writes go to pc_written / pc_data
+    // for the core to consume rather than to internal storage)
     input  logic [3:0]  wa_addr,
     input  logic [31:0] wa_data,
     input  logic        wa_enable,
@@ -54,7 +62,7 @@ module arm7tdmis_regfile
     // Force-User-bank read/write (LDM ^ flag in §11)
     input  logic        force_user_bank,
 
-    // Raised when wa_enable && wa_addr==15. Pipeline flushes + refills.
+    // Raised when wa_enable && wa_addr==15 — instruction wants to write PC.
     output logic        pc_written
 );
 
@@ -95,7 +103,7 @@ module arm7tdmis_regfile
         input logic       t
     );
         if (r == 4'd15) begin
-            return regs[15] + pc_offset(t);
+            return pc_in + pc_offset(t);
         end else begin
             return regs[bank_index(r, effective_mode)];
         end
@@ -105,17 +113,24 @@ module arm7tdmis_regfile
     assign rb_data = read_with_offset(rb_addr, t_bit);
     assign rc_data = read_with_offset(rc_addr, t_bit);
 
-    // ---- Write port ----
+    // ---- Write port (suppressed for wa_addr=15 — PC lives in core) ----
     always_ff @(posedge CLK) begin
         if (CLKEN) begin
             if (!nRESET) begin
                 for (int i = 0; i < 31; i = i + 1) regs[i] <= 32'h0;
-            end else if (wa_enable) begin
+            end else if (wa_enable && wa_addr != 4'd15) begin
                 regs[bank_index(wa_addr, effective_mode)] <= wa_data;
             end
         end
     end
 
     assign pc_written = wa_enable && (wa_addr == 4'd15) && nRESET && CLKEN;
+
+    // Slot 15 is reserved by the bank layout but never read (r15 reads use
+    // pc_in) and never written (suppressed above). Drain it into a no-op
+    // so the linter doesn't flag the dead storage.
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire _unused_slot15 = &{1'b0, regs[15]};
+    /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule

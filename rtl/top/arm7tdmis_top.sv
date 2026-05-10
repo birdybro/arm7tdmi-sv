@@ -1,12 +1,11 @@
-// Top-level ARM7TDMI-S r4p3 port shell. Pin names match the TRM exactly
-// (uppercase, with lowercase `n` prefix for active-low signals) per
-// TASKS.md §1.4 and CLAUDE.md. Downstream tests, the ETM wrapper (§24),
-// and the scan wrapper (§25) all assume these names.
+// Top-level ARM7TDMI-S r4p3. Pin names match the TRM exactly per
+// TASKS.md §1.4 / CLAUDE.md so downstream tests, the ETM wrapper (§24),
+// and the scan wrapper (§25) all line up.
 //
-// At §1 this module is a port shell only: outputs tied to safe idle
-// defaults, inputs declared but unused. Real drivers replace the
-// defaults starting in §3 (programmer state) and roll forward through
-// the milestones.
+// At §7 the top instantiates a synchronized reset and the simple
+// non-pipelined core. Coprocessor (§19), debug (§22), JTAG (§23), and
+// ETM (§24) outputs are still tied to safe idle defaults — those
+// subsystems land in their own milestones.
 
 module arm7tdmis_top
     import arm7tdmis_bus_pkg::*;
@@ -22,7 +21,7 @@ module arm7tdmis_top
     input  logic        nFIQ,
     input  logic        ABORT,
 
-    // Memory bus (address-class signals lead the data cycle by one bus cycle)
+    // Memory bus
     output logic [31:0] ADDR,
     output logic        WRITE,
     output logic [1:0]  SIZE,
@@ -66,44 +65,57 @@ module arm7tdmis_top
     output logic        DMORE
 );
 
-    // ---- Memory bus: idle, post-reset shape ----
-    assign ADDR  = 32'h0;
-    assign WRITE = WRITE_READ;
-    assign SIZE  = 2'(SIZE_WORD);
-    assign PROT  = 2'(PROT_OPC_PRIV);   // privileged opcode fetch
-    assign LOCK  = LOCK_FREE;
-    assign TRANS = 2'(TRANS_I);         // idle until execution begins
-    assign WDATA = 32'h0;
+    // ---- Reset synchronizer (§4) ----
+    logic core_nreset;
+    arm7tdmis_reset_sync u_rst (
+        .CLK         (CLK),
+        .nRESET      (nRESET),
+        .core_nreset (core_nreset)
+    );
 
-    // ---- Coprocessor: no request, ARM state, active-low signals deasserted ----
+    // ---- Core (§7 — simple non-pipelined model) ----
+    arm7tdmis_core u_core (
+        .CLK       (CLK),
+        .CLKEN     (CLKEN),
+        .nRESET    (core_nreset),
+        .CFGBIGEND (CFGBIGEND),
+        .nIRQ      (nIRQ),
+        .nFIQ      (nFIQ),
+        .ABORT     (ABORT),
+        .ADDR      (ADDR),
+        .WRITE     (WRITE),
+        .SIZE      (SIZE),
+        .PROT      (PROT),
+        .LOCK      (LOCK),
+        .TRANS     (TRANS),
+        .WDATA     (WDATA),
+        .RDATA     (RDATA),
+        .DMORE     (DMORE)
+    );
+
+    // ---- Coprocessor: no external coprocessor (§19 / §30.19.5) ----
     assign CPnMREQ  = 1'b1;
     assign CPSEQ    = 1'b0;
-    assign CPnTRANS = 1'b1;             // privileged
+    assign CPnTRANS = 1'b1;
     assign CPnOPC   = 1'b1;
-    assign CPTBIT   = 1'b0;             // ARM state
-    assign CPnI     = 1'b1;             // not a coprocessor instruction
+    assign CPTBIT   = 1'b0;          // ARM state — Thumb support is §15
+    assign CPnI     = 1'b1;          // not a coprocessor instruction
 
-    // ---- Debug status ----
+    // ---- Debug status (idle until §22) ----
     assign DBGACK        = 1'b0;
-    assign DBGnEXEC      = 1'b1;        // HIGH = no instruction in Execute
+    assign DBGnEXEC      = 1'b1;     // active-low: HIGH = no instruction in EX
     assign DBGINSTRVALID = 1'b0;
     assign DBGRNG        = 2'b00;
     assign DBGCOMMTX     = 1'b0;
     assign DBGCOMMRX     = 1'b0;
 
-    // ---- JTAG TAP ----
+    // ---- JTAG TAP outputs (idle until §23) ----
     assign DBGTDO    = 1'b0;
-    assign DBGnTDOEN = 1'b1;            // HiZ until the TAP drives
+    assign DBGnTDOEN = 1'b1;          // HiZ until the TAP drives
 
-    // ---- LDM/STM continuation hint ----
-    assign DMORE = 1'b0;
-
-    // Inputs are intentionally unused at this milestone. Reduction-XOR them
-    // into a discarded wire to keep both the linter and a future grep happy.
-    // Remove this block once §3 starts wiring real logic.
+    // ---- Inputs not yet consumed (debug + JTAG, until §22 / §23) ----
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused_inputs = &{1'b0,
-        CLK, CLKEN, nRESET, CFGBIGEND, nIRQ, nFIQ, ABORT, RDATA,
         CPA, CPB,
         DBGEN, DBGRQ, DBGBREAK, DBGEXT,
         DBGTCKEN, DBGTMS, DBGTDI, DBGnTRST

@@ -26,6 +26,7 @@ module regfile_tb
     logic        nRESET;
     logic [4:0]  mode;
     logic        t_bit;
+    logic [31:0] pc_in;
     logic [3:0]  ra_addr, rb_addr, rc_addr, wa_addr;
     logic [31:0] ra_data, rb_data, rc_data, wa_data;
     logic        wa_enable;
@@ -77,6 +78,7 @@ module regfile_tb
         nRESET          = 1'b0;
         mode            = MODE_USER;
         t_bit           = 1'b0;
+        pc_in           = 32'h0;
         ra_addr         = 4'd0;
         rb_addr         = 4'd0;
         rc_addr         = 4'd0;
@@ -127,30 +129,32 @@ module regfile_tb
         @(negedge CLK);
         check32("r8 fiq", ra_data, 32'hDDDD0000);
 
-        // T5: PC read offset in ARM state (+8)
-        write_reg(4'd15, 32'h00001000, MODE_USER);
+        // T5: PC read offset in ARM state (+8). PC lives in the core,
+        //     fed in via pc_in; the regfile just adds the ARM/Thumb offset.
         @(negedge CLK);
-        mode = MODE_USER; t_bit = 1'b0; ra_addr = 4'd15;
+        mode = MODE_USER; t_bit = 1'b0; pc_in = 32'h00001000; ra_addr = 4'd15;
         @(negedge CLK);
-        check32("PC ARM", ra_data, 32'h00001008);
+        check32("PC ARM (+8)", ra_data, 32'h00001008);
 
         // T6: PC read offset in Thumb state (+4)
         @(negedge CLK);
         t_bit = 1'b1;
         @(negedge CLK);
-        check32("PC Thumb", ra_data, 32'h00001004);
+        check32("PC Thumb (+4)", ra_data, 32'h00001004);
 
-        // Reset Thumb bit so subsequent PC writes via write_reg behave as ARM
         @(negedge CLK);
         t_bit = 1'b0;
+        pc_in = 32'h0;
 
-        // T7: pc_written asserts during r15 write
+        // T7: pc_written asserts during a wa_addr=15 write — the regfile
+        //     does NOT update internal storage; the core consumes this
+        //     pulse to update its own pc_q. The instruction's wa_data
+        //     would be the new PC value.
         @(negedge CLK);
         wa_addr   = 4'd15;
         wa_data   = 32'h00002000;
         wa_enable = 1'b1;
         @(posedge CLK);
-        // Sample shortly after the rising edge
         #1;
         check1("pc_written", pc_written, 1'b1);
         @(negedge CLK);

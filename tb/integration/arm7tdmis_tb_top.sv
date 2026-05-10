@@ -161,14 +161,20 @@ module arm7tdmis_tb_top
         .inject_abort   (mem_inject_abort)
     );
 
-    // ---- Cycle counter (drives logger and timeout) ----
+    // ---- Cycle counter (drives logger and timeout). The reset_sync
+    //      module uses nRESET as an asynchronous flop reset, while we read
+    //      it here synchronously — Verilator flags this as a sync/async
+    //      mismatch on the same net. In the TB it's benign (nRESET is
+    //      driven procedurally, never crosses a real domain), so suppress.
     logic [63:0] cycle_count;
+    /* verilator lint_off SYNCASYNCNET */
     always_ff @(posedge CLK) begin
         if (CLKEN) begin
             if (!nRESET) cycle_count <= 64'h0;
             else         cycle_count <= cycle_count + 64'h1;
         end
     end
+    /* verilator lint_on SYNCASYNCNET */
 
     // ---- Bus / architectural assertions ----
     arm7tdmis_assertions u_assert (
@@ -223,6 +229,51 @@ module arm7tdmis_tb_top
         wait (nRESET);
         repeat (CYCLE_LIMIT) @(posedge CLK);
         $display("[tb] reached CYCLE_LIMIT (%0d cycles); finishing.", CYCLE_LIMIT);
+        $finish;
+    end
+
+    // ---- §7 smoke verification ----
+    int unsigned smoke_errors = 0;
+
+    initial begin
+        wait (nRESET);
+        @(posedge CLK);
+        $display("[smoke] mem[0..4] = %08x %08x %08x %08x %08x",
+                 u_mem.mem[0], u_mem.mem[1], u_mem.mem[2],
+                 u_mem.mem[3], u_mem.mem[4]);
+        repeat (30) @(posedge CLK);
+
+        if (u_dut.u_core.u_regfile.regs[0] !== 32'h00000005) begin
+            $display("[smoke] FAIL r0: expected 0x00000005, got %08x",
+                     u_dut.u_core.u_regfile.regs[0]);
+            smoke_errors = smoke_errors + 1;
+        end
+        if (u_dut.u_core.u_regfile.regs[1] !== 32'h00000007) begin
+            $display("[smoke] FAIL r1: expected 0x00000007, got %08x",
+                     u_dut.u_core.u_regfile.regs[1]);
+            smoke_errors = smoke_errors + 1;
+        end
+        if (u_dut.u_core.u_regfile.regs[2] !== 32'h000000FF) begin
+            $display("[smoke] FAIL r2: expected 0x000000FF, got %08x",
+                     u_dut.u_core.u_regfile.regs[2]);
+            smoke_errors = smoke_errors + 1;
+        end
+        if (u_dut.u_core.u_regfile.regs[3] !== 32'hFF000000) begin
+            $display("[smoke] FAIL r3: expected 0xFF000000, got %08x",
+                     u_dut.u_core.u_regfile.regs[3]);
+            smoke_errors = smoke_errors + 1;
+        end
+        if (u_dut.u_core.pc_q !== 32'h00000010) begin
+            $display("[smoke] FAIL pc_q: expected 0x00000010 (self-loop), got %08x",
+                     u_dut.u_core.pc_q);
+            smoke_errors = smoke_errors + 1;
+        end
+
+        if (smoke_errors == 0) begin
+            $display("[smoke] PASS");
+        end else begin
+            $display("[smoke] FAIL (%0d errors)", smoke_errors);
+        end
         $finish;
     end
 
