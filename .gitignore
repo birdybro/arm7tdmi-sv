@@ -1,0 +1,16 @@
+# Verilator build output
+obj_dir/
+
+# Simulation artifacts
+*.fst
+*.fst.hier
+*.vcd
+*.csv
+*.log
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
