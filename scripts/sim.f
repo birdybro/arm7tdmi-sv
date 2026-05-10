@@ -13,6 +13,7 @@
 ../rtl/datapath/arm7tdmis_regfile.sv
 ../rtl/datapath/arm7tdmis_shifter.sv
 ../rtl/datapath/arm7tdmis_alu.sv
+../rtl/datapath/arm7tdmis_multiplier.sv
 ../rtl/core/arm7tdmis_psr.sv
 ../rtl/core/arm7tdmis_reset_sync.sv
 
