@@ -1,10 +1,13 @@
 # Build / lint / sim flow for arm7tdmi-sv. Run from this directory:
-#   make lint       # Verilator --lint-only -Wall on the RTL filelist
-#   make lint-tb    # same, but elaborate the testbench top
-#   make sim        # build the testbench binary (Verilator --binary)
-#   make run        # build and run; produces cycle.csv + waves.fst
-#   make wave       # open the FST in GTKWave
-#   make clean      # remove obj_dir + simulation artifacts
+#   make lint            # Verilator --lint-only -Wall on the RTL filelist
+#   make lint-tb         # same, but elaborate the integration testbench top
+#   make sim             # build the integration testbench binary
+#   make run             # build and run; produces cycle.csv + waves.fst
+#   make wave            # open the FST in GTKWave
+#   make unit-regfile    # build + run the regfile unit test
+#   make unit-psr        # build + run the PSR unit test
+#   make unit            # run every unit test
+#   make clean           # remove obj_dir + simulation artifacts
 # or from the repo root: make -C scripts <target>
 
 VERILATOR ?= verilator
@@ -16,19 +19,21 @@ TB_F      := tb.f
 TOP_RTL   := arm7tdmis_top
 TOP_TB    := arm7tdmis_tb_top
 
-# Verilator lint flags. -Wall enables every warning category. UNUSEDPARAM is
-# suppressed while package constants have no consumers yet (they exist to be
-# referenced by RTL that lands in §3+); re-enable once consumers exist and
-# audit anything that still warns.
+# Verilator flags. -Wall enables every warning category. UNUSEDPARAM is
+# suppressed while package constants are being introduced ahead of their
+# consumers; re-enable once each constant has at least one user.
 VFLAGS_COMMON := -Wall -Wno-UNUSEDPARAM --timescale 1ns/1ps
 VFLAGS_LINT   := $(VFLAGS_COMMON)
 VFLAGS_BUILD  := $(VFLAGS_COMMON) --binary --trace-fst -j 0
 
-OBJ_DIR     := obj_dir
-TB_BIN      := $(OBJ_DIR)/V$(TOP_TB)
-RUN_ARTIFACTS := cycle.csv waves.fst
+OBJ_DIR        := obj_dir
+TB_BIN         := $(OBJ_DIR)/V$(TOP_TB)
+RUN_ARTIFACTS  := cycle.csv waves.fst
 
-.PHONY: all lint lint-tb sim run wave clean help
+UNIT_TESTS := regfile psr
+
+.PHONY: all lint lint-tb sim run wave clean help \
+        $(addprefix unit-, $(UNIT_TESTS)) unit
 
 all: lint
 
@@ -49,14 +54,31 @@ run: sim
 wave: run
 	$(GTKWAVE) waves.fst &
 
+# Per-unit-test recipe: each test has its top module named `<name>_tb` in
+# tb/unit/<name>_tb.sv, builds into obj_dir/<name>/V<name>_tb, and runs
+# from that path. Generated explicitly per test (a `unit-%` pattern rule
+# doesn't fire reliably for phony targets).
+define UNIT_RULE
+unit-$(1):
+	$$(VERILATOR) $$(VFLAGS_BUILD) --top-module $(1)_tb \
+	    --Mdir $$(OBJ_DIR)/$(1) -f $$(SIM_F) ../tb/unit/$(1)_tb.sv
+	./$$(OBJ_DIR)/$(1)/V$(1)_tb
+endef
+
+$(foreach t,$(UNIT_TESTS),$(eval $(call UNIT_RULE,$(t))))
+
+unit: $(addprefix unit-, $(UNIT_TESTS))
+
 clean:
 	rm -rf $(OBJ_DIR) $(RUN_ARTIFACTS)
 
 help:
 	@echo "Targets:"
-	@echo "  lint     Verilator --lint-only on RTL only (default)"
-	@echo "  lint-tb  Verilator --lint-only including the testbench"
-	@echo "  sim      build the testbench binary"
-	@echo "  run      build and run; emits cycle.csv + waves.fst"
-	@echo "  wave     open waves.fst in GTKWave (requires \$$DISPLAY)"
-	@echo "  clean    remove obj_dir + run artifacts"
+	@echo "  lint         Verilator --lint-only on RTL only (default)"
+	@echo "  lint-tb      Verilator --lint-only including the integration TB"
+	@echo "  sim          build the integration testbench binary"
+	@echo "  run          build and run; emits cycle.csv + waves.fst"
+	@echo "  wave         open waves.fst in GTKWave (requires \$$DISPLAY)"
+	@echo "  unit-<name>  build + run a unit test (e.g. unit-regfile)"
+	@echo "  unit         run every unit test ($(UNIT_TESTS))"
+	@echo "  clean        remove obj_dir + run artifacts"
