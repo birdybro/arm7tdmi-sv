@@ -30,7 +30,9 @@ The `arm7tdmis_top` port list is fixed by the TRM and enumerated in TASKS.md §1
 
 ## Build / lint / test
 
-No toolchain is wired up yet. When the first scripts land they will live in `scripts/`. Until then, do not invent commands — ask the user which simulator (Verilator, Questa, VCS, Xcelium, …) and which lint flow they want before writing a Makefile or `.f` file.
+Toolchain: **Verilator 5.x** for simulation and `verilator --lint-only -Wall` for lint. **GTKWave** for waveforms (Verilator emits FST via `--trace-fst`). No commercial simulator; no Yosys/SymbiYosys yet (defer until §27 formal work). No Quartus on the build box yet — FPGA bring-up (§26) will install it. ARM cross-assembler (`arm-none-eabi-binutils`) is **not** installed; install before §27 instruction tests, not before. Build scripts and `.f` filelists live in `scripts/`; commit-message convention `§N.M description …` per the working-style note below.
+
+Reference-model strategy for §2 cross-checking is **hand-written TRM-derived expected state per test** — no QEMU/Unicorn cosim. Each unit/instruction test embeds the expected register/CPSR/memory state derived directly from the TRM; failures point at the spec, not at a foreign model's quirks.
 
 ## RTL coding discipline (load-bearing — read before writing any `.sv`)
 
