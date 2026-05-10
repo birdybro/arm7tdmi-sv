@@ -1903,3 +1903,292 @@ A complete implementation should pass this checklist:
 ```
 
 The hardest parts will be **PC/pipeline semantics**, **LDM/STM abort behavior**, **Thumb interworking**, **cycle-accurate memory bus timing**, and **EmbeddedICE-RT/JTAG debug**. A good learning path is to treat the first working CPU as a stepping stone, then iteratively replace simplified behavior with the exact ARM7TDMI-S behavior from the TRM.
+
+---
+
+# 30. TRM gap-fill addenda (post-roadmap audit)
+
+These items tighten or extend the §1–§29 roadmap to match TRM (`ARM_DDI_0234B_ARM7TDMI-S_r4p3_TRM.pdf`, 242 pages) at the level of detail any conformant implementation must hit. Numbering: **§30.N amends §N**. Page numbers refer to the PDF page (the document's printed page numbers differ).
+
+## 30.0 ARMv4T scope guard — features NOT in r4p3
+
+Do not implement; remove if mistakenly introduced:
+
+1. `BKPT` instruction — ARMv5+ only. Software breakpoints on r4p3 are pattern-matched via EmbeddedICE-RT, not via a `BKPT` opcode (TRM §1.2 / §B.1).
+2. `BLX` (immediate or register) — ARMv5+. ARM↔Thumb exchange on r4p3 is `BX` only.
+3. `CLZ` — ARMv5+.
+4. Q (saturation) flag in CPSR — ARMv5E+.
+5. ARM7TDMI hard-macrocell pin names absent from r4p3: `MAS[1:0]` (replaced by `SIZE[1:0]`), `ABE/DBE/TBE`, `ALE/APE`, `BL`, bidirectional `D`, `nM`, `BUSDIS/BUSEN/NnENIN/nNENOUT/nENOUTI` (TRM §B.4.6 Table B-2).
+6. Plausible-sounding pins that do not exist: `DBGRESTART`, `DBGINSTR`. `RESTART` is a JTAG TAP *instruction* (`4'b0100`); debug-state instruction injection is via scan chain 1 with bit 33 selecting debug-speed vs system-speed (§30.23.6). `DBGINSTRVALID` is real and distinct.
+
+## 30.3 Programmer-visible state (amends §3)
+
+1. **CPSR/SPSR explicit bit map** (TRM §2.8 Fig. 2-6, p. 48):
+   - `[31]=N`, `[30]=Z`, `[29]=C`, `[28]=V` — flags.
+   - `[27:8]` reserved — preserve under read-modify-write; never assume a value (TRM §2.8.3, p. 50).
+   - `[7]=I` (IRQ disable), `[6]=F` (FIQ disable), `[5]=T` (state), `[4:0]=M[4:0]` (mode).
+   - SPSRs share the layout. **No Q flag** (ARMv4T).
+2. FIQ banks **7** registers (`r8_fiq…r14_fiq` + `SPSR_fiq`); other exception modes bank only `r13_xxx, r14_xxx, SPSR_xxx` (TRM §2.7.1, p. 56).
+3. System mode (`M[4:0]=11111`): privileged, shares User register set, no SPSR (TRM §2.6 / Table 2-2).
+
+## 30.4 Reset (amends §4)
+
+1. `nRESET` must be held LOW for ≥ 2 `CLK` cycles. While LOW, the bus is forced into I-cycles; any in-flight instruction abandons on the next non-wait cycle. On rising `nRESET`, fetching restarts at `0x00000000` (TRM Appendix A `nRESET`, p. 222).
+2. `CFGBIGEND` is *static*. Tie or hold stable; must not change during debug. To reconfigure endianness, hold `nRESET` LOW (TRM §5.3.4 Note, p. 121).
+
+## 30.5 Datapath primitives (amends §5)
+
+1. **Multiplier early-termination `m` parameter** drives every multiply's cycle count:
+   - `m=1` if `Rs[31:8]` are all 0 or all 1.
+   - `m=2` if `Rs[31:16]` are all 0 or all 1.
+   - `m=3` if `Rs[31:24]` are all 0 or all 1.
+   - `m=4` otherwise.
+   - `MUL`: `m·I + S`. `MLA`: `(m+1)·I + S`. `MULL/SMULL`: `(m+1)·I + S`. `MLAL/SMLAL`: `(m+2)·I + S` (TRM §7.7 Tables 7-7..7-10, pp. 194–195).
+   - `MULL/MLAL` are ARM-state-only; `MUL` is the only Thumb multiply.
+
+## 30.8 PSR transfer (amends §8 / §9)
+
+1. `MSR` field-mask bits (per Table 1-10): `_c`=bit 16 (control), `_x`=bit 17 (extension, RAZ/SBZP), `_s`=bit 18 (status, RAZ/SBZP), `_f`=bit 19 (flags).
+2. User mode may write only `_f` of `CPSR`; privileged modes write any field.
+3. **`MSR` and the T bit**: TRM §2.8.2 (p. 49) says programs *must not* alter the T bit via `MSR` — behavior is UNPREDICTABLE. Pick a hardware policy (drop the T-bit write, or honor it and let the architectural UNPREDICTABLE bite); document the choice and exercise with a cycle test.
+
+## 30.10 Branch (amends §10)
+
+1. `B`/`BL` cycle order (TRM §7.3 Table 7-3):
+   - Cycle 1: prefetch from current PC continues + destination computed (the prefetch already issued — too late to cancel).
+   - Cycle 2: N-cycle fetch from branch destination; if `BL`, save `(PC+i)` to `r14`.
+   - Cycle 3: S-cycle fetch from `dest+i`; if `BL`, post-decrement `r14` by 4 so `MOV PC, R14` returns to instruction *after* the BL.
+2. Thumb `BL` is two halfwords (TRM §7.4 Table 7-4): first executes as a data-op accumulating `PC + upper_offset` into `r14`; second performs the branch with `r14` fix-up of −2.
+3. `BX` cycle order (TRM §7.5 Table 7-5):
+   - Cycle 1: `ADDR=PC+2i`, T = current state.
+   - Cycle 2: `ADDR=pc'`, T = new state. `CPTBIT` reflects the new state from this cycle on.
+   - Cycle 3: `ADDR=pc'+i'`. ARM→Thumb: `i=4, i'=2`; Thumb→ARM: `i=2, i'=4`.
+
+## 30.12 Block data transfer (amends §12)
+
+1. **LDM data abort** (TRM §2.9.6, p. 54; §7.10, p. 199):
+   - Complete the instruction but suppress all destination-register writes that follow the abort.
+   - If the writeback bit is set, the modified base register *is* written (handler sees post-modified base — restore manually if it must be undone).
+   - r15 is always last in the list, so any abort prevents PC overwrite.
+2. **STM** writeback completes normally on abort; handler must be aware base is updated.
+3. **Empty register list** in LDM/STM is architecturally UNPREDICTABLE; pick a behavior (TRM is silent), document it, and lock it in a cycle test.
+
+## 30.13 SWP (amends §13)
+
+1. `LOCK` HIGH for both data cycles of `SWP/SWPB`. Sequence (TRM §7.12 Table 7-15): `N(prefetch) → N(read, LOCK=1) → I(write, LOCK=1) → S(continue prefetch, LOCK=0)`.
+2. SWP is **ARM-state only**.
+3. On data abort, `SWP` behaves as if it had not executed; the abort must occur on the read access.
+
+## 30.14 Exceptions (amends §14)
+
+1. **Return-address offsets per exception** (TRM §2.9.1 Table 2-3, p. 51):
+   - `BL`/`SWI`/`Undef` from ARM ⇒ save `PC+4` to LR; from Thumb ⇒ save `PC+2`.
+   - Prefetch Abort ⇒ save `PC+4`; return via `SUBS PC, R14_abt, #4`.
+   - Data Abort ⇒ save `PC+8`; return via `SUBS PC, R14_abt, #8`.
+   - IRQ/FIQ ⇒ save `PC+4`; return via `SUBS PC, R14_xxx, #4`.
+   - Reset: `r14_svc` is UNPREDICTABLE.
+2. **Data Abort + FIQ coincidence**: enter the Data Abort handler first, then immediately vector to FIQ at `0x1C`. A naive priority encoder that fires only the highest-priority exception loses the abort (TRM §2.9.10, p. 60).
+3. `nFIQ` and `nIRQ` are **synchronous, level-sensitive**, sampled on rising `CLK`. Hold LOW until handler clears the source. Async sources need an external synchronizer — r4p3 has no `ISYNC` pin (TRM Appendix A; §B.4.4).
+4. **Worst-case FIQ latency** = `T_syncmax + T_ldm + T_exc + T_fiq = 2 + 20 + 3 + 2 = 27 cycles` (zero-wait-state, longest LDM including PC). Min FIQ/IRQ latency = 4 cycles. Verify in §27 (TRM §2.10, p. 60).
+
+## 30.17 Memory interface (amends §17)
+
+1. **Von Neumann bus** — instruction and data share `ADDR/RDATA/WDATA`. The pipeline arbitrates one bus cycle for either fetch or data, never both (TRM §1.1.2, p. 19).
+2. **Burst rules** (TRM §3.3, pp. 77–79):
+   - Bursts are word (+4 per S) or halfword (+2 per S) only. **Byte bursts do not exist.**
+   - Within a burst, `WRITE/SIZE/PROT/LOCK` hold constant; only `ADDR` advances.
+   - A burst opens with N (or merged I-S); subsequent beats are S.
+   - During an I cycle the address of the next sequential access is broadcast for early decode, but the memory controller must not commit during the I cycle (an I may be followed by an N to an unrelated address on PC writes/exceptions).
+3. **`SIZE` encoding** (TRM §3.4.3 Table 3-3): `00=byte`, `01=halfword`, `10=word`, `11=reserved` (never generated; assert).
+4. **Significant-address-bit rule** (TRM §3.5.4 Table 3-6): word — use `ADDR[31:2]`; halfword — `ADDR[31:1]`; byte — `ADDR[31:0]`.
+5. **`ABORT` sampling** (TRM §3.5.3, p. 87): sampled on rising `CLK` *only during S/N memory cycles*; ignored in I/C. On data access, traps immediately. On opcode fetch, marks the prefetched instruction invalid; trap fires only when (and if) it reaches Execute.
+6. **`DMORE`** (TRM §1.5.5, p. 40 / Appendix A): HIGH during the current data access ⇒ next data access *will* be sequential (mid-LDM/STM). LOW ⇒ last beat or no immediate further data access. Distinct from `TRANS[1:0]`, which describes the next *transaction's* type.
+7. During `nRESET` LOW the bus is forced into I-cycles; existing memory cycles abandon. No spurious access on the way to `0x00000000`.
+
+## 30.18 Cycle accuracy (amends §18)
+
+Anchor each cycle test to an explicit TRM table:
+
+1. **Data-op** (Table 7-6, p. 194): `+S` (1S); shifted-by-register form adds an I.
+2. **MSR/MRS** (Table 7-6).
+3. **LDR** (Table 7-11, p. 196): `+N+I+S`; if `Rd=PC`, add `+N+S`.
+4. **STR** (Table 7-12, p. 196): `+N+N`.
+5. **LDM** (Table 7-13, p. 196):
+   - 1 reg, dest≠PC: `+N+I+S`.
+   - 1 reg, dest=PC: `+N+I+N+2S`.
+   - n>1, dest≠PC: `+N+(n−1)S+I+S`.
+   - n>1, dest=PC: `+N+(n−1)S+I+N+2S`.
+6. **STM** (Table 7-14, p. 197):
+   - 1 reg: `+N+N`.
+   - n>1: `+N+(n−1)S+N`.
+7. **SWP** (Table 7-15): per §30.13.
+8. **Exception entry** (Table 7-16, p. 201): `+N+2S` total (cycle 1 N to `PC+2i` in old mode; cycle 2 S to vector `Xn` in new mode/Tbit; cycle 3 S to `Xn+4`).
+9. **B/BL** (Table 7-3): `+N+2S`.
+10. **BX** (Table 7-5): `+N+2S` with Tbit transitions per §30.10.3.
+11. **MUL/MLA/MULL/MLAL** (Tables 7-7..7-10): per §30.5.1.
+12. **CDP** (Table 7-17, p. 201): `+S` plus busy-wait I cycles if `CPB` HIGH.
+13. **LDC/STC** (Tables 7-18 / 7-19): `+N+(n−1)S+I` per word with leading busy-wait I.
+14. **MCR/MRC** (Tables 7-20 / 7-21): `+N+I+S` (`MRC`), `+N+I` (`MCR`).
+15. **Undef / coprocessor-absent trap** (Table 7-22): same path as exception entry.
+16. **Unexecuted instruction** (Table 7-23, p. 204): exactly `+S` at `PC+2i`. All side effects suppressed except the bus cycle and `DBGnEXEC` HIGH. Easy smoke test.
+
+## 30.19 Coprocessor interface (amends §19)
+
+1. **Reserved CP IDs** (TRM §4.1.1 Table 4-1): CP15=system control, CP14=DCC + Abort Status Register, CP13:8=ARM-reserved, CP7:4=user-available, CP3:0=ARM-reserved. External coprocessors must use CP4–CP7.
+2. **Pipeline-following** (TRM §4.3, p. 93): coprocessors mirror the core. Load into pipeline on rising `CLK` only when `CPnOPC=0 ∧ CPnMREQ=0 ∧ CPTBIT=0` were *all* LOW in the *previous* bus cycle (= ARM-state opcode fetch). Advance pipeline when the same triple is LOW in the *current* cycle. Coprocessor state changes only when `CLKEN` HIGH (except reset).
+3. **Privilege via `CPnTRANS`** (TRM §4.8 Table 4-4): `CPnTRANS=0`=User, `=1`=privileged. Coprocessor checks at decode; User-mode access to a privileged-only operation is rejected with `CPA=1, CPB=1` (absent), forcing the undef trap.
+4. **Busy-wait abandonment** (TRM §4.4.4, p. 96; §5.3.3, p. 121): on a non-masked IRQ/FIQ or `DBGRQ`, the core takes `CPnI` HIGH. Coprocessor monitors `CPnI` and abandons. Coprocessor actions during busy-wait must be *idempotent* — must not corrupt state and must repeat with identical results.
+5. **No-coprocessor tie-off** (TRM §4.6, p. 102; Table 4-3): tie `CPA=1, CPB=1`; leave outputs `CPnMREQ, CPSEQ, CPnTRANS, CPnOPC, CPnI, CPTBIT` unconnected. All coprocessor instructions then take the undef trap. For multiple coprocessors: AND each one's `CPA` together, AND each one's `CPB` together; common `CPnI` fans out.
+6. **`CPn`-prefix polarity reminder**: active-LOW (`CPnOPC=0` ⇒ opcode fetch). `CPSEQ`, `CPA`, `CPB` are active-HIGH.
+7. LDC/STC may transfer >16 words; this stretches worst-case interrupt latency past 27 cycles. Recommend a 16-word software cap.
+
+## 30.20 CP14 / DCC (amends §20)
+
+1. **CP14 register set**:
+   - DCC control register (32-bit): `[31:28]=4'b0001` (EmbeddedICE-RT version constant), `[27:2]` reserved, `[1]=W` (W=1 ⇒ tx buffer empty, processor may write; debugger-readable, processor-writable), `[0]=R` (R=1 ⇒ rx buffer full, processor may read; debugger-writable, processor-readable).
+   - DCC data-read / data-write register.
+   - **Abort Status Register (1 bit `DbgAbt`)** — accessed via `MRC/MCR CP14`. Set when monitor mode causes a Prefetch/Data Abort due to a breakpoint or watchpoint; if both an external `ABORT` and a debug abort coincide, external `ABORT` wins and `DbgAbt` stays 0. Sticky; cleared by software write (TRM §5.23, p. 161).
+2. **DCC instructions**:
+   - `MRC CP14,0,Rd,C0,C0` — read DCC control.
+   - `MRC CP14,0,Rd,C1,C0` — read DCC data-read.
+   - `MCR CP14,0,Rn,C1,C0` — write DCC data-write.
+3. **Rev 4 single-access optimization** (TRM §5.10.2, pp. 134–135): DCC data and status fit in one scan-chain-2 access; status bit is the LSB of the address field returned. DCC control bit 0 preserved for backward compatibility.
+4. **`DBGCOMMRX/TX` polarity** (Appendix A): `DBGCOMMRX=1` ⇒ rx buffer full; `DBGCOMMTX=1` ⇒ tx buffer empty. Both gated by `DBGEN=1`.
+5. Coprocessor instructions, **including DCC `MCR/MRC` to CP14, do not exist in Thumb**. Monitor-mode debugger code reaching DCC from Thumb must switch to ARM first.
+
+## 30.22 EmbeddedICE-RT (amends §22)
+
+1. **`DBGEN=0`**: `DBGBREAK/DBGRQ` ignored; `DBGACK` forced LOW; interrupts pass through; macrocell enters low-power. **Caution from TRM**: tying `DBGEN` LOW is not a security mechanism — implement security elsewhere if required (TRM §5.7, p. 124).
+2. **Watchpoint mask is XNOR, not AND** (TRM §5.20.2 / §5.26):
+   - `match = ((value XNOR input) OR mask) == all-1s`.
+   - Mask bit = 1 ⇒ that position always matches; mask bit = 0 ⇒ exact equality required. Common implementation bug is to AND.
+3. **Watchpoint coupling** (TRM §5.20.3 / §5.26.1, pp. 169–170):
+   - `CHAIN`: WP1's `CHAINOUT` feeds WP0's `CHAIN`. WP1 has no CHAIN input; WP0 has no CHAINOUT.
+   - `CHAINOUT` is a latch: write-enable from WP1's address/control comparator, D-input from WP1's data comparator. Cleared on control-value-register write or `DBGnTRST=0`.
+   - `RANGE`: WP1's `RANGEOUT` feeds WP0's `RANGE`. Power-of-2 ranges only.
+   - `DBGRNG[1:0]` external pins reflect each watchpoint's address/control + data-mask match **independent of the ENABLE bit** (so trace can see range hits without breaking).
+   - ENABLE = bit 8 of the 9-bit control-value register; **unmaskable** (no mask-register equivalent for bit 8).
+4. **Debug Control Register — 6 bits** (TRM §5.24 Table 5-7, p. 161):
+   - `[5]` EmbeddedICE-RT disable (Rev 4).
+   - `[4]` Monitor-mode enable (Rev 4 — abort vs halt).
+   - `[3]` SBZ/RAZ.
+   - `[2]` `INTDIS` (force `IFEN` LOW; mask interrupts even outside debug).
+   - `[1]` force-`DBGRQ`.
+   - `[0]` force-`DBGACK`.
+5. **Debug Status Register — 5 bits, read-only** (TRM §5.25, p. 164):
+   - `[4]=TBIT, [3]=TRANS[1], [2]=IFEN, [1]=synced DBGRQ, [0]=synced DBGACK`.
+6. **Interrupt-mask logic** (TRM Fig. 5-17, p. 165): `IFEN_to_core = !((bit2 OR DBGACKI) | INTDIS)`. `DBGACK_pin = bit0 OR DBGACKI`. `DBGRQI_to_core = bit1 OR sync(DBGRQ_input)`.
+7. **Reprogramming sequence under monitor mode** (TRM §5.9.2, p. 130):
+   1. Set debug-control bit 5 (disable).
+   2. **Poll** bit 5 read-back until set.
+   3. Modify watchpoint registers and/or bit 4.
+   4. Clear bit 5.
+   - Poll step is mandatory — propagation is async; skipping it causes false matches.
+8. **Software breakpoints** (TRM §5.21.2, p. 150):
+   - Program a watchpoint with a magic data-value pattern and `0xFFFFFFFF` address mask.
+   - For Thumb, **replicate** the 16-bit pattern in both halves of the 32-bit data-value register (a `LDR` may return either halfword on the 32-bit bus).
+   - Architectural reservations for breakpoint encodings: ARM `0xE7Fxxxxx`, Thumb `0xDExx/0xBExx`. (No `BKPT` opcode on r4p3 — see §30.0.)
+9. **Breakpoint flushed by branch/exception** (TRM §5.3.1, p. 120): if the instruction is flushed (preceding branch / exception / PC write), debug entry is canceled. On exception return + refetch, the breakpoint reflags. Comparator's ENABLE qualification must combine with a pipeline-valid signal.
+10. **Watchpoint completion** (TRM §5.3.2 / §5.18.3): fires *after* the access completes (data writeback / base writeback finished). For LDM/STM, many cycles can elapse between match and entry. Watchpointed access that also Data Aborts ⇒ debug state entered in abort mode (vector fetch first). Watchpointed access coincident with another exception ⇒ debug state entered in that exception's mode; debugger disambiguates via CPSR/SPSR/PC.
+11. **Monitor-mode restrictions** (TRM §5.9.2): in monitor mode, breakpoints/watchpoints **cannot** be data-dependent, range-coupled, or externally-conditioned via `DBGEXT`. External `DBGBREAK` not supported. Halt and monitor modes cannot mix.
+12. **IFEN auto-disable in debug state** (TRM §5.19.2, p. 147): on debug-state entry, IRQ and FIQ are forced disabled internally regardless of `CPSR.I/F`. Pending interrupts at entry are remembered.
+13. **Debug-exit return-PC offsets** (TRM §5.18.6, p. 146):
+   - Normal break/watch exit: `−(4 + N + 3S)`, with N = debug-speed, S = system-speed.
+   - DBGRQ-entry / watchpoint-with-exception: `−(3 + N + 3S)`.
+   - System-speed access drops `DBGACK` temporarily; force via control-bit 0 if peripherals must be held inhibited.
+14. **Allowable debug-state instructions** (TRM §5.16.1, p. 162): only data-processing, all loads/stores including LDM/STM, and MSR/MRS may be scanned in. STM is the standard register-file dump path. Mode changes between any two modes are allowed in debug state.
+
+## 30.23 JTAG TAP and scan chains (amends §23)
+
+1. **Public JTAG instructions — exactly five** (TRM §5.13 Table 5-3, p. 153):
+   `SCAN_N=4'b0010`, `INTEST=4'b1100`, `IDCODE=4'b1110`, `BYPASS=4'b1111`, `RESTART=4'b0100`. Other 4-bit encodings default to `BYPASS`.
+2. **Do NOT implement** `EXTEST/SAMPLE/PRELOAD/CLAMP/HIGHZ/CLAMPZ` — there is no boundary-scan chain on r4p3. Selecting them while scan chain 1 or 2 is active yields UNPREDICTABLE behavior (TRM §B.4.3, p. 233).
+3. **IR width = 4 bits**, no parity. CAPTURE-IR loads fixed pattern `4'b0001` (LSB-first). SHIFT-IR shifts in LSB-first. UPDATE-IR latches. Reset value = `IDCODE` (TRM §5.14.3, p. 156).
+4. **IDCODE** (TRM §5.14.2, p. 155):
+   - 32-bit format `[31:28]=Version, [27:12]=PartNumber, [11:1]=ManufacturerID, [0]=1` (LSB always 1 per IEEE 1149.1; do not tie LOW).
+   - r4p3 default value `0x7F1F0F0F` (matches CLAUDE.md).
+   - No parallel write. CAPTURE-DR loads the constant; SHIFT-DR clocks LSB-first; UPDATE-DR is a no-op for IDCODE.
+5. **Scan chain map**:
+   - 0: reserved (returns zeros if selected).
+   - 1: debug, **33 bits** = `[31:0]` data + bit 33 (= `[32]`) `DBGBREAK` cell.
+   - 2: EmbeddedICE-RT, **38 bits** = `[37]` R/W + `[36:32]` 5-bit reg-addr + `[31:0]` data; commit on UPDATE-DR.
+   - 3, 4, 8: reserved.
+6. **Scan chain 1 bit-33 dual semantics** (TRM §5.14.5 / §5.16):
+   - During INTEST: scans a known value into the `DBGBREAK` input.
+   - During debug-state instruction injection: bit 33 = 0 ⇒ run at debug speed; bit 33 = 1 ⇒ run at system speed (sync to `CLKEN`).
+   - On debug-state entry capture: bit 33 = 0 ⇒ entered from breakpoint; bit 33 = 1 ⇒ from watchpoint.
+   - For a system-speed access: bit 33 HIGH on the penultimate scanned instruction; the final branch has bit 33 LOW. After RESTART, the core executes at full speed via `CLKEN` then re-enters debug state.
+7. **TAP reset via `DBGnTRST=0`** (TRM §5.3.5 Fig. 5-4, p. 117; §5.12.1, p. 152):
+   - TAP state machine → Test-Logic-Reset.
+   - Current instruction → `IDCODE`.
+   - Active scan chain → 0.
+   - All EmbeddedICE-RT D-types in Fig. 5-4 cleared (TCK synchronizer, TMS/TDI sample-hold).
+   - `CHAINOUT` cleared.
+   - No `CLK`/`DBGTCKEN` pulse needed.
+   - For JTAG use, `DBGnTRST` must pulse LOW then HIGH at power-on; tie LOW permanently if JTAG unused.
+8. **`DBGnTDOEN` polarity** (Appendix A): LOW = TDO actively driven; HIGH = HiZ. Gated by `DBGEN`.
+9. **3-stage TCK synchronizer** to `CLK` for off-chip Multi-ICE-style debug (TRM Fig. 5-4); off-chip device must wait on `RTCK` before the next TCK edge. TMS/TDI on-chip latches gated by `DBGTCKEN`. All synchronizer flops reset by `DBGnTRST`.
+10. **Scan-path-select register**: 4 bits; CAPTURE-DR loads `4'b1000`; UPDATE-DR latches selection. Default chain 0 on TAP reset.
+
+## 30.24 ETM-facing interface (amends §24)
+
+1. **`DBGINSTRVALID`** = HIGH for exactly one cycle per instruction *committed* to Execute. Used by ETM7 to count executed instructions, **not** bus accesses (Appendix A).
+2. **Combination rule**: instruction committed = `DBGINSTRVALID && !DBGnEXEC`. `DBGnEXEC` HIGH means an instruction reached Execute but failed its condition codes (no commit).
+3. **PROCID tie-off**: r4p3 has no OS context-ID source. When wrapping ETM7, tie `PROCID[31:0]=0` and `PROCIDWR=0` at the ETM input (TRM §6.3 Table 6-1 footnotes, p. 175).
+4. **Direct RDATA/WDATA exposure**: connect `RDATA[31:0]` and `WDATA[31:0]` straight to the ETM so coprocessor cycles can be traced (TRM §4.5.1 Note, p. 100).
+5. **Reset propagation**: connect system `nTRST`→`DBGnTRST` so `PWRDOWN` and ETM state reset in lockstep with the macrocell (TRM §6.4, p. 176).
+
+## 30.26 AC / timing (amends §26)
+
+1. Bake the TRM Table 8-1 percentage-of-`CLK` budgets into SDC once a toolchain is chosen (TRM §8.2, pp. 216–217). Sample budgets:
+   - **Setup**: `CLKEN` 40%, `ABORT` 15%, `RDATA` 10%, `CPA/CPB` 20%, `nFIQ/nIRQ/nRESET` 10%, `CFGBIGEND` 10%, `DBGTCKEN` 40%, `DBGTDI/DBGTMS` 35%.
+   - **Hold**: 0% on most inputs (clock-skew budget only).
+   - **Output valid (max % of t_cyc)**: `ADDR` 90%, control (`WRITE/SIZE/PROT/LOCK`) 90%, `TRANS` 50%, `WDATA` 40%, `DBGTDO` 20%, debug control 40%, debug status 40%, coprocessor control 80%.
+2. Off-chip JTAG path needs the 3-stage TCK synchronizer (§30.23.9) and the `RTCK`-handshake convention.
+
+## 30.27 Conformance tests (amends §27)
+
+1. Each cycle test cites a specific TRM table (§30.18). Regressions stay traceable.
+2. Worst-case-FIQ-latency cycle test targeting 27 cycles (§30.14.4).
+3. CHAIN/RANGE coupling reference cases (TRM §5.26):
+   - "Break on address Y only when process X is running" (CHAIN: WP1 matches process-ID location with `data=X` ⇒ `CHAINOUT` enables WP0).
+   - "Break on first 256 bytes but not first 32" (RANGE: WP1 disabled, mask `0x1F`; WP0 enabled, mask `0xFF`, RANGE bit cleared).
+4. `MSR` T-bit-write policy test — verify the implementation matches its documented choice (drop vs honor; §30.8.3).
+5. Software-breakpoint replication test for Thumb — verify both halfwords of the 32-bit data-value register match.
+6. `ABORT`-during-I-cycle ignored — explicit negative test.
+7. Unexecuted-instruction `+S` cycle (§30.18.16) as a smoke test.
+
+## 30.29 Final checklist additions (amends §29)
+
+```text
+[ ] Exception-entry return-address offsets per Table 2-3 verified
+[ ] LDM abort writeback + r15-protect verified
+[ ] SWP LOCK held across both data cycles
+[ ] FIQ-after-Data-Abort interlock verified
+[ ] Worst-case 27-cycle FIQ latency verified
+[ ] CFGBIGEND tied static; not changed mid-debug
+[ ] nRESET ≥ 2 cycle hold modeled in TB
+[ ] CPSR/SPSR explicit bit map (no Q flag) implemented
+[ ] MSR T-bit-write policy chosen, documented, and tested
+[ ] Multiplier early-termination m parameter verified per Tables 7-7..7-10
+[ ] ABORT sampled only on S/N cycles
+[ ] Burst rules (constant control, +4/+2 ADDR, no byte burst) verified
+[ ] DMORE distinct from TRANS verified
+[ ] CP14 Abort Status Register implemented and DbgAbt sticky
+[ ] DCC Rev-4 single-access optimization in scan chain 2
+[ ] Watchpoint mask is XNOR (not AND)
+[ ] CHAINOUT latch + clear on CV-write / DBGnTRST
+[ ] DBGRNG independent of ENABLE bit
+[ ] Debug control register = 6 bits per Table 5-7
+[ ] Debug status register = 5 bits per §5.25
+[ ] Reprogramming poll sequence (set bit5 → poll → modify → clear) implemented
+[ ] Scan chain 1 = 33 bits with bit-33 dual semantics
+[ ] Scan chain 2 = 38 bits committed on UPDATE-DR
+[ ] Public JTAG instruction set = exactly 5 (others default to BYPASS)
+[ ] EXTEST/SAMPLE/PRELOAD/CLAMP/HIGHZ not implemented
+[ ] IDCODE LSB tied 1, value 0x7F1F0F0F
+[ ] DBGnTRST resets TAP / instruction / chain-select / CHAINOUT / sync flops
+[ ] DBGINSTRVALID + !DBGnEXEC = committed instruction (ETM)
+[ ] PROCID/PROCIDWR tied LOW at ETM wrapper
+[ ] No BKPT / BLX / CLZ / Q / MAS / DBGRESTART / DBGINSTR introduced
+```
