@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Greenfield. The repo currently contains only planning + reference material — no RTL, testbench, scripts, or build system have been written yet. The first code task in any session is almost certainly to scaffold one of the directories described below, not to modify existing sources.
+Greenfield. The repo contains planning + reference material plus the empty directory skeleton (`rtl/{core,decode,datapath,memory,coproc,debug,jtag,etm,top}/`, `tb/{unit,integration,formal,programs}/`, `docs/`, `scripts/`) — no RTL, testbench, scripts, or build system have been written yet. The first code task in any session is almost certainly to scaffold the first SystemVerilog files into one of those existing directories, not to create new top-level paths or modify existing sources.
 
 ## Authoritative sources
 
