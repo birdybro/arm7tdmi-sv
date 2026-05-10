@@ -38,4 +38,23 @@ module arm7tdmis_assertions (
         end
     end
 
+    // nRESET hold-time check per TRM §30.4.1: the system must hold nRESET
+    // LOW for at least 2 CLK cycles. This is a system-side contract, not a
+    // core requirement, but tracking it in the TB catches stimulus bugs.
+    int unsigned nreset_low_cycles;
+    logic        nreset_q;
+
+    always_ff @(posedge CLK) begin
+        nreset_q <= nRESET;
+        if (!nRESET) begin
+            nreset_low_cycles <= nreset_low_cycles + 1;
+        end else if (!nreset_q && nRESET) begin
+            // rising edge of nRESET — verify hold count
+            assert (nreset_low_cycles >= 2)
+                else $error("nRESET held LOW for only %0d cycles (TRM requires >= 2)",
+                            nreset_low_cycles);
+            nreset_low_cycles <= 0;
+        end
+    end
+
 endmodule

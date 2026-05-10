@@ -30,7 +30,7 @@ OBJ_DIR        := obj_dir
 TB_BIN         := $(OBJ_DIR)/V$(TOP_TB)
 RUN_ARTIFACTS  := cycle.csv waves.fst
 
-UNIT_TESTS := regfile psr
+UNIT_TESTS := regfile psr reset_sync
 
 .PHONY: all lint lint-tb sim run wave clean help \
         $(addprefix unit-, $(UNIT_TESTS)) unit
@@ -60,6 +60,7 @@ wave: run
 # doesn't fire reliably for phony targets).
 define UNIT_RULE
 unit-$(1):
+	mkdir -p $$(OBJ_DIR)
 	$$(VERILATOR) $$(VFLAGS_BUILD) --top-module $(1)_tb \
 	    --Mdir $$(OBJ_DIR)/$(1) -f $$(SIM_F) ../tb/unit/$(1)_tb.sv
 	./$$(OBJ_DIR)/$(1)/V$(1)_tb

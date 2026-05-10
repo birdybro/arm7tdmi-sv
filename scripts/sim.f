@@ -12,5 +12,6 @@
 
 ../rtl/datapath/arm7tdmis_regfile.sv
 ../rtl/core/arm7tdmis_psr.sv
+../rtl/core/arm7tdmis_reset_sync.sv
 
 ../rtl/top/arm7tdmis_top.sv
