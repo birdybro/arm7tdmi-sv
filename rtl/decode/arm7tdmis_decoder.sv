@@ -238,10 +238,14 @@ module arm7tdmis_decoder
     //        §7  → DP-imm
     //        §9  → DP register-form
     //        §10 → BRANCH (B/BL) and BX
-    //        §11+→ LDR/STR, LDM/STM, MUL, SWP, MSR/MRS, SWI, coproc
+    //        §11 → LDR/STR (immediate offset, pre-indexed, no writeback)
+    //        §11b+→ post-index / writeback / register offset / halfword
+    //        §12+→ LDM/STM, MUL, SWP, MSR/MRS, SWI, coproc
+    //      The core further restricts LDR_STR to the supported subset.
     assign is_dataproc      = (c == INSTR_DP);
     assign is_unimplemented = !((c == INSTR_DP)
                               || (c == INSTR_BRANCH)
-                              || (c == INSTR_BX));
+                              || (c == INSTR_BX)
+                              || (c == INSTR_LDR_STR));
 
 endmodule

@@ -49,14 +49,30 @@ module arm7tdmis_core
     output logic        DMORE
 );
 
-    // ---- FSM state ----
-    typedef enum logic [0:0] {
-        S_FETCH   = 1'b0,
-        S_EXECUTE = 1'b1
+    // ---- FSM state. §11 adds the L/S data cycle: S_FETCH → S_EXECUTE
+    //      → S_DADDR → S_DDATA → S_FETCH for load/store instructions;
+    //      non-L/S instructions take the original 2-state path.
+    typedef enum logic [1:0] {
+        S_FETCH   = 2'd0,
+        S_EXECUTE = 2'd1,
+        S_DADDR   = 2'd2,    // drive data address to memory
+        S_DDATA   = 2'd3     // commit load (RDATA→Rd) or drive WDATA
     } state_e;
 
     state_e       state_q;
     logic [31:0]  pc_q;
+
+    // L/S latches captured at end of S_EXECUTE for use in S_DADDR/S_DDATA.
+    // dec.* fields are combinational from RDATA; once we transition to
+    // S_DADDR the data bus drives the memory address and RDATA in S_DDATA
+    // carries the loaded value, so the decoder's view of the instruction
+    // is gone — we must snapshot what we need.
+    logic [31:0]  ls_data_addr_q;
+    logic [31:0]  ls_store_data_q;
+    logic [3:0]   ls_rd_q;
+    logic         ls_byte_q;
+    logic         ls_load_q;
+    logic [1:0]   ls_addr_lo_q;
 
     // ---- PSR ----
     psr_t         cpsr;
@@ -136,6 +152,12 @@ module arm7tdmis_core
     logic [31:0] rf_ra_data, rf_rb_data, rf_rc_data;
     logic        rf_pc_written;
 
+    // Read port C is shared between the DP register-shift-by-register
+    // path (which needs Rs) and the L/S store path (which needs the
+    // value held in Rd). Mux on instruction class.
+    wire instr_is_ls_decoder = (dec.instr_class == INSTR_LDR_STR);
+    wire [3:0] rc_addr_eff   = instr_is_ls_decoder ? dec.rd : dec.rs;
+
     arm7tdmis_regfile u_regfile (
         .CLK             (CLK),
         .CLKEN           (CLKEN),
@@ -143,9 +165,9 @@ module arm7tdmis_core
         .mode            (cpsr.m),
         .t_bit           (cpsr.t),
         .pc_in           (pc_q),
-        .ra_addr         (dec.rn),         // Rn → ALU op_a
+        .ra_addr         (dec.rn),         // Rn → ALU op_a / L/S base
         .rb_addr         (dec.rm),         // Rm → shifter input (DP-reg)
-        .rc_addr         (dec.rs),         // Rs → shifter amount (DP-reg-reg)
+        .rc_addr         (rc_addr_eff),    // Rs (DP-reg-reg) / Rd (STR source)
         .ra_data         (rf_ra_data),
         .rb_data         (rf_rb_data),
         .rc_data         (rf_rc_data),
@@ -203,13 +225,24 @@ module arm7tdmis_core
         .flag_we       (alu_flag_we)
     );
 
-    // ---- FSM transitions ----
+    // ---- FSM transitions. Non-L/S instructions go S_FETCH→S_EXECUTE→
+    //      S_FETCH (2 cycles). L/S instructions take the longer
+    //      S_FETCH→S_EXECUTE→S_DADDR→S_DDATA→S_FETCH path (4 cycles).
+    //      An L/S that fails its condition is treated as a NOP and
+    //      stays on the short path.
     state_e state_next;
+
+    wire ls_take_data_cycle = passes_cond && (dec.instr_class == INSTR_LDR_STR)
+                            && dec.ls_use_imm
+                            && dec.ls_pre_index
+                            && !dec.ls_writeback;
 
     always_comb begin
         unique case (state_q)
             S_FETCH:   state_next = S_EXECUTE;
-            S_EXECUTE: state_next = S_FETCH;
+            S_EXECUTE: state_next = ls_take_data_cycle ? S_DADDR : S_FETCH;
+            S_DADDR:   state_next = S_DDATA;
+            S_DDATA:   state_next = S_FETCH;
             default:   state_next = S_FETCH;
         endcase
     end
@@ -248,7 +281,7 @@ module arm7tdmis_core
     wire bx_writes_pc       = passes_cond && instr_is_bx;
 
     wire writes_pc      = dp_writes_pc || branch_writes_pc || bx_writes_pc;
-    wire writes_dest    = dp_writes_dest || branch_link_writes;
+    wire exec_writes_rf = dp_writes_dest || branch_link_writes;
     wire writes_flags   = passes_cond && instr_is_dp && dec.s_bit;
 
     assign cpsr_restore_now = dp_writes_pc && dec.s_bit;
@@ -267,15 +300,47 @@ module arm7tdmis_core
                             instr_is_bx     ? bx_pc_target     :
                                               dp_pc_target;
 
-    // Regfile write port mux: BL writes LR (r14) with return address;
-    // everything else uses Rd / alu_result.
+    // ---- §11: L/S address generation + byte/word extraction ----
+    // Offset is dec.ls_imm_offset (12-bit), added or subtracted from Rn
+    // per the U bit. Pre-indexed and no-writeback only; ls_take_data_cycle
+    // above ensures unsupported variants stay on the 2-state path.
+    wire [31:0] ls_offset_ext = {20'h0, dec.ls_imm_offset};
+    wire [31:0] ls_data_addr_calc = dec.ls_up
+                                    ? (rf_ra_data + ls_offset_ext)
+                                    : (rf_ra_data - ls_offset_ext);
+
+    // Loaded byte: shift RDATA right by 8*addr_lo, then zero-extend.
+    // Loaded word: pass RDATA through (aligned access assumed for now).
+    wire [4:0]  load_byte_shift = {ls_addr_lo_q, 3'b000};
+    wire [31:0] load_byte_val   = (RDATA >> load_byte_shift) & 32'h0000_00FF;
+    wire [31:0] load_word_val   = RDATA;
+    wire [31:0] load_value      = ls_byte_q ? load_byte_val : load_word_val;
+
+    // S_DDATA load writeback: commit RDATA into the latched Rd register.
+    wire ddata_writes_rd = (state_q == S_DDATA) && ls_load_q;
+
+    // ---- Regfile write port mux ----
+    // S_DDATA loads commit Rd with the extracted memory value;
+    // S_EXECUTE DP and BL still write through this same port.
     logic [3:0]  rf_write_addr;
     logic [31:0] rf_write_data;
     logic        rf_write_en;
 
-    assign rf_write_addr = branch_link_writes ? 4'd14    : dec.rd;
-    assign rf_write_data = branch_link_writes ? (pc_q + 32'd4) : alu_result;
-    assign rf_write_en   = writes_dest;
+    always_comb begin
+        if (ddata_writes_rd) begin
+            rf_write_addr = ls_rd_q;
+            rf_write_data = load_value;
+            rf_write_en   = 1'b1;
+        end else if (branch_link_writes) begin
+            rf_write_addr = 4'd14;
+            rf_write_data = pc_q + 32'd4;
+            rf_write_en   = 1'b1;
+        end else begin
+            rf_write_addr = dec.rd;
+            rf_write_data = alu_result;
+            rf_write_en   = exec_writes_rf;
+        end
+    end
 
     // CPSR flag update: only the _f byte (bits [31:24]) per the ALU
     // outputs. The S-bit + condition-pass gates are folded into write_flags.
@@ -287,18 +352,37 @@ module arm7tdmis_core
     always_ff @(posedge CLK) begin
         if (CLKEN) begin
             if (!nRESET) begin
-                state_q <= S_FETCH;
-                pc_q    <= 32'h0;
+                state_q         <= S_FETCH;
+                pc_q            <= 32'h0;
+                ls_data_addr_q  <= 32'h0;
+                ls_store_data_q <= 32'h0;
+                ls_rd_q         <= 4'h0;
+                ls_byte_q       <= 1'b0;
+                ls_load_q       <= 1'b0;
+                ls_addr_lo_q    <= 2'h0;
             end else begin
                 state_q <= state_next;
 
-                // Advance PC at end of EXECUTE
+                // PC advances at end of EXECUTE — for both 2-state and
+                // 4-state instructions. After S_EXECUTE the next fetch
+                // (eventually) uses the updated pc_q.
                 if (state_q == S_EXECUTE) begin
                     if (writes_pc) begin
                         pc_q <= pc_target;
                     end else begin
                         pc_q <= pc_q + 32'd4;
                     end
+                end
+
+                // Snapshot the L/S micro-op at end of EXECUTE so the data
+                // bus cycles can drive memory without the decoder context.
+                if (state_q == S_EXECUTE && ls_take_data_cycle) begin
+                    ls_data_addr_q  <= ls_data_addr_calc;
+                    ls_store_data_q <= rf_rc_data;
+                    ls_rd_q         <= dec.rd;
+                    ls_byte_q       <= dec.ls_byte;
+                    ls_load_q       <= dec.ls_load;
+                    ls_addr_lo_q    <= ls_data_addr_calc[1:0];
                 end
             end
         end
@@ -307,16 +391,53 @@ module arm7tdmis_core
     // ---- Bus drive ----
     wire is_priv = (cpsr.m != 5'(MODE_USER));
 
+    wire [31:0] store_byte_data = {4{ls_store_data_q[7:0]}};
+    wire [31:0] store_wdata     = ls_byte_q ? store_byte_data : ls_store_data_q;
+
     always_comb begin
+        // Default: idle, post-S_EXECUTE shape
         ADDR  = pc_q;
         WRITE = WRITE_READ;
         SIZE  = 2'(SIZE_WORD);
-        PROT  = {is_priv, 1'b0};      // {priv, opcode_fetch}
+        PROT  = {is_priv, 1'b0};        // {priv, opcode_fetch}
         LOCK  = LOCK_FREE;
+        TRANS = 2'(TRANS_I);
         WDATA = 32'h0;
 
-        // Drive an active fetch only in S_FETCH; idle in S_EXECUTE.
-        TRANS = (state_q == S_FETCH) ? 2'(TRANS_N) : 2'(TRANS_I);
+        unique case (state_q)
+            S_FETCH: begin
+                // Drive the opcode fetch address
+                ADDR  = pc_q;
+                TRANS = 2'(TRANS_N);
+                PROT  = {is_priv, 1'b0};
+            end
+            S_EXECUTE: begin
+                // Bus idle — the memory's address phase from the previous
+                // S_FETCH cycle is producing RDATA combinationally.
+                ADDR  = pc_q;
+                TRANS = 2'(TRANS_I);
+            end
+            S_DADDR: begin
+                // Drive the L/S data address.
+                ADDR  = ls_data_addr_q;
+                TRANS = 2'(TRANS_N);
+                WRITE = ls_load_q ? WRITE_READ : WRITE_WRITE;
+                SIZE  = ls_byte_q ? 2'(SIZE_BYTE) : 2'(SIZE_WORD);
+                PROT  = {is_priv, 1'b1};   // data access
+            end
+            S_DDATA: begin
+                // Memory consumes WDATA (for stores) or returns RDATA
+                // (for loads) at this cycle's rising edge. Bus otherwise
+                // idle from our side.
+                ADDR  = ls_data_addr_q;
+                TRANS = 2'(TRANS_I);
+                WRITE = ls_load_q ? WRITE_READ : WRITE_WRITE;
+                SIZE  = ls_byte_q ? 2'(SIZE_BYTE) : 2'(SIZE_WORD);
+                PROT  = {is_priv, 1'b1};
+                WDATA = ls_load_q ? 32'h0 : store_wdata;
+            end
+            default: ;
+        endcase
     end
 
     assign DMORE = 1'b0;     // no LDM/STM yet
@@ -325,24 +446,21 @@ module arm7tdmis_core
     //      cpsr[27:6] = reserved bits + I + F (interrupt masking is §14);
     //      alu_flag_we is unused because we drive a fixed _f-byte mask
     //      and gate writes by S+condition externally.
-    //      Most of the decoded_t fields are unused too — they describe
-    //      classes whose execute paths (§9-§13) haven't landed yet.
+    //      Most of the decoded_t fields below are unused too — they
+    //      describe classes whose execute paths haven't landed yet.
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused = &{1'b0,
         CFGBIGEND, nIRQ, nFIQ, ABORT,
-        rf_rb_data, rf_rc_data,
         spsr_unused, spsr_valid_unused,
         cond_is_nv, dec_is_dataproc, rf_pc_written,
         alu_flag_we,
         cpsr[27:6],
+        ls_data_addr_calc[31:12],         // high bits flow into ls_data_addr_q
+        // dp_imm_value is the decoder's pre-rotated imm; the core feeds
+        // the shifter raw imm8 and rotates there, so this field is dead.
+        dec.dp_imm_value,
         // Decoder fields not yet routed to execute logic
-        dec.instr_class,
-        dec.rs,
-        dec.dp_use_imm, dec.dp_imm_value, dec.shifter_use_rs,
         dec.mul_accumulate, dec.mul_signed,
-        dec.branch_link, dec.branch_offset,
-        dec.ls_pre_index, dec.ls_up, dec.ls_byte, dec.ls_writeback,
-        dec.ls_load, dec.ls_use_imm, dec.ls_imm_offset,
         dec.hs_signed, dec.hs_halfword, dec.hs_use_imm, dec.hs_imm_offset,
         dec.block_pre_index, dec.block_up, dec.block_user_mode,
         dec.block_writeback, dec.block_load, dec.block_reg_list,

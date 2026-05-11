@@ -232,28 +232,28 @@ module arm7tdmis_tb_top
         $finish;
     end
 
-    // ---- §10 smoke verification ----
-    // The smoke program covers everything implemented so far:
-    //   §7-§8  DP-immediate (r0..r3)
-    //   §9     DP-register, immediate-shift, register-shift (r4..r9)
-    //   §10    B (skip over a poisoned MOV), BL (saves LR),
-    //          BX r14 (return to caller, LSB=0 stays ARM)
+    // ---- §11 smoke verification ----
+    // Cumulative program covering §7-§11 in one linear test. The §10
+    // subroutine is moved to the tail (after the L/S sequence) so the
+    // self-loop catches normal completion before falling into it.
     //
-    // Program layout (each entry = 1 word at PC offset):
-    //   0x00..0x0C   MOV r0..r3 immediates              (§7-§8)
-    //   0x10..0x24   ADD/MOV-shift/ORR/AND/MOV-reg-shift (§9)
-    //   0x28         B  0x30                            (skip 0x2C)
-    //   0x2C         MOV r10, #99  ← MUST NOT EXECUTE
-    //   0x30         MOV r10, #11
-    //   0x34         BL 0x40                            (LR <- 0x38)
-    //   0x38         MOV r11, #12
-    //   0x3C         MOV r15, #0x3C  (self-loop)
-    //   0x40         MOV r12, #13
-    //   0x44         BX r14                             (PC <- 0x38)
+    // Execution flow:
+    //   0x00..0x24  DP-imm + DP-reg sets r0..r9
+    //   0x28        B over poisoned MOV r10,#99
+    //   0x30        MOV r10, #11
+    //   0x34        BL <subroutine at 0x54> — LR=0x38
+    //   0x54        subroutine: MOV r12, #13
+    //   0x58        BX r14 → return to 0x38
+    //   0x38        MOV r11, #12
+    //   0x3C        MOV r13, #0x100      (base for L/S — r13_svc)
+    //   0x40        STR r0, [r13]        (mem[0x100] ← 5)
+    //   0x44        LDR r10, [r13]       (r10 ← mem[0x100] = 5)
+    //   0x48        STRB r1, [r13, #4]   (mem[0x104] byte0 ← 7)
+    //   0x4C        LDRB r11, [r13, #4]  (r11 ← byte0 = 7)
+    //   0x50        MOV r15, #0x50       (self-loop)
     //
-    // Execution flow: ... 0x28→0x30, 0x34→0x40, 0x44→0x38, 0x3C self-loop.
-    // 17 instructions execute (0x2C is skipped). At 2 cycles each plus
-    // reset-sync slack we need ~40 cycles; 80 is comfortable.
+    // L/S takes 4 cycles each (S_FETCH/EXECUTE/DADDR/DDATA); DP takes 2.
+    // Total ≈ 65 cycles after reset. 100-cycle wait is comfortable.
     int unsigned smoke_errors = 0;
 
     task automatic check_reg(input int idx, input logic [31:0] expected, input string name);
@@ -264,13 +264,21 @@ module arm7tdmis_tb_top
         end
     endtask
 
+    task automatic check_mem(input int idx, input logic [31:0] expected, input string name);
+        if (u_mem.mem[idx] !== expected) begin
+            $display("[smoke] FAIL %s (mem[%0d]): expected %08x, got %08x",
+                     name, idx, expected, u_mem.mem[idx]);
+            smoke_errors = smoke_errors + 1;
+        end
+    endtask
+
     initial begin
         wait (nRESET);
         @(posedge CLK);
         $display("[smoke] mem[0..4] = %08x %08x %08x %08x %08x",
                  u_mem.mem[0], u_mem.mem[1], u_mem.mem[2],
                  u_mem.mem[3], u_mem.mem[4]);
-        repeat (80) @(posedge CLK);
+        repeat (100) @(posedge CLK);
 
         // DP-immediate (§7-§8)
         check_reg(0, 32'h00000005, "r0=5");
@@ -286,18 +294,21 @@ module arm7tdmis_tb_top
         check_reg(8, 32'h00000005, "r8=r2&r0");
         check_reg(9, 32'h00000280, "r9=r0<<r1");
 
-        // §10 branch coverage. r10 must be 11 (not 99 — proves the B
-        // branch skipped the poisoned MOV); r11=12 (post-BL return);
-        // r12=13 (executed inside the BL target); r14_svc=0x38 (LR set
-        // by BL — the core boots in Supervisor mode so the banked
-        // r14_svc lives at flat-index 26, not 14).
-        check_reg(10, 32'h0000000B, "r10=11 (B skipped MOV r10,#99)");
-        check_reg(11, 32'h0000000C, "r11=12 (post-BL return via BX r14)");
+        // §10 branch coverage (subroutine + post-return path)
         check_reg(12, 32'h0000000D, "r12=13 (executed inside BL target)");
         check_reg(26, 32'h00000038, "r14_svc=LR set by BL");
 
-        if (u_dut.u_core.pc_q !== 32'h0000003C) begin
-            $display("[smoke] FAIL pc_q: expected 0x0000003C (self-loop), got %08x",
+        // §11 load/store coverage. The L/S sequence overwrites r10 and
+        // r11 with values loaded from memory.
+        check_reg(10, 32'h00000005, "r10=LDR mem[0x100] = 5");
+        check_reg(11, 32'h00000007, "r11=LDRB mem[0x104] = 7");
+        check_reg(25, 32'h00000100, "r13_svc=L/S base 0x100");
+
+        check_mem(64, 32'h00000005, "mem[0x100]=STR r0");
+        check_mem(65, 32'h00000007, "mem[0x104]=STRB r1");
+
+        if (u_dut.u_core.pc_q !== 32'h00000050) begin
+            $display("[smoke] FAIL pc_q: expected 0x00000050 (self-loop), got %08x",
                      u_dut.u_core.pc_q);
             smoke_errors = smoke_errors + 1;
         end
