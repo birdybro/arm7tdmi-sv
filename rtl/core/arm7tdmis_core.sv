@@ -83,38 +83,26 @@ module arm7tdmis_core
     );
 
     // ---- Decoder ----
-    cond_e       dec_cond;
-    alu_op_e     dec_alu_op;
-    logic        dec_s_bit;
-    logic [3:0]  dec_rd, dec_rn, dec_rm;
-    logic [31:0] dec_shifter_in;
-    shift_op_e   dec_shifter_op;
-    logic [7:0]  dec_shifter_amount;
-    logic        dec_shifter_is_rrx;
-    logic        dec_is_dataproc;
-    logic        dec_is_test_op;
-    logic        dec_is_unimplemented;
-
+    // The decoder hands back a normalized decoded_t with classification
+    // and all class-specific fields; we also keep three legacy scalars
+    // for §7-style write-back gating (the integration path still only
+    // executes DP-immediate — DP-register and the other classes get their
+    // execute paths in §9-§13).
+    //
     // Decoder fed directly from RDATA. The memory model produces RDATA
     // combinationally from a registered address (latched at end of S_FETCH),
     // so RDATA carries the instruction throughout the S_EXECUTE cycle.
     // In S_FETCH, RDATA is whatever the memory drives (typically 0 or
     // stale) — harmless because the writeback gates suppress commits
     // outside S_EXECUTE.
+    decoded_t dec;
+    logic     dec_is_dataproc;
+    logic     dec_is_unimplemented;
+
     arm7tdmis_decoder u_dec (
         .instr            (RDATA),
-        .cond             (dec_cond),
-        .alu_op           (dec_alu_op),
-        .s_bit            (dec_s_bit),
-        .rd               (dec_rd),
-        .rn               (dec_rn),
-        .rm               (dec_rm),
-        .shifter_in       (dec_shifter_in),
-        .shifter_op       (dec_shifter_op),
-        .shifter_amount   (dec_shifter_amount),
-        .shifter_is_rrx   (dec_shifter_is_rrx),
+        .dec              (dec),
         .is_dataproc      (dec_is_dataproc),
-        .is_test_op       (dec_is_test_op),
         .is_unimplemented (dec_is_unimplemented)
     );
 
@@ -123,7 +111,7 @@ module arm7tdmis_core
     logic cond_is_nv;
 
     arm7tdmis_condition u_cond (
-        .cond           (dec_cond),
+        .cond           (dec.cond),
         .n_flag         (cpsr.n),
         .z_flag         (cpsr.z),
         .c_flag         (cpsr.c),
@@ -143,8 +131,8 @@ module arm7tdmis_core
         .mode            (cpsr.m),
         .t_bit           (cpsr.t),
         .pc_in           (pc_q),
-        .ra_addr         (dec_rn),
-        .rb_addr         (dec_rm),
+        .ra_addr         (dec.rn),
+        .rb_addr         (dec.rm),
         .rc_addr         (4'h0),
         .ra_data         (rf_ra_data),
         .rb_data         (rf_rb_data),
@@ -160,11 +148,14 @@ module arm7tdmis_core
     logic [31:0] sh_result;
     logic        sh_carry_out;
 
+    // For §7 we only feed the shifter from the DP-immediate path
+    // (dp_imm_value with ROR-by-2*rot4). DP-register and other classes
+    // get their shifter wiring in §9.
     arm7tdmis_shifter u_shifter (
-        .op        (dec_shifter_op),
-        .amount    (dec_shifter_amount),
-        .is_rrx    (dec_shifter_is_rrx),
-        .in_data   (dec_shifter_in),
+        .op        (dec.shifter_op),
+        .amount    (dec.shifter_amount),
+        .is_rrx    (dec.shifter_is_rrx),
+        .in_data   ({24'h0, RDATA[7:0]}),    // imm8 zero-extended; matches DP-imm
         .carry_in  (cpsr.c),
         .result    (sh_result),
         .carry_out (sh_carry_out)
@@ -176,7 +167,7 @@ module arm7tdmis_core
     logic [3:0]  alu_flag_we;
 
     arm7tdmis_alu u_alu (
-        .op            (dec_alu_op),
+        .op            (dec.alu_op),
         .op_a          (rf_ra_data),
         .op_b          (sh_result),
         .cpsr_c        (cpsr.c),
@@ -200,18 +191,20 @@ module arm7tdmis_core
         endcase
     end
 
-    // ---- Writeback control ----
+    // ---- Writeback control. Still §7-style: only DP-immediate commits;
+    //      every other class (now properly classified by the §8 decoder)
+    //      is treated as a NOP until §9-§13 wire its execute path.
     wire executing       = (state_q == S_EXECUTE);
-    wire passes_cond     = executing && condition_pass && dec_is_dataproc;
-    wire writes_dest     = passes_cond && !dec_is_test_op;
-    wire writes_pc       = writes_dest && (dec_rd == 4'd15);
-    wire writes_flags    = passes_cond && dec_s_bit;
+    wire passes_cond     = executing && condition_pass && !dec_is_unimplemented;
+    wire writes_dest     = passes_cond && !dec.is_test_op;
+    wire writes_pc       = writes_dest && (dec.rd == 4'd15);
+    wire writes_flags    = passes_cond && dec.s_bit;
 
     logic [3:0]  rf_write_addr;
     logic [31:0] rf_write_data;
     logic        rf_write_en;
 
-    assign rf_write_addr = dec_rd;
+    assign rf_write_addr = dec.rd;
     assign rf_write_data = alu_result;
     assign rf_write_en   = writes_dest;
 
@@ -263,14 +256,29 @@ module arm7tdmis_core
     //      cpsr[27:6] = reserved bits + I + F (interrupt masking is §14);
     //      alu_flag_we is unused because we drive a fixed _f-byte mask
     //      and gate writes by S+condition externally.
+    //      Most of the decoded_t fields are unused too — they describe
+    //      classes whose execute paths (§9-§13) haven't landed yet.
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused = &{1'b0,
         CFGBIGEND, nIRQ, nFIQ, ABORT,
         rf_rb_data, rf_rc_data,
         spsr_unused, spsr_valid_unused,
-        cond_is_nv, dec_is_unimplemented, rf_pc_written,
+        cond_is_nv, dec_is_dataproc, rf_pc_written,
         alu_flag_we,
-        cpsr[27:6]
+        cpsr[27:6],
+        // Decoder fields not yet routed to execute logic
+        dec.instr_class,
+        dec.rs,
+        dec.dp_use_imm, dec.dp_imm_value, dec.shifter_use_rs,
+        dec.mul_accumulate, dec.mul_signed,
+        dec.branch_link, dec.branch_offset,
+        dec.ls_pre_index, dec.ls_up, dec.ls_byte, dec.ls_writeback,
+        dec.ls_load, dec.ls_use_imm, dec.ls_imm_offset,
+        dec.hs_signed, dec.hs_halfword, dec.hs_use_imm, dec.hs_imm_offset,
+        dec.block_pre_index, dec.block_up, dec.block_user_mode,
+        dec.block_writeback, dec.block_load, dec.block_reg_list,
+        dec.psr_use_spsr, dec.msr_field_mask, dec.msr_use_imm,
+        dec.swi_comment, dec.cp_num
     };
     /* verilator lint_on UNUSEDSIGNAL */
 
