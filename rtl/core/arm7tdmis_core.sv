@@ -214,11 +214,18 @@ module arm7tdmis_core
     wire instr_is_mul_decoder = (dec.instr_class == INSTR_MUL);
     wire [3:0] ra_addr_eff    = instr_is_mul_decoder ? dec.rd : dec.rn;
 
+    // During exception entry, mux the regfile mode to the target mode so
+    // the LR (r14) writeback lands in the target bank — e.g., undef trap
+    // from SVC writes r14_und (slot 30) rather than r14_svc (slot 26).
+    // Register reads in the exception-entry cycle don't matter (the
+    // instruction's source operands aren't consumed by the trap).
+    wire [4:0] regfile_mode_eff = any_exc_fires ? exc_mode_target : cpsr.m;
+
     arm7tdmis_regfile u_regfile (
         .CLK             (CLK),
         .CLKEN           (CLKEN),
         .nRESET          (nRESET),
-        .mode            (cpsr.m),
+        .mode            (regfile_mode_eff),
         .t_bit           (cpsr.t),
         .pc_in           (pc_q),
         .ra_addr         (ra_addr_eff),    // Rn / Rd-as-accumulator (MUL/MLA)
@@ -434,6 +441,7 @@ module arm7tdmis_core
     wire instr_is_mul    = (dec.instr_class == INSTR_MUL);
     wire instr_is_msr    = (dec.instr_class == INSTR_MSR);
     wire instr_is_mrs    = (dec.instr_class == INSTR_MRS);
+    wire instr_is_undef  = (dec.instr_class == INSTR_UNDEF);
 
     wire msr_fires      = passes_cond && instr_is_msr;
     wire mrs_fires      = passes_cond && instr_is_mrs;
@@ -446,41 +454,61 @@ module arm7tdmis_core
     wire branch_writes_pc   = passes_cond && instr_is_branch;
     wire bx_writes_pc       = passes_cond && instr_is_bx;
     wire swi_fires          = passes_cond && instr_is_swi;
+    wire undef_fires        = executing && condition_pass && instr_is_undef;
+    wire any_exc_fires      = swi_fires || undef_fires;
     wire mul_writes_dest    = passes_cond && instr_is_mul;
     wire mul_writes_flags   = mul_writes_dest && dec.s_bit;
 
-    wire writes_pc      = dp_writes_pc || branch_writes_pc || bx_writes_pc || swi_fires;
-    wire exec_writes_rf = dp_writes_dest || branch_link_writes || swi_fires;
+    wire writes_pc      = dp_writes_pc || branch_writes_pc || bx_writes_pc || any_exc_fires;
+    wire exec_writes_rf = dp_writes_dest || branch_link_writes || any_exc_fires;
     wire writes_flags   = (passes_cond && instr_is_dp && dec.s_bit) || mul_writes_flags;
 
     assign cpsr_restore_now = dp_writes_pc && dec.s_bit;
     assign bx_set_t_en      = bx_writes_pc;
     assign bx_set_t_value   = rf_rb_data[0];     // Rm[0] selects new state
 
-    // SWI: atomically enter SVC mode. exc_new_cpsr = current CPSR with
-    // mode=SVC, I=1, T=0 (F preserved). spsr index for SVC = 2.
-    psr_t swi_new_cpsr;
+    // Per-exception target mode / SPSR bank / vector address.
+    //   SWI    → SVC mode, SPSR_svc (idx 2), vector 0x08
+    //   UNDEF  → UND mode, SPSR_und (idx 4), vector 0x04
+    // (IRQ/FIQ/abort entries land in §14c once external pins are wired.)
+    logic [4:0]   exc_mode_target;
+    logic [2:0]   exc_spsr_target;
+    logic [31:0]  exc_pc_target_addr;
+
     always_comb begin
-        swi_new_cpsr   = cpsr;
-        swi_new_cpsr.m = 5'(MODE_SUPERVISOR);
-        swi_new_cpsr.i = 1'b1;
-        swi_new_cpsr.t = 1'b0;
+        // Defaults: SWI form
+        exc_mode_target    = 5'(MODE_SUPERVISOR);
+        exc_spsr_target    = 3'd2;
+        exc_pc_target_addr = 32'h0000_0008;
+        if (undef_fires) begin
+            exc_mode_target    = 5'(MODE_UNDEFINED);
+            exc_spsr_target    = 3'd4;
+            exc_pc_target_addr = 32'h0000_0004;
+        end
     end
-    assign exc_enter_en        = swi_fires;
-    assign exc_target_spsr_idx = 3'd2;     // SPSR_svc
-    assign exc_new_cpsr        = swi_new_cpsr;
+
+    // exc_new_cpsr = current CPSR with mode/I/T overridden. F preserved.
+    psr_t exc_cpsr_built;
+    always_comb begin
+        exc_cpsr_built   = cpsr;
+        exc_cpsr_built.m = exc_mode_target;
+        exc_cpsr_built.i = 1'b1;
+        exc_cpsr_built.t = 1'b0;
+    end
+    assign exc_enter_en        = any_exc_fires;
+    assign exc_target_spsr_idx = exc_spsr_target;
+    assign exc_new_cpsr        = exc_cpsr_built;
 
     // PC target per class:
     //   DP/Rd=15:  ALU result
     //   B/BL:      pc_q + 8 + sign-extended (offset24<<2)
     //   BX:        Rm with LSB cleared (LSB is the new T bit, handled above)
-    //   SWI:       0x00000008 (SWI exception vector — TRM Table 2-4)
+    //   Exception: exc_pc_target_addr (vector for SWI / undef / ...)
     wire [31:0] dp_pc_target     = alu_result;
     wire [31:0] branch_pc_target = pc_q + 32'd8 + dec.branch_offset;
     wire [31:0] bx_pc_target     = rf_rb_data & 32'hFFFFFFFE;
-    wire [31:0] swi_pc_target    = 32'h0000_0008;
 
-    wire [31:0] pc_target = instr_is_swi    ? swi_pc_target    :
+    wire [31:0] pc_target = any_exc_fires   ? exc_pc_target_addr :
                             instr_is_branch ? branch_pc_target :
                             instr_is_bx     ? bx_pc_target     :
                                               dp_pc_target;
@@ -578,15 +606,12 @@ module arm7tdmis_core
             rf_write_addr = swp_rd_q;
             rf_write_data = swp_load_value;
             rf_write_en   = 1'b1;
-        end else if (swi_fires) begin
-            // SWI: save return address (pc_q+4 = instruction after SWI)
-            // into r14 of the target mode. Since the PSR's exc_enter_en
-            // is asserted in the same cycle, the regfile sees the OLD
-            // mode (still pre-SWI mode); the write lands in the source
-            // mode's r14 bank. For boot-mode SWI (SVC→SVC) the source
-            // and target bank coincide, so this is correct. Cross-mode
-            // SWI (User→SVC) needs a force-target-mode override; that
-            // lands when User mode is testable in §14b.
+        end else if (any_exc_fires) begin
+            // Exception entry: save the return address (pc_q+4 — the
+            // instruction after the trapping one) into r14 of the
+            // TARGET mode. regfile_mode_eff is muxed to exc_mode_target
+            // during this cycle so the bank index resolves correctly
+            // (e.g., undef from SVC writes r14_und at flat slot 30).
             rf_write_addr = 4'd14;
             rf_write_data = pc_q + 32'd4;
             rf_write_en   = 1'b1;
