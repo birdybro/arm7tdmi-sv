@@ -454,7 +454,13 @@ module arm7tdmis_core
     wire branch_writes_pc   = passes_cond && instr_is_branch;
     wire bx_writes_pc       = passes_cond && instr_is_bx;
     wire swi_fires          = passes_cond && instr_is_swi;
-    wire undef_fires        = executing && condition_pass && instr_is_undef;
+    // Undef trap fires for unrecognized classifications AND for the
+    // architecturally-reserved NV condition encoding (ARMv4T § §30.0):
+    // NV makes condition_pass=0 in the normal path so the instruction
+    // would NOP — but the architecture says trap. cond_is_nv catches it.
+    wire undef_fires        = executing &&
+                              ((condition_pass && instr_is_undef)
+                               || cond_is_nv);
 
     // External interrupt sampling. nIRQ/nFIQ are active-LOW and level-
     // sensitive per TRM §30.14.3. We treat them as gating the next
@@ -914,7 +920,7 @@ module arm7tdmis_core
     wire _unused = &{1'b0,
         CFGBIGEND, ABORT,
         spsr_valid,                       // MRS doesn't currently check validity (UNPREDICTABLE in User/System mode anyway)
-        cond_is_nv, dec_is_dataproc, rf_pc_written,
+        dec_is_dataproc, rf_pc_written,
         alu_flag_we,
         cpsr[27:6],
         ls_data_addr_calc[31:12],         // high bits flow into ls_data_addr_q
