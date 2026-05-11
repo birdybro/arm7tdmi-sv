@@ -455,7 +455,19 @@ module arm7tdmis_core
     wire bx_writes_pc       = passes_cond && instr_is_bx;
     wire swi_fires          = passes_cond && instr_is_swi;
     wire undef_fires        = executing && condition_pass && instr_is_undef;
-    wire any_exc_fires      = swi_fires || undef_fires;
+
+    // External interrupt sampling. nIRQ/nFIQ are active-LOW and level-
+    // sensitive per TRM §30.14.3. We treat them as gating the next
+    // instruction: if at S_EXECUTE end an interrupt is pending and the
+    // matching mask bit is clear, take the exception in place of the
+    // sequential PC advance.
+    wire irq_pending = executing && !nIRQ && !cpsr.i;
+    wire fiq_pending = executing && !nFIQ && !cpsr.f;
+    wire fiq_fires   = fiq_pending && !swi_fires && !undef_fires;
+    wire irq_fires   = irq_pending && !fiq_pending
+                    && !swi_fires && !undef_fires;
+
+    wire any_exc_fires      = swi_fires || undef_fires || irq_fires || fiq_fires;
     wire mul_writes_dest    = passes_cond && instr_is_mul;
     wire mul_writes_flags   = mul_writes_dest && dec.s_bit;
 
@@ -484,6 +496,14 @@ module arm7tdmis_core
             exc_mode_target    = 5'(MODE_UNDEFINED);
             exc_spsr_target    = 3'd4;
             exc_pc_target_addr = 32'h0000_0004;
+        end else if (fiq_fires) begin
+            exc_mode_target    = 5'(MODE_FIQ);
+            exc_spsr_target    = 3'd0;
+            exc_pc_target_addr = 32'h0000_001C;
+        end else if (irq_fires) begin
+            exc_mode_target    = 5'(MODE_IRQ);
+            exc_spsr_target    = 3'd1;
+            exc_pc_target_addr = 32'h0000_0018;
         end
     end
 
@@ -492,8 +512,10 @@ module arm7tdmis_core
     always_comb begin
         exc_cpsr_built   = cpsr;
         exc_cpsr_built.m = exc_mode_target;
-        exc_cpsr_built.i = 1'b1;
+        exc_cpsr_built.i = 1'b1;          // mask IRQs in handler
         exc_cpsr_built.t = 1'b0;
+        // FIQ entry additionally masks subsequent FIQs (TRM §2.9.7).
+        if (fiq_fires) exc_cpsr_built.f = 1'b1;
     end
     assign exc_enter_en        = any_exc_fires;
     assign exc_target_spsr_idx = exc_spsr_target;
@@ -890,7 +912,7 @@ module arm7tdmis_core
     //      describe classes whose execute paths haven't landed yet.
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused = &{1'b0,
-        CFGBIGEND, nIRQ, nFIQ, ABORT,
+        CFGBIGEND, ABORT,
         spsr_valid,                       // MRS doesn't currently check validity (UNPREDICTABLE in User/System mode anyway)
         cond_is_nv, dec_is_dataproc, rf_pc_written,
         alu_flag_we,
