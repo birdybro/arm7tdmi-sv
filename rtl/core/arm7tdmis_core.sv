@@ -90,10 +90,13 @@ module arm7tdmis_core
     // still to be transferred (including the one in flight); each
     // S_BLOCK_DATA cycle clears the bit for block_curr_reg_q and
     // computes the next register from the priority encoder.
+    // block_first_beat_q distinguishes the first beat (TRANS=N) from
+    // subsequent beats (TRANS=S) in the burst.
     logic [15:0]  block_remaining_q;
     logic [31:0]  block_curr_addr_q;
     logic [3:0]   block_curr_reg_q;
     logic         block_load_q;
+    logic         block_first_beat_q;
 
     // SWP latches. swp_loaded_q holds the value read in S_SWP_RDATA
     // for commit to Rd at the end of S_SWP_WDATA — Rd is only updated
@@ -551,10 +554,11 @@ module arm7tdmis_core
                 ls_byte_q         <= 1'b0;
                 ls_load_q         <= 1'b0;
                 ls_addr_lo_q      <= 2'h0;
-                block_remaining_q <= 16'h0;
-                block_curr_addr_q <= 32'h0;
-                block_curr_reg_q  <= 4'h0;
-                block_load_q      <= 1'b0;
+                block_remaining_q   <= 16'h0;
+                block_curr_addr_q   <= 32'h0;
+                block_curr_reg_q    <= 4'h0;
+                block_load_q        <= 1'b0;
+                block_first_beat_q  <= 1'b0;
                 swp_addr_q        <= 32'h0;
                 swp_store_q       <= 32'h0;
                 swp_loaded_q      <= 32'h0;
@@ -587,11 +591,14 @@ module arm7tdmis_core
                 end
 
                 // Snapshot the LDM/STM micro-op + start the iteration.
+                // The first beat after this transition drives TRANS=N;
+                // subsequent beats are sequential (TRANS=S).
                 if (state_q == S_EXECUTE && block_take_cycle) begin
-                    block_remaining_q <= dec.block_reg_list;
-                    block_curr_addr_q <= block_start_addr;
-                    block_curr_reg_q  <= lowest_set_idx(dec.block_reg_list);
-                    block_load_q      <= dec.block_load;
+                    block_remaining_q  <= dec.block_reg_list;
+                    block_curr_addr_q  <= block_start_addr;
+                    block_curr_reg_q   <= lowest_set_idx(dec.block_reg_list);
+                    block_load_q       <= dec.block_load;
+                    block_first_beat_q <= 1'b1;
                 end
 
                 // After each per-register data phase, clear the bit just
@@ -600,8 +607,9 @@ module arm7tdmis_core
                 if (state_q == S_BLOCK_DATA) begin
                     block_remaining_q <= block_after_curr;
                     if (block_has_more) begin
-                        block_curr_reg_q  <= lowest_set_idx(block_after_curr);
-                        block_curr_addr_q <= block_curr_addr_q + 32'd4;
+                        block_curr_reg_q   <= lowest_set_idx(block_after_curr);
+                        block_curr_addr_q  <= block_curr_addr_q + 32'd4;
+                        block_first_beat_q <= 1'b0;     // continuation → TRANS=S
                     end
                 end
 
@@ -677,9 +685,11 @@ module arm7tdmis_core
                 WDATA = ls_load_q ? 32'h0 : store_wdata;
             end
             S_BLOCK_ADDR: begin
-                // Drive the address for the current register.
+                // Drive the address for the current register. First beat
+                // is TRANS=N (start of burst); subsequent beats are
+                // TRANS=S (sequential continuation) per TRM §30.17.2.
                 ADDR  = block_curr_addr_q;
-                TRANS = 2'(TRANS_N);
+                TRANS = block_first_beat_q ? 2'(TRANS_N) : 2'(TRANS_S);
                 WRITE = block_load_q ? WRITE_READ : WRITE_WRITE;
                 SIZE  = 2'(SIZE_WORD);
                 PROT  = {is_priv, 1'b1};
@@ -735,7 +745,12 @@ module arm7tdmis_core
         endcase
     end
 
-    assign DMORE = 1'b0;     // no LDM/STM yet
+    // DMORE: HIGH during the current data access if the NEXT data access
+    // will be a sequential continuation (LDM/STM mid-burst). Cleared on
+    // the last beat (= no more registers to transfer) and for non-block
+    // data cycles. Single LDR/STR / SWP set this low — only LDM/STM
+    // signals continuation. Per TRM §30.17.6.
+    assign DMORE = block_active && block_has_more;
 
     // ---- Inputs / outputs not yet consumed at this milestone.
     //      cpsr[27:6] = reserved bits + I + F (interrupt masking is §14);
