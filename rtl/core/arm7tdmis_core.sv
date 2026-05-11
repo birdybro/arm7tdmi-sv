@@ -128,19 +128,22 @@ module arm7tdmis_core
     logic [2:0] exc_target_spsr_idx;
     psr_t       exc_new_cpsr;
 
+    psr_t spsr_value;             // current-mode SPSR for MRS
+    logic spsr_valid;             // 1 if current mode has a banked SPSR
+
     arm7tdmis_psr u_psr (
         .CLK                 (CLK),
         .CLKEN               (CLKEN),
         .nRESET              (nRESET),
         .cpsr                (cpsr),
-        .spsr                (spsr_unused),
-        .spsr_valid          (spsr_valid_unused),
+        .spsr                (spsr_value),
+        .spsr_valid          (spsr_valid),
         .cpsr_write_en       (cpsr_write_en),
         .cpsr_write_data     (cpsr_write_data),
         .cpsr_write_mask     (cpsr_write_mask),
-        .spsr_write_en       (1'b0),
-        .spsr_write_data     (32'h0),
-        .spsr_write_mask     (4'h0),
+        .spsr_write_en       (msr_to_spsr),
+        .spsr_write_data     (sh_result),
+        .spsr_write_mask     (dec.msr_field_mask),
         .cpsr_restore_en     (cpsr_restore_now),
         .bx_set_t_en         (bx_set_t_en),
         .bx_set_t_value      (bx_set_t_value),
@@ -427,6 +430,13 @@ module arm7tdmis_core
     wire instr_is_bx     = (dec.instr_class == INSTR_BX);
     wire instr_is_swi    = (dec.instr_class == INSTR_SWI);
     wire instr_is_mul    = (dec.instr_class == INSTR_MUL);
+    wire instr_is_msr    = (dec.instr_class == INSTR_MSR);
+    wire instr_is_mrs    = (dec.instr_class == INSTR_MRS);
+
+    wire msr_fires      = passes_cond && instr_is_msr;
+    wire mrs_fires      = passes_cond && instr_is_mrs;
+    wire msr_to_cpsr    = msr_fires && !dec.psr_use_spsr;
+    wire msr_to_spsr    = msr_fires &&  dec.psr_use_spsr;
 
     wire dp_writes_dest     = passes_cond && instr_is_dp && !dec.is_test_op;
     wire dp_writes_pc       = dp_writes_dest && (dec.rd == 4'd15);
@@ -575,6 +585,11 @@ module arm7tdmis_core
             rf_write_addr = dec.rn;
             rf_write_data = mul_result_lo;
             rf_write_en   = 1'b1;
+        end else if (mrs_fires) begin
+            // MRS reads CPSR or SPSR-of-current-mode into Rd.
+            rf_write_addr = dec.rd;
+            rf_write_data = dec.psr_use_spsr ? 32'(spsr_value) : 32'(cpsr);
+            rf_write_en   = 1'b1;
         end else begin
             rf_write_addr = dec.rd;
             rf_write_data = alu_result;
@@ -582,17 +597,18 @@ module arm7tdmis_core
         end
     end
 
-    // CPSR flag update: only the _f byte (bits [31:24]) per the ALU
-    // outputs. The S-bit + condition-pass gates are folded into
-    // writes_flags. For MULS/MLAS only N and Z update (multiplier
-    // produces them; C is UNPREDICTABLE on ARMv4 and we preserve it).
+    // CPSR write multiplexing:
+    //   - MSR to CPSR uses the shifter result + the instruction's
+    //     msr_field_mask.
+    //   - DP S-bit / MULS uses the _f byte mask with flags from the
+    //     respective unit (ALU or multiplier).
     wire        flags_from_mul = mul_writes_flags;
     wire [3:0]  flags_value = flags_from_mul
-                            ? {mul_n_out, mul_z_out, cpsr.c, cpsr.v}   // preserve C/V
+                            ? {mul_n_out, mul_z_out, cpsr.c, cpsr.v}
                             : {alu_n, alu_z, alu_c, alu_v};
-    assign cpsr_write_en   = writes_flags;
-    assign cpsr_write_data = {flags_value, 28'h0};
-    assign cpsr_write_mask = 4'b1000;
+    assign cpsr_write_en   = writes_flags || msr_to_cpsr;
+    assign cpsr_write_data = msr_to_cpsr ? sh_result : {flags_value, 28'h0};
+    assign cpsr_write_mask = msr_to_cpsr ? dec.msr_field_mask : 4'b1000;
 
     // ---- Sequential state ----
     always_ff @(posedge CLK) begin
@@ -813,7 +829,7 @@ module arm7tdmis_core
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused = &{1'b0,
         CFGBIGEND, nIRQ, nFIQ, ABORT,
-        spsr_unused, spsr_valid_unused,
+        spsr_valid,                       // MRS doesn't currently check validity (UNPREDICTABLE in User/System mode anyway)
         cond_is_nv, dec_is_dataproc, rf_pc_written,
         alu_flag_we,
         cpsr[27:6],
