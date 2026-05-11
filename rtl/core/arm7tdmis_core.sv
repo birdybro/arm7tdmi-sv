@@ -49,14 +49,19 @@ module arm7tdmis_core
     output logic        DMORE
 );
 
-    // ---- FSM state. §11 adds the L/S data cycle: S_FETCH → S_EXECUTE
-    //      → S_DADDR → S_DDATA → S_FETCH for load/store instructions;
-    //      non-L/S instructions take the original 2-state path.
-    typedef enum logic [1:0] {
-        S_FETCH   = 2'd0,
-        S_EXECUTE = 2'd1,
-        S_DADDR   = 2'd2,    // drive data address to memory
-        S_DDATA   = 2'd3     // commit load (RDATA→Rd) or drive WDATA
+    // ---- FSM state.
+    //   Non-L/S         : FETCH → EXECUTE → FETCH                          (2 cycles)
+    //   Single LDR/STR  : FETCH → EXECUTE → DADDR → DDATA → FETCH          (4 cycles)
+    //   LDM/STM         : FETCH → EXECUTE → BLOCK_ADDR → BLOCK_DATA → …    (2+2n)
+    //                     repeating ADDR/DATA per register in the list,
+    //                     low-numbered first.
+    typedef enum logic [2:0] {
+        S_FETCH      = 3'd0,
+        S_EXECUTE    = 3'd1,
+        S_DADDR      = 3'd2,    // single L/S address phase
+        S_DDATA      = 3'd3,    // single L/S data phase
+        S_BLOCK_ADDR = 3'd4,    // LDM/STM per-register address phase
+        S_BLOCK_DATA = 3'd5     // LDM/STM per-register data phase
     } state_e;
 
     state_e       state_q;
@@ -73,6 +78,15 @@ module arm7tdmis_core
     logic         ls_byte_q;
     logic         ls_load_q;
     logic [1:0]   ls_addr_lo_q;
+
+    // Block transfer latches. block_remaining_q tracks the registers
+    // still to be transferred (including the one in flight); each
+    // S_BLOCK_DATA cycle clears the bit for block_curr_reg_q and
+    // computes the next register from the priority encoder.
+    logic [15:0]  block_remaining_q;
+    logic [31:0]  block_curr_addr_q;
+    logic [3:0]   block_curr_reg_q;
+    logic         block_load_q;
 
     // ---- PSR ----
     psr_t         cpsr;
@@ -152,11 +166,15 @@ module arm7tdmis_core
     logic [31:0] rf_ra_data, rf_rb_data, rf_rc_data;
     logic        rf_pc_written;
 
-    // Read port C is shared between the DP register-shift-by-register
-    // path (which needs Rs) and the L/S store path (which needs the
-    // value held in Rd). Mux on instruction class.
+    // Read port C is shared:
+    //   DP register-shift-by-register : Rs   (dec.rs)
+    //   L/S single store              : Rd   (dec.rd — source for STR)
+    //   LDM/STM block phase           : block_curr_reg_q (current register)
     wire instr_is_ls_decoder = (dec.instr_class == INSTR_LDR_STR);
-    wire [3:0] rc_addr_eff   = instr_is_ls_decoder ? dec.rd : dec.rs;
+    wire block_active = (state_q == S_BLOCK_ADDR) || (state_q == S_BLOCK_DATA);
+    wire [3:0] rc_addr_eff = block_active        ? block_curr_reg_q
+                           : instr_is_ls_decoder ? dec.rd
+                                                 : dec.rs;
 
     arm7tdmis_regfile u_regfile (
         .CLK             (CLK),
@@ -226,24 +244,50 @@ module arm7tdmis_core
     );
 
     // ---- FSM transitions. Non-L/S instructions go S_FETCH→S_EXECUTE→
-    //      S_FETCH (2 cycles). L/S instructions take the longer
-    //      S_FETCH→S_EXECUTE→S_DADDR→S_DDATA→S_FETCH path (4 cycles).
-    //      An L/S that fails its condition is treated as a NOP and
-    //      stays on the short path.
+    //      S_FETCH (2 cycles). L/S instructions take the longer path.
+    //      LDM/STM iterates: BLOCK_ADDR↔BLOCK_DATA per register.
     state_e state_next;
 
-    wire ls_take_data_cycle = passes_cond && (dec.instr_class == INSTR_LDR_STR)
+    // Helper: lowest set bit index. Linear scan; small (16 entries).
+    function automatic logic [3:0] lowest_set_idx(input logic [15:0] mask);
+        for (int i = 0; i < 16; i = i + 1) begin
+            if (mask[i]) return i[3:0];
+        end
+        return 4'd0;
+    endfunction
+
+    wire ls_take_data_cycle = passes_cond
+                            && (dec.instr_class == INSTR_LDR_STR)
                             && dec.ls_use_imm
                             && dec.ls_pre_index
                             && !dec.ls_writeback;
 
+    // Block (LDM/STM) §12 minimum: IA mode (P=0, U=1), no writeback,
+    // no User-mode override, no PC in list, non-empty list.
+    wire block_take_cycle = passes_cond
+                          && (dec.instr_class == INSTR_LDM_STM)
+                          && !dec.block_pre_index
+                          && dec.block_up
+                          && !dec.block_user_mode
+                          && !dec.block_writeback
+                          && !dec.block_reg_list[15]
+                          && (dec.block_reg_list != 16'h0);
+
+    // Block iteration: clearing the current bit yields the remaining set.
+    wire [15:0] block_after_curr = block_remaining_q & ~(16'h1 << block_curr_reg_q);
+    wire        block_has_more   = (block_after_curr != 16'h0);
+
     always_comb begin
         unique case (state_q)
-            S_FETCH:   state_next = S_EXECUTE;
-            S_EXECUTE: state_next = ls_take_data_cycle ? S_DADDR : S_FETCH;
-            S_DADDR:   state_next = S_DDATA;
-            S_DDATA:   state_next = S_FETCH;
-            default:   state_next = S_FETCH;
+            S_FETCH:      state_next = S_EXECUTE;
+            S_EXECUTE:    state_next = ls_take_data_cycle    ? S_DADDR
+                                     : block_take_cycle      ? S_BLOCK_ADDR
+                                                             : S_FETCH;
+            S_DADDR:      state_next = S_DDATA;
+            S_DDATA:      state_next = S_FETCH;
+            S_BLOCK_ADDR: state_next = S_BLOCK_DATA;
+            S_BLOCK_DATA: state_next = block_has_more ? S_BLOCK_ADDR : S_FETCH;
+            default:      state_next = S_FETCH;
         endcase
     end
 
@@ -319,9 +363,16 @@ module arm7tdmis_core
     // S_DDATA load writeback: commit RDATA into the latched Rd register.
     wire ddata_writes_rd = (state_q == S_DDATA) && ls_load_q;
 
+    // S_BLOCK_DATA load writeback: commit RDATA to the register currently
+    // being transferred (for LDM only — STM is a memory write).
+    wire block_writes_ldm = (state_q == S_BLOCK_DATA) && block_load_q;
+
     // ---- Regfile write port mux ----
-    // S_DDATA loads commit Rd with the extracted memory value;
-    // S_EXECUTE DP and BL still write through this same port.
+    // Priorities (only one fires per cycle by construction):
+    //   - S_DDATA load   : ls_rd_q ← load_value     (single LDR/LDRB)
+    //   - S_BLOCK_DATA   : block_curr_reg_q ← RDATA (LDM iteration)
+    //   - S_EXECUTE BL   : r14 ← pc_q + 4           (BL link)
+    //   - S_EXECUTE DP   : dec.rd ← alu_result      (data-processing)
     logic [3:0]  rf_write_addr;
     logic [31:0] rf_write_data;
     logic        rf_write_en;
@@ -330,6 +381,10 @@ module arm7tdmis_core
         if (ddata_writes_rd) begin
             rf_write_addr = ls_rd_q;
             rf_write_data = load_value;
+            rf_write_en   = 1'b1;
+        end else if (block_writes_ldm) begin
+            rf_write_addr = block_curr_reg_q;
+            rf_write_data = RDATA;
             rf_write_en   = 1'b1;
         end else if (branch_link_writes) begin
             rf_write_addr = 4'd14;
@@ -352,14 +407,18 @@ module arm7tdmis_core
     always_ff @(posedge CLK) begin
         if (CLKEN) begin
             if (!nRESET) begin
-                state_q         <= S_FETCH;
-                pc_q            <= 32'h0;
-                ls_data_addr_q  <= 32'h0;
-                ls_store_data_q <= 32'h0;
-                ls_rd_q         <= 4'h0;
-                ls_byte_q       <= 1'b0;
-                ls_load_q       <= 1'b0;
-                ls_addr_lo_q    <= 2'h0;
+                state_q           <= S_FETCH;
+                pc_q              <= 32'h0;
+                ls_data_addr_q    <= 32'h0;
+                ls_store_data_q   <= 32'h0;
+                ls_rd_q           <= 4'h0;
+                ls_byte_q         <= 1'b0;
+                ls_load_q         <= 1'b0;
+                ls_addr_lo_q      <= 2'h0;
+                block_remaining_q <= 16'h0;
+                block_curr_addr_q <= 32'h0;
+                block_curr_reg_q  <= 4'h0;
+                block_load_q      <= 1'b0;
             end else begin
                 state_q <= state_next;
 
@@ -383,6 +442,25 @@ module arm7tdmis_core
                     ls_byte_q       <= dec.ls_byte;
                     ls_load_q       <= dec.ls_load;
                     ls_addr_lo_q    <= ls_data_addr_calc[1:0];
+                end
+
+                // Snapshot the LDM/STM micro-op + start the iteration.
+                if (state_q == S_EXECUTE && block_take_cycle) begin
+                    block_remaining_q <= dec.block_reg_list;
+                    block_curr_addr_q <= rf_ra_data;           // IA: start = Rn
+                    block_curr_reg_q  <= lowest_set_idx(dec.block_reg_list);
+                    block_load_q      <= dec.block_load;
+                end
+
+                // After each per-register data phase, clear the bit just
+                // transferred, advance the address by 4, and pick the
+                // next lowest register from the remaining list.
+                if (state_q == S_BLOCK_DATA) begin
+                    block_remaining_q <= block_after_curr;
+                    if (block_has_more) begin
+                        block_curr_reg_q  <= lowest_set_idx(block_after_curr);
+                        block_curr_addr_q <= block_curr_addr_q + 32'd4;
+                    end
                 end
             end
         end
@@ -436,6 +514,25 @@ module arm7tdmis_core
                 PROT  = {is_priv, 1'b1};
                 WDATA = ls_load_q ? 32'h0 : store_wdata;
             end
+            S_BLOCK_ADDR: begin
+                // Drive the address for the current register.
+                ADDR  = block_curr_addr_q;
+                TRANS = 2'(TRANS_N);
+                WRITE = block_load_q ? WRITE_READ : WRITE_WRITE;
+                SIZE  = 2'(SIZE_WORD);
+                PROT  = {is_priv, 1'b1};
+            end
+            S_BLOCK_DATA: begin
+                // Drive WDATA for STM (from regfile read port C, which is
+                // routed to the current block register). LDM commits the
+                // load through the regfile write port.
+                ADDR  = block_curr_addr_q;
+                TRANS = 2'(TRANS_I);
+                WRITE = block_load_q ? WRITE_READ : WRITE_WRITE;
+                SIZE  = 2'(SIZE_WORD);
+                PROT  = {is_priv, 1'b1};
+                WDATA = block_load_q ? 32'h0 : rf_rc_data;
+            end
             default: ;
         endcase
     end
@@ -456,14 +553,13 @@ module arm7tdmis_core
         alu_flag_we,
         cpsr[27:6],
         ls_data_addr_calc[31:12],         // high bits flow into ls_data_addr_q
+        ls_store_data_q[31:8],            // only [7:0] used for byte store
         // dp_imm_value is the decoder's pre-rotated imm; the core feeds
         // the shifter raw imm8 and rotates there, so this field is dead.
         dec.dp_imm_value,
         // Decoder fields not yet routed to execute logic
         dec.mul_accumulate, dec.mul_signed,
         dec.hs_signed, dec.hs_halfword, dec.hs_use_imm, dec.hs_imm_offset,
-        dec.block_pre_index, dec.block_up, dec.block_user_mode,
-        dec.block_writeback, dec.block_load, dec.block_reg_list,
         dec.psr_use_spsr, dec.msr_field_mask, dec.msr_use_imm,
         dec.swi_comment, dec.cp_num
     };

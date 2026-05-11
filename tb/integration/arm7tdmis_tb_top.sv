@@ -232,28 +232,32 @@ module arm7tdmis_tb_top
         $finish;
     end
 
-    // ---- §11 smoke verification ----
-    // Cumulative program covering §7-§11 in one linear test. The §10
-    // subroutine is moved to the tail (after the L/S sequence) so the
-    // self-loop catches normal completion before falling into it.
+    // ---- §12 smoke verification ----
+    // Cumulative program covering §7-§12. The §10 subroutine moved to
+    // the tail (now at 0x60) to make room for the §11 L/S sequence at
+    // 0x40-0x4C and the §12 block-transfer sequence at 0x50-0x58.
     //
     // Execution flow:
     //   0x00..0x24  DP-imm + DP-reg sets r0..r9
     //   0x28        B over poisoned MOV r10,#99
     //   0x30        MOV r10, #11
-    //   0x34        BL <subroutine at 0x54> — LR=0x38
-    //   0x54        subroutine: MOV r12, #13
-    //   0x58        BX r14 → return to 0x38
+    //   0x34        BL 0x60 (subroutine) — LR=0x38
+    //   0x60        MOV r12, #13
+    //   0x64        BX r14 → return to 0x38
     //   0x38        MOV r11, #12
-    //   0x3C        MOV r13, #0x100      (base for L/S — r13_svc)
-    //   0x40        STR r0, [r13]        (mem[0x100] ← 5)
-    //   0x44        LDR r10, [r13]       (r10 ← mem[0x100] = 5)
-    //   0x48        STRB r1, [r13, #4]   (mem[0x104] byte0 ← 7)
-    //   0x4C        LDRB r11, [r13, #4]  (r11 ← byte0 = 7)
-    //   0x50        MOV r15, #0x50       (self-loop)
+    //   0x3C        MOV r13, #0x100        (base for L/S)
+    //   0x40        STR r0, [r13]          (mem[0x100] ← 5)
+    //   0x44        LDR r10, [r13]         (r10 ← 5)
+    //   0x48        STRB r1, [r13, #4]     (mem[0x104] byte0 ← 7)
+    //   0x4C        LDRB r11, [r13, #4]    (r11 ← 7)
+    //   0x50        MOV r5, #0x200         (base for LDM/STM — overwrites r5)
+    //   0x54        STMIA r5, {r0,r1,r2}   (mem[0x200..0x208] ← r0,r1,r2)
+    //   0x58        LDMIA r5, {r6,r7,r8}   (r6,r7,r8 ← mem[0x200..0x208])
+    //   0x5C        MOV r15, #0x5C         (self-loop)
     //
-    // L/S takes 4 cycles each (S_FETCH/EXECUTE/DADDR/DDATA); DP takes 2.
-    // Total ≈ 65 cycles after reset. 100-cycle wait is comfortable.
+    // LDM/STM with 3 registers takes 2 (fetch+execute) + 3×2 (per-register
+    // addr+data) = 8 cycles each. Total ≈ 80 cycles after reset; 150
+    // gives plenty of headroom.
     int unsigned smoke_errors = 0;
 
     task automatic check_reg(input int idx, input logic [31:0] expected, input string name);
@@ -278,7 +282,7 @@ module arm7tdmis_tb_top
         $display("[smoke] mem[0..4] = %08x %08x %08x %08x %08x",
                  u_mem.mem[0], u_mem.mem[1], u_mem.mem[2],
                  u_mem.mem[3], u_mem.mem[4]);
-        repeat (100) @(posedge CLK);
+        repeat (150) @(posedge CLK);
 
         // DP-immediate (§7-§8)
         check_reg(0, 32'h00000005, "r0=5");
@@ -286,29 +290,34 @@ module arm7tdmis_tb_top
         check_reg(2, 32'h000000FF, "r2=0xFF");
         check_reg(3, 32'hFF000000, "r3=0xFF000000");
 
-        // DP-register (§9)
+        // DP-register (§9). r5, r6, r8 get overwritten by §12's LDM/STM
+        // sequence — those are the final values verified below.
         check_reg(4, 32'h0000000C, "r4=r0+r1");
-        check_reg(5, 32'h0000000A, "r5=r0<<1");
-        check_reg(6, 32'h00000003, "r6=r1>>1");
-        check_reg(7, 32'h00000007, "r7=r0|r1");
-        check_reg(8, 32'h00000005, "r8=r2&r0");
         check_reg(9, 32'h00000280, "r9=r0<<r1");
 
         // §10 branch coverage (subroutine + post-return path)
         check_reg(12, 32'h0000000D, "r12=13 (executed inside BL target)");
         check_reg(26, 32'h00000038, "r14_svc=LR set by BL");
 
-        // §11 load/store coverage. The L/S sequence overwrites r10 and
-        // r11 with values loaded from memory.
+        // §11 single-L/S
         check_reg(10, 32'h00000005, "r10=LDR mem[0x100] = 5");
         check_reg(11, 32'h00000007, "r11=LDRB mem[0x104] = 7");
         check_reg(25, 32'h00000100, "r13_svc=L/S base 0x100");
-
         check_mem(64, 32'h00000005, "mem[0x100]=STR r0");
         check_mem(65, 32'h00000007, "mem[0x104]=STRB r1");
 
-        if (u_dut.u_core.pc_q !== 32'h00000050) begin
-            $display("[smoke] FAIL pc_q: expected 0x00000050 (self-loop), got %08x",
+        // §12 block transfer. STMIA stores r0,r1,r2 to mem[0x200..0x208];
+        // LDMIA loads them back into r6,r7,r8.
+        check_reg(5,  32'h00000200, "r5=LDM/STM base 0x200");
+        check_reg(6,  32'h00000005, "r6=LDM[r0] = 5");
+        check_reg(7,  32'h00000007, "r7=LDM[r1] = 7");
+        check_reg(8,  32'h000000FF, "r8=LDM[r2] = 0xFF");
+        check_mem(128, 32'h00000005, "mem[0x200]=STM r0");
+        check_mem(129, 32'h00000007, "mem[0x204]=STM r1");
+        check_mem(130, 32'h000000FF, "mem[0x208]=STM r2");
+
+        if (u_dut.u_core.pc_q !== 32'h0000005C) begin
+            $display("[smoke] FAIL pc_q: expected 0x0000005C (self-loop), got %08x",
                      u_dut.u_core.pc_q);
             smoke_errors = smoke_errors + 1;
         end

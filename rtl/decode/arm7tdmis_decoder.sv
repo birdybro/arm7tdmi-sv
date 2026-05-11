@@ -246,6 +246,7 @@ module arm7tdmis_decoder
     assign is_unimplemented = !((c == INSTR_DP)
                               || (c == INSTR_BRANCH)
                               || (c == INSTR_BX)
-                              || (c == INSTR_LDR_STR));
+                              || (c == INSTR_LDR_STR)
+                              || (c == INSTR_LDM_STM));
 
 endmodule
