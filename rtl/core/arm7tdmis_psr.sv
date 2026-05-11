@@ -56,7 +56,15 @@ module arm7tdmis_psr
     // way to change CPSR.T — and is the only way prior to ARMv5 where
     // BLX or load-to-PC don't exist.
     input  logic        bx_set_t_en,
-    input  logic        bx_set_t_value
+    input  logic        bx_set_t_value,
+
+    // Exception-entry path: atomically save the current CPSR into the
+    // target mode's SPSR and replace CPSR with `exc_new_cpsr` (which the
+    // core has assembled with the right mode/I/F/T/flags for the
+    // exception class). Dominates all other CPSR write paths.
+    input  logic        exc_enter_en,
+    input  logic [2:0]  exc_target_spsr_idx,
+    input  psr_t        exc_new_cpsr
 );
 
     // ---- Storage ----
@@ -136,11 +144,18 @@ module arm7tdmis_psr
                 end
 
                 // BX writes CPSR.T explicitly (and only that bit). Applied
-                // last so BX during exception return — which shouldn't
-                // happen architecturally but is defined here — would let
-                // BX dominate.
+                // after MSR/restore but before exception-entry.
                 if (bx_set_t_en) begin
                     cpsr_next[PSR_BIT_T] = bx_set_t_value;
+                end
+
+                // Exception entry: save the current CPSR into the target
+                // SPSR bank and overwrite CPSR. Dominates everything else
+                // since exception entry is atomic — the architecture
+                // doesn't interleave it with normal CPSR writes.
+                if (exc_enter_en) begin
+                    spsr_q[exc_target_spsr_idx] <= cpsr_q;
+                    cpsr_next = 32'(exc_new_cpsr);
                 end
 
                 cpsr_q <= cpsr_next;

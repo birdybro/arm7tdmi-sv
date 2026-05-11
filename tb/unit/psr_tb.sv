@@ -39,6 +39,9 @@ module psr_tb
     logic        cpsr_restore_en;
     logic        bx_set_t_en;
     logic        bx_set_t_value;
+    logic        exc_enter_en;
+    logic [2:0]  exc_target_spsr_idx;
+    psr_t        exc_new_cpsr;
 
     arm7tdmis_psr dut (.*);
 
@@ -88,9 +91,12 @@ module psr_tb
         spsr_write_en   = 1'b0;
         spsr_write_data = 32'h0;
         spsr_write_mask = 4'b0000;
-        cpsr_restore_en = 1'b0;
-        bx_set_t_en     = 1'b0;
-        bx_set_t_value  = 1'b0;
+        cpsr_restore_en     = 1'b0;
+        bx_set_t_en         = 1'b0;
+        bx_set_t_value      = 1'b0;
+        exc_enter_en        = 1'b0;
+        exc_target_spsr_idx = 3'd0;
+        exc_new_cpsr        = '0;
 
         repeat (4) @(posedge CLK);
         @(negedge CLK);

@@ -113,32 +113,37 @@ module arm7tdmis_core
     logic [31:0]  cpsr_write_data;
     logic [3:0]   cpsr_write_mask;
 
-    // cpsr_restore is for "exception return via data-processing": MOVS PC,
-    // LR / SUBS PC, R14, #N etc. — when an S=1 DP instruction writes Rd=15,
-    // CPSR is restored from the current-mode SPSR (TRM §2.9 / ARM ARM).
-    // bx_set_t_* is the BX-architecture path that flips CPSR.T to switch
-    // between ARM and Thumb states. Both are computed below alongside
-    // writes_pc / writes_flags.
-    logic cpsr_restore_now;
-    logic bx_set_t_en;
-    logic bx_set_t_value;
+    // PSR control. Three exception-aware paths plus the normal MSR write:
+    //   cpsr_restore_now : MOVS PC, LR family — CPSR <- SPSR-of-current-mode.
+    //   bx_set_t_*       : BX writes CPSR.T atomically (ARM↔Thumb switch).
+    //   exc_enter_*      : SWI (and later other exceptions) — atomic save
+    //                      current CPSR to target SPSR + load new CPSR.
+    logic       cpsr_restore_now;
+    logic       bx_set_t_en;
+    logic       bx_set_t_value;
+    logic       exc_enter_en;
+    logic [2:0] exc_target_spsr_idx;
+    psr_t       exc_new_cpsr;
 
     arm7tdmis_psr u_psr (
-        .CLK             (CLK),
-        .CLKEN           (CLKEN),
-        .nRESET          (nRESET),
-        .cpsr            (cpsr),
-        .spsr            (spsr_unused),
-        .spsr_valid      (spsr_valid_unused),
-        .cpsr_write_en   (cpsr_write_en),
-        .cpsr_write_data (cpsr_write_data),
-        .cpsr_write_mask (cpsr_write_mask),
-        .spsr_write_en   (1'b0),
-        .spsr_write_data (32'h0),
-        .spsr_write_mask (4'h0),
-        .cpsr_restore_en (cpsr_restore_now),
-        .bx_set_t_en     (bx_set_t_en),
-        .bx_set_t_value  (bx_set_t_value)
+        .CLK                 (CLK),
+        .CLKEN               (CLKEN),
+        .nRESET              (nRESET),
+        .cpsr                (cpsr),
+        .spsr                (spsr_unused),
+        .spsr_valid          (spsr_valid_unused),
+        .cpsr_write_en       (cpsr_write_en),
+        .cpsr_write_data     (cpsr_write_data),
+        .cpsr_write_mask     (cpsr_write_mask),
+        .spsr_write_en       (1'b0),
+        .spsr_write_data     (32'h0),
+        .spsr_write_mask     (4'h0),
+        .cpsr_restore_en     (cpsr_restore_now),
+        .bx_set_t_en         (bx_set_t_en),
+        .bx_set_t_value      (bx_set_t_value),
+        .exc_enter_en        (exc_enter_en),
+        .exc_target_spsr_idx (exc_target_spsr_idx),
+        .exc_new_cpsr        (exc_new_cpsr)
     );
 
     // ---- Decoder ----
@@ -344,30 +349,48 @@ module arm7tdmis_core
     wire instr_is_dp     = (dec.instr_class == INSTR_DP);
     wire instr_is_branch = (dec.instr_class == INSTR_BRANCH);
     wire instr_is_bx     = (dec.instr_class == INSTR_BX);
+    wire instr_is_swi    = (dec.instr_class == INSTR_SWI);
 
     wire dp_writes_dest     = passes_cond && instr_is_dp && !dec.is_test_op;
     wire dp_writes_pc       = dp_writes_dest && (dec.rd == 4'd15);
     wire branch_link_writes = passes_cond && instr_is_branch && dec.branch_link;
     wire branch_writes_pc   = passes_cond && instr_is_branch;
     wire bx_writes_pc       = passes_cond && instr_is_bx;
+    wire swi_fires          = passes_cond && instr_is_swi;
 
-    wire writes_pc      = dp_writes_pc || branch_writes_pc || bx_writes_pc;
-    wire exec_writes_rf = dp_writes_dest || branch_link_writes;
+    wire writes_pc      = dp_writes_pc || branch_writes_pc || bx_writes_pc || swi_fires;
+    wire exec_writes_rf = dp_writes_dest || branch_link_writes || swi_fires;
     wire writes_flags   = passes_cond && instr_is_dp && dec.s_bit;
 
     assign cpsr_restore_now = dp_writes_pc && dec.s_bit;
     assign bx_set_t_en      = bx_writes_pc;
     assign bx_set_t_value   = rf_rb_data[0];     // Rm[0] selects new state
 
+    // SWI: atomically enter SVC mode. exc_new_cpsr = current CPSR with
+    // mode=SVC, I=1, T=0 (F preserved). spsr index for SVC = 2.
+    psr_t swi_new_cpsr;
+    always_comb begin
+        swi_new_cpsr   = cpsr;
+        swi_new_cpsr.m = 5'(MODE_SUPERVISOR);
+        swi_new_cpsr.i = 1'b1;
+        swi_new_cpsr.t = 1'b0;
+    end
+    assign exc_enter_en        = swi_fires;
+    assign exc_target_spsr_idx = 3'd2;     // SPSR_svc
+    assign exc_new_cpsr        = swi_new_cpsr;
+
     // PC target per class:
     //   DP/Rd=15:  ALU result
-    //   B/BL:      pc_q + 8 (= ARM-visible PC) + sign-extended (offset24<<2)
+    //   B/BL:      pc_q + 8 + sign-extended (offset24<<2)
     //   BX:        Rm with LSB cleared (LSB is the new T bit, handled above)
+    //   SWI:       0x00000008 (SWI exception vector — TRM Table 2-4)
     wire [31:0] dp_pc_target     = alu_result;
     wire [31:0] branch_pc_target = pc_q + 32'd8 + dec.branch_offset;
     wire [31:0] bx_pc_target     = rf_rb_data & 32'hFFFFFFFE;
+    wire [31:0] swi_pc_target    = 32'h0000_0008;
 
-    wire [31:0] pc_target = instr_is_branch ? branch_pc_target :
+    wire [31:0] pc_target = instr_is_swi    ? swi_pc_target    :
+                            instr_is_branch ? branch_pc_target :
                             instr_is_bx     ? bx_pc_target     :
                                               dp_pc_target;
 
@@ -424,6 +447,18 @@ module arm7tdmis_core
         end else if (swp_writes_rd) begin
             rf_write_addr = swp_rd_q;
             rf_write_data = swp_load_value;
+            rf_write_en   = 1'b1;
+        end else if (swi_fires) begin
+            // SWI: save return address (pc_q+4 = instruction after SWI)
+            // into r14 of the target mode. Since the PSR's exc_enter_en
+            // is asserted in the same cycle, the regfile sees the OLD
+            // mode (still pre-SWI mode); the write lands in the source
+            // mode's r14 bank. For boot-mode SWI (SVC→SVC) the source
+            // and target bank coincide, so this is correct. Cross-mode
+            // SWI (User→SVC) needs a force-target-mode override; that
+            // lands when User mode is testable in §14b.
+            rf_write_addr = 4'd14;
+            rf_write_data = pc_q + 32'd4;
             rf_write_en   = 1'b1;
         end else if (branch_link_writes) begin
             rf_write_addr = 4'd14;

@@ -232,21 +232,30 @@ module arm7tdmis_tb_top
         $finish;
     end
 
-    // ---- §13 smoke verification ----
-    // Cumulative program covering §7-§13. SWPB added at 0x5C; subroutine
-    // and self-loop relocated to 0x60-0x68.
+    // ---- §14 smoke verification ----
+    // Cumulative program now has a proper vector table at 0x00-0x1C, so
+    // all the §7-§13 main code shifts to 0x20+. PC-relative branches keep
+    // their encodings; only the self-loop's MOV PC, #imm changes.
     //
-    // Execution flow (only highlights beyond §12):
-    //   ...existing §7-§12 sequence runs to mem[0x200..0x208] holding 5,7,0xFF
-    //   0x5C        SWPB r12, r1, [r5]   (mem[0x200] byte0: 5→7;  r12 ← 5)
-    //   0x60        MOV r15, #0x60       (self-loop)
-    //   0x64        MOV r12, #13         (subroutine)
-    //   0x68        BX r14
+    // Vector layout:
+    //   0x00  B 0x20             (skip vectors → main entry)
+    //   0x04  0xE7FFFFFE         (undef vector — illegal pattern)
+    //   0x08  B 0x94             (SWI vector → handler)
+    //   0x0C..0x1C  0xE7FFFFFE   (other vectors not yet wired)
     //
-    // SWPB does an atomic 6-cycle read-modify-write with LOCK held high
-    // across S_SWP_RADDR / RDATA / WADDR / WDATA. The byte read becomes
-    // r12 (zero-extended); r1's low byte gets written back to memory.
-    // Total ≈ 86 cycles after reset; 150-cycle wait remains comfortable.
+    // §7-§13 main runs 0x20..0x7C as before. New §14 tail:
+    //   0x80  SWI #0             → mode=SVC (already), LR=0x84, PC=0x08
+    //   0x84  MOV r4, #50        (proves we returned past the SWI)
+    //   0x88  MOV r15, #0x88     (self-loop)
+    //   0x8C  MOV r12, #13       (BL subroutine — relocated)
+    //   0x90  BX r14
+    //   0x94  MOV r3, #42        (SWI handler — overwrites the
+    //                            0xFF000000 from §7's MOV r3)
+    //   0x98  MOVS PC, LR        (return: CPSR <- SPSR_svc, PC <- LR=0x84)
+    //
+    // Coverage notes: r3 and r4 get final values from the SWI path, so
+    // their §7 checks are removed below. r14_svc ends at 0x84 (the SWI
+    // return address) rather than 0x38 (the earlier BL return).
     int unsigned smoke_errors = 0;
 
     task automatic check_reg(input int idx, input logic [31:0] expected, input string name);
@@ -273,21 +282,15 @@ module arm7tdmis_tb_top
                  u_mem.mem[3], u_mem.mem[4]);
         repeat (150) @(posedge CLK);
 
-        // DP-immediate (§7-§8)
+        // DP-immediate (§7-§8). r3 ends as 42 (SWI handler) and r4 as 50
+        // (post-SWI marker); their original values are exercised on the
+        // way to those final ones but not re-verified at the end.
         check_reg(0, 32'h00000005, "r0=5");
         check_reg(1, 32'h00000007, "r1=7");
         check_reg(2, 32'h000000FF, "r2=0xFF");
-        check_reg(3, 32'hFF000000, "r3=0xFF000000");
 
-        // DP-register (§9). r5, r6, r8 get overwritten by §12's LDM/STM
-        // sequence — those are the final values verified below.
-        check_reg(4, 32'h0000000C, "r4=r0+r1");
+        // DP-register (§9). r4-r9: r4/r5/r6/r8 overwritten by §11-§13.
         check_reg(9, 32'h00000280, "r9=r0<<r1");
-
-        // §10 branch coverage (subroutine + post-return path). r12 was
-        // initially set to 13 by the BL subroutine, then overwritten to
-        // 5 by SWPB; the §13 check below verifies that update.
-        check_reg(26, 32'h00000038, "r14_svc=LR set by BL");
 
         // §11 single-L/S
         check_reg(10, 32'h00000005, "r10=LDR mem[0x100] = 5");
@@ -305,15 +308,18 @@ module arm7tdmis_tb_top
         check_mem(129, 32'h00000007, "mem[0x204]=STM r1");
         check_mem(130, 32'h000000FF, "mem[0x208]=STM r2");
 
-        // §13 SWPB. mem[0x200] started at 5 (STMIA r0). SWPB:
-        //   - tmp byte = mem[0x200][7:0] = 5
-        //   - mem[0x200][7:0] ← r1[7:0] = 7  → mem[0x200] = 0x00000007
-        //   - r12 ← {24'h0, tmp} = 5
+        // §13 SWPB
         check_reg(12, 32'h00000005, "r12=SWPB old byte from mem[0x200]");
         check_mem(128, 32'h00000007, "mem[0x200]=SWPB wrote r1 byte");
 
-        if (u_dut.u_core.pc_q !== 32'h00000060) begin
-            $display("[smoke] FAIL pc_q: expected 0x00000060 (self-loop), got %08x",
+        // §14 SWI. The handler set r3 ← 42, then MOVS PC, LR returned to
+        // 0x84 where r4 ← 50 ran. r14_svc holds the SWI return address.
+        check_reg(3,  32'h0000002A, "r3=42 (set by SWI handler)");
+        check_reg(4,  32'h00000032, "r4=50 (post-SWI marker)");
+        check_reg(26, 32'h00000084, "r14_svc=SWI return address 0x84");
+
+        if (u_dut.u_core.pc_q !== 32'h00000088) begin
+            $display("[smoke] FAIL pc_q: expected 0x00000088 (self-loop), got %08x",
                      u_dut.u_core.pc_q);
             smoke_errors = smoke_errors + 1;
         end

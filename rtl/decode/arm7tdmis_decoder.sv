@@ -248,6 +248,7 @@ module arm7tdmis_decoder
                               || (c == INSTR_BX)
                               || (c == INSTR_LDR_STR)
                               || (c == INSTR_LDM_STM)
-                              || (c == INSTR_SWP));
+                              || (c == INSTR_SWP)
+                              || (c == INSTR_SWI));
 
 endmodule
