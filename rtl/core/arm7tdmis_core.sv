@@ -278,11 +278,12 @@ module arm7tdmis_core
         return 4'd0;
     endfunction
 
+    // §11b: every LDR/STR variant accepted — pre/post-index, immediate
+    // or register offset, optional writeback. The unsupported case (Rd=15
+    // on a load — implicit branch-to-PC) is left as a NOP-equivalent
+    // until a future commit wires the pipeline flush.
     wire ls_take_data_cycle = passes_cond
-                            && (dec.instr_class == INSTR_LDR_STR)
-                            && dec.ls_use_imm
-                            && dec.ls_pre_index
-                            && !dec.ls_writeback;
+                            && (dec.instr_class == INSTR_LDR_STR);
 
     // Block (LDM/STM) §12 minimum: IA mode (P=0, U=1), no writeback,
     // no User-mode override, no PC in list, non-empty list.
@@ -394,14 +395,25 @@ module arm7tdmis_core
                             instr_is_bx     ? bx_pc_target     :
                                               dp_pc_target;
 
-    // ---- §11: L/S address generation + byte/word extraction ----
-    // Offset is dec.ls_imm_offset (12-bit), added or subtracted from Rn
-    // per the U bit. Pre-indexed and no-writeback only; ls_take_data_cycle
-    // above ensures unsupported variants stay on the 2-state path.
-    wire [31:0] ls_offset_ext = {20'h0, dec.ls_imm_offset};
+    // ---- §11/§11b: L/S address generation + byte/word extraction ----
+    // Offset is either the 12-bit immediate (dec.ls_use_imm=1) or the
+    // shifter result (register offset, optionally pre-shifted using the
+    // instruction's bits[6:5]/[11:7] just like a DP-reg shift). The
+    // shifter is already wired to Rm through op2_shifter_in for both
+    // DP-reg and L/S register-offset; we reuse sh_result here.
+    wire [31:0] ls_offset_value = dec.ls_use_imm
+                                  ? {20'h0, dec.ls_imm_offset}
+                                  : sh_result;
     wire [31:0] ls_data_addr_calc = dec.ls_up
-                                    ? (rf_ra_data + ls_offset_ext)
-                                    : (rf_ra_data - ls_offset_ext);
+                                    ? (rf_ra_data + ls_offset_value)
+                                    : (rf_ra_data - ls_offset_value);
+
+    // Pre-indexed uses the offset-applied address for the memory access;
+    // post-indexed uses Rn directly (then writes back the post-modified
+    // value). Writeback fires whenever W=1 or P=0 (post-index implies it).
+    wire [31:0] ls_data_addr_used      = dec.ls_pre_index ? ls_data_addr_calc : rf_ra_data;
+    wire        ls_writeback_in_exec   = ls_take_data_cycle
+                                       && (dec.ls_writeback || !dec.ls_pre_index);
 
     // Loaded byte: shift RDATA right by 8*addr_lo, then zero-extend.
     // Loaded word: pass RDATA through (aligned access assumed for now).
@@ -464,6 +476,14 @@ module arm7tdmis_core
             rf_write_addr = 4'd14;
             rf_write_data = pc_q + 32'd4;
             rf_write_en   = 1'b1;
+        end else if (ls_writeback_in_exec) begin
+            // L/S base writeback: post-modified Rn for both pre-with-W
+            // and post-indexed forms. For LDR with Rd == Rn, the load
+            // writeback in S_DDATA arrives in a later cycle and naturally
+            // wins ("load takes precedence" per ARM ARM).
+            rf_write_addr = dec.rn;
+            rf_write_data = ls_data_addr_calc;
+            rf_write_en   = 1'b1;
         end else begin
             rf_write_addr = dec.rd;
             rf_write_data = alu_result;
@@ -516,12 +536,12 @@ module arm7tdmis_core
                 // Snapshot the L/S micro-op at end of EXECUTE so the data
                 // bus cycles can drive memory without the decoder context.
                 if (state_q == S_EXECUTE && ls_take_data_cycle) begin
-                    ls_data_addr_q  <= ls_data_addr_calc;
+                    ls_data_addr_q  <= ls_data_addr_used;
                     ls_store_data_q <= rf_rc_data;
                     ls_rd_q         <= dec.rd;
                     ls_byte_q       <= dec.ls_byte;
                     ls_load_q       <= dec.ls_load;
-                    ls_addr_lo_q    <= ls_data_addr_calc[1:0];
+                    ls_addr_lo_q    <= ls_data_addr_used[1:0];
                 end
 
                 // Snapshot the LDM/STM micro-op + start the iteration.
