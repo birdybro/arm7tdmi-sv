@@ -83,6 +83,8 @@ module arm7tdmis_core
     logic [31:0]  ls_store_data_q;
     logic [3:0]   ls_rd_q;
     logic         ls_byte_q;
+    logic         ls_halfword_q;     // §11c: LDRH/STRH/LDRSH carry this
+    logic         ls_signed_q;       // §11c: LDRSB/LDRSH sign-extend on load
     logic         ls_load_q;
     logic [1:0]   ls_addr_lo_q;
 
@@ -321,12 +323,12 @@ module arm7tdmis_core
         return 4'd0;
     endfunction
 
-    // §11b: every LDR/STR variant accepted — pre/post-index, immediate
-    // or register offset, optional writeback. The unsupported case (Rd=15
-    // on a load — implicit branch-to-PC) is left as a NOP-equivalent
-    // until a future commit wires the pipeline flush.
-    wire ls_take_data_cycle = passes_cond
-                            && (dec.instr_class == INSTR_LDR_STR);
+    // §11b/§11c: every LDR/STR/LDRH/STRH/LDRSB/LDRSH variant accepted.
+    // The two L/S classes share the same 4-state data-cycle path; only
+    // the address / size / sign-extension parameters differ.
+    wire instr_is_ls_any = (dec.instr_class == INSTR_LDR_STR)
+                        || (dec.instr_class == INSTR_LDRH_STRH);
+    wire ls_take_data_cycle = passes_cond && instr_is_ls_any;
 
     // §12b: every Addressing-Mode-4 form accepted — IA / IB / DA / DB
     // with optional base writeback. Still no User-mode override (^ form)
@@ -483,15 +485,16 @@ module arm7tdmis_core
                             instr_is_bx     ? bx_pc_target     :
                                               dp_pc_target;
 
-    // ---- §11/§11b: L/S address generation + byte/word extraction ----
-    // Offset is either the 12-bit immediate (dec.ls_use_imm=1) or the
-    // shifter result (register offset, optionally pre-shifted using the
-    // instruction's bits[6:5]/[11:7] just like a DP-reg shift). The
-    // shifter is already wired to Rm through op2_shifter_in for both
-    // DP-reg and L/S register-offset; we reuse sh_result here.
-    wire [31:0] ls_offset_value = dec.ls_use_imm
-                                  ? {20'h0, dec.ls_imm_offset}
-                                  : sh_result;
+    // ---- §11 / §11b / §11c: L/S address generation + byte/halfword/word
+    // extraction with optional sign extension. The two L/S classes use
+    // different offset encodings:
+    //   LDR/STR     : 12-bit imm  OR  Rm shifted (shifter result)
+    //   LDRH/STRH.. :  8-bit imm  OR  Rm unshifted
+    wire [31:0] ls_offset_value =
+        (dec.instr_class == INSTR_LDRH_STRH)
+          ? (dec.hs_use_imm ? {24'h0, dec.hs_imm_offset} : rf_rb_data)
+          : (dec.ls_use_imm ? {20'h0, dec.ls_imm_offset} : sh_result);
+
     wire [31:0] ls_data_addr_calc = dec.ls_up
                                     ? (rf_ra_data + ls_offset_value)
                                     : (rf_ra_data - ls_offset_value);
@@ -503,12 +506,39 @@ module arm7tdmis_core
     wire        ls_writeback_in_exec   = ls_take_data_cycle
                                        && (dec.ls_writeback || !dec.ls_pre_index);
 
-    // Loaded byte: shift RDATA right by 8*addr_lo, then zero-extend.
-    // Loaded word: pass RDATA through (aligned access assumed for now).
+    // Class-aware size selectors latched at S_EXECUTE.
+    //   LDRH:  byte=0 halfword=1 signed=0
+    //   STRH:  byte=0 halfword=1 signed=0
+    //   LDRSB: byte=1 halfword=0 signed=1
+    //   LDRSH: byte=0 halfword=1 signed=1
+    wire ls_effective_byte     = (dec.instr_class == INSTR_LDRH_STRH)
+                                   ? !dec.hs_halfword
+                                   : dec.ls_byte;
+    wire ls_effective_halfword = (dec.instr_class == INSTR_LDRH_STRH)
+                                   ? dec.hs_halfword
+                                   : 1'b0;
+    wire ls_effective_signed   = (dec.instr_class == INSTR_LDRH_STRH)
+                                   ? dec.hs_signed
+                                   : 1'b0;
+
+    // Load-value extraction. Byte: shift RDATA by 8·addr_lo, optionally
+    // sign-extend (LDRSB). Halfword: pick high or low half by addr[1],
+    // optionally sign-extend (LDRSH). Word: passthrough.
     wire [4:0]  load_byte_shift = {ls_addr_lo_q, 3'b000};
-    wire [31:0] load_byte_val   = (RDATA >> load_byte_shift) & 32'h0000_00FF;
+    wire [7:0]  load_byte_raw   = 8'((RDATA >> load_byte_shift) & 32'h0000_00FF);
+    wire [31:0] load_byte_val   = ls_signed_q
+                                  ? {{24{load_byte_raw[7]}}, load_byte_raw}
+                                  : {24'h0, load_byte_raw};
+
+    wire [15:0] load_hw_raw     = ls_addr_lo_q[1] ? RDATA[31:16] : RDATA[15:0];
+    wire [31:0] load_hw_val     = ls_signed_q
+                                  ? {{16{load_hw_raw[15]}}, load_hw_raw}
+                                  : {16'h0, load_hw_raw};
+
     wire [31:0] load_word_val   = RDATA;
-    wire [31:0] load_value      = ls_byte_q ? load_byte_val : load_word_val;
+    wire [31:0] load_value      = ls_halfword_q ? load_hw_val
+                                : ls_byte_q    ? load_byte_val
+                                                : load_word_val;
 
     // S_DDATA load writeback: commit RDATA into the latched Rd register.
     wire ddata_writes_rd = (state_q == S_DDATA) && ls_load_q;
@@ -620,6 +650,8 @@ module arm7tdmis_core
                 ls_store_data_q   <= 32'h0;
                 ls_rd_q           <= 4'h0;
                 ls_byte_q         <= 1'b0;
+                ls_halfword_q     <= 1'b0;
+                ls_signed_q       <= 1'b0;
                 ls_load_q         <= 1'b0;
                 ls_addr_lo_q      <= 2'h0;
                 block_remaining_q   <= 16'h0;
@@ -653,7 +685,9 @@ module arm7tdmis_core
                     ls_data_addr_q  <= ls_data_addr_used;
                     ls_store_data_q <= rf_rc_data;
                     ls_rd_q         <= dec.rd;
-                    ls_byte_q       <= dec.ls_byte;
+                    ls_byte_q       <= ls_effective_byte;
+                    ls_halfword_q   <= ls_effective_halfword;
+                    ls_signed_q     <= ls_effective_signed;
                     ls_load_q       <= dec.ls_load;
                     ls_addr_lo_q    <= ls_data_addr_used[1:0];
                 end
@@ -704,7 +738,10 @@ module arm7tdmis_core
     wire is_priv = (cpsr.m != 5'(MODE_USER));
 
     wire [31:0] store_byte_data = {4{ls_store_data_q[7:0]}};
-    wire [31:0] store_wdata     = ls_byte_q ? store_byte_data : ls_store_data_q;
+    wire [31:0] store_hw_data   = {2{ls_store_data_q[15:0]}};
+    wire [31:0] store_wdata     = ls_halfword_q ? store_hw_data
+                                : ls_byte_q    ? store_byte_data
+                                                : ls_store_data_q;
 
     // SWP store-side WDATA: byte form replicates Rm[7:0] across all lanes
     // so the memory's lane-mux picks the right one.
@@ -734,21 +771,21 @@ module arm7tdmis_core
                 TRANS = 2'(TRANS_I);
             end
             S_DADDR: begin
-                // Drive the L/S data address.
                 ADDR  = ls_data_addr_q;
                 TRANS = 2'(TRANS_N);
                 WRITE = ls_load_q ? WRITE_READ : WRITE_WRITE;
-                SIZE  = ls_byte_q ? 2'(SIZE_BYTE) : 2'(SIZE_WORD);
-                PROT  = {is_priv, 1'b1};   // data access
+                SIZE  = ls_halfword_q ? 2'(SIZE_HALFWORD)
+                      : ls_byte_q    ? 2'(SIZE_BYTE)
+                                     : 2'(SIZE_WORD);
+                PROT  = {is_priv, 1'b1};
             end
             S_DDATA: begin
-                // Memory consumes WDATA (for stores) or returns RDATA
-                // (for loads) at this cycle's rising edge. Bus otherwise
-                // idle from our side.
                 ADDR  = ls_data_addr_q;
                 TRANS = 2'(TRANS_I);
                 WRITE = ls_load_q ? WRITE_READ : WRITE_WRITE;
-                SIZE  = ls_byte_q ? 2'(SIZE_BYTE) : 2'(SIZE_WORD);
+                SIZE  = ls_halfword_q ? 2'(SIZE_HALFWORD)
+                      : ls_byte_q    ? 2'(SIZE_BYTE)
+                                     : 2'(SIZE_WORD);
                 PROT  = {is_priv, 1'b1};
                 WDATA = ls_load_q ? 32'h0 : store_wdata;
             end
