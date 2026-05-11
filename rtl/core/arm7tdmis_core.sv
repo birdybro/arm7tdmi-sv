@@ -195,11 +195,19 @@ module arm7tdmis_core
     //   DP register-shift-by-register : Rs   (dec.rs)
     //   L/S single store              : Rd   (dec.rd — source for STR)
     //   LDM/STM block phase           : block_curr_reg_q (current register)
+    //   MUL/MLA                       : Rs   (dec.rs — already correct)
     wire instr_is_ls_decoder = (dec.instr_class == INSTR_LDR_STR);
     wire block_active = (state_q == S_BLOCK_ADDR) || (state_q == S_BLOCK_DATA);
     wire [3:0] rc_addr_eff = block_active        ? block_curr_reg_q
                            : instr_is_ls_decoder ? dec.rd
                                                  : dec.rs;
+
+    // Read port A is normally Rn (DP/L/S base). For MUL/MLA the
+    // accumulator lives at bits[15:12] (= dec.rd in the standard
+    // field-position mapping) — semantically the roles invert, so
+    // port A reads dec.rd when the instruction is a multiply.
+    wire instr_is_mul_decoder = (dec.instr_class == INSTR_MUL);
+    wire [3:0] ra_addr_eff    = instr_is_mul_decoder ? dec.rd : dec.rn;
 
     arm7tdmis_regfile u_regfile (
         .CLK             (CLK),
@@ -208,8 +216,8 @@ module arm7tdmis_core
         .mode            (cpsr.m),
         .t_bit           (cpsr.t),
         .pc_in           (pc_q),
-        .ra_addr         (dec.rn),         // Rn → ALU op_a / L/S base
-        .rb_addr         (dec.rm),         // Rm → shifter input (DP-reg)
+        .ra_addr         (ra_addr_eff),    // Rn / Rd-as-accumulator (MUL/MLA)
+        .rb_addr         (dec.rm),         // Rm → shifter input / multiplicand
         .rc_addr         (rc_addr_eff),    // Rs (DP-reg-reg) / Rd (STR source)
         .ra_data         (rf_ra_data),
         .rb_data         (rf_rb_data),
@@ -266,6 +274,35 @@ module arm7tdmis_core
         .c_out         (alu_c),
         .v_out         (alu_v),
         .flag_we       (alu_flag_we)
+    );
+
+    // ---- Multiplier (§9b: MUL / MLA) ----
+    // Operand mapping for MUL/MLA encoding:
+    //   bits[19:16] = Rd      (destination — dec.rn in our struct)
+    //   bits[15:12] = Rn      (accumulator for MLA — dec.rd here)
+    //   bits[11:8]  = Rs      (multiplier — dec.rs)
+    //   bits[3:0]   = Rm      (multiplicand — dec.rm)
+    // MULL forms are recognized by the decoder (INSTR_MULL) but their
+    // 64-bit two-register writeback isn't wired here yet (§9c).
+    logic [31:0] mul_result_lo, mul_result_hi;
+    logic        mul_n_out, mul_z_out;
+    logic [3:0]  mul_flag_we;
+    logic [2:0]  mul_cycle_count;     // m parameter — used by §18 cycle shaping
+
+    arm7tdmis_multiplier u_mul (
+        .is_signed   (1'b0),                  // MUL/MLA are unsigned in low 32 bits
+        .is_long     (1'b0),                  // single-result, not MULL
+        .accumulate  (dec.mul_accumulate),    // MLA when bit[21]=1
+        .op_a        (rf_rb_data),            // Rm
+        .op_b        (rf_rc_data),            // Rs
+        .acc_lo      (rf_ra_data),            // Rn (= accumulator) for MLA
+        .acc_hi      (32'h0),
+        .result_lo   (mul_result_lo),
+        .result_hi   (mul_result_hi),
+        .n_out       (mul_n_out),
+        .z_out       (mul_z_out),
+        .flag_we     (mul_flag_we),
+        .cycle_count (mul_cycle_count)
     );
 
     // ---- FSM transitions. Non-L/S instructions go S_FETCH→S_EXECUTE→
@@ -389,6 +426,7 @@ module arm7tdmis_core
     wire instr_is_branch = (dec.instr_class == INSTR_BRANCH);
     wire instr_is_bx     = (dec.instr_class == INSTR_BX);
     wire instr_is_swi    = (dec.instr_class == INSTR_SWI);
+    wire instr_is_mul    = (dec.instr_class == INSTR_MUL);
 
     wire dp_writes_dest     = passes_cond && instr_is_dp && !dec.is_test_op;
     wire dp_writes_pc       = dp_writes_dest && (dec.rd == 4'd15);
@@ -396,10 +434,12 @@ module arm7tdmis_core
     wire branch_writes_pc   = passes_cond && instr_is_branch;
     wire bx_writes_pc       = passes_cond && instr_is_bx;
     wire swi_fires          = passes_cond && instr_is_swi;
+    wire mul_writes_dest    = passes_cond && instr_is_mul;
+    wire mul_writes_flags   = mul_writes_dest && dec.s_bit;
 
     wire writes_pc      = dp_writes_pc || branch_writes_pc || bx_writes_pc || swi_fires;
     wire exec_writes_rf = dp_writes_dest || branch_link_writes || swi_fires;
-    wire writes_flags   = passes_cond && instr_is_dp && dec.s_bit;
+    wire writes_flags   = (passes_cond && instr_is_dp && dec.s_bit) || mul_writes_flags;
 
     assign cpsr_restore_now = dp_writes_pc && dec.s_bit;
     assign bx_set_t_en      = bx_writes_pc;
@@ -529,6 +569,12 @@ module arm7tdmis_core
             rf_write_addr = dec.rn;
             rf_write_data = block_writeback_addr;
             rf_write_en   = 1'b1;
+        end else if (mul_writes_dest) begin
+            // MUL/MLA destination — semantically Rd lives at bits[19:16],
+            // which is dec.rn in our standardized field mapping.
+            rf_write_addr = dec.rn;
+            rf_write_data = mul_result_lo;
+            rf_write_en   = 1'b1;
         end else begin
             rf_write_addr = dec.rd;
             rf_write_data = alu_result;
@@ -537,9 +583,15 @@ module arm7tdmis_core
     end
 
     // CPSR flag update: only the _f byte (bits [31:24]) per the ALU
-    // outputs. The S-bit + condition-pass gates are folded into write_flags.
+    // outputs. The S-bit + condition-pass gates are folded into
+    // writes_flags. For MULS/MLAS only N and Z update (multiplier
+    // produces them; C is UNPREDICTABLE on ARMv4 and we preserve it).
+    wire        flags_from_mul = mul_writes_flags;
+    wire [3:0]  flags_value = flags_from_mul
+                            ? {mul_n_out, mul_z_out, cpsr.c, cpsr.v}   // preserve C/V
+                            : {alu_n, alu_z, alu_c, alu_v};
     assign cpsr_write_en   = writes_flags;
-    assign cpsr_write_data = {alu_n, alu_z, alu_c, alu_v, 28'h0};
+    assign cpsr_write_data = {flags_value, 28'h0};
     assign cpsr_write_mask = 4'b1000;
 
     // ---- Sequential state ----
@@ -767,6 +819,9 @@ module arm7tdmis_core
         cpsr[27:6],
         ls_data_addr_calc[31:12],         // high bits flow into ls_data_addr_q
         ls_store_data_q[31:8],            // only [7:0] used for byte store
+        mul_result_hi,                    // §9b MUL: only result_lo consumed (32-bit form)
+        mul_flag_we,                      // we drive flag writes from explicit MUL gates
+        mul_cycle_count,                  // m parameter — §18 cycle-shaping will consume
         // dp_imm_value is the decoder's pre-rotated imm; the core feeds
         // the shifter raw imm8 and rotates there, so this field is dead.
         dec.dp_imm_value,
