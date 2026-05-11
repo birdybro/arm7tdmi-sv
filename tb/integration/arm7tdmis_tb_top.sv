@@ -232,32 +232,21 @@ module arm7tdmis_tb_top
         $finish;
     end
 
-    // ---- §12 smoke verification ----
-    // Cumulative program covering §7-§12. The §10 subroutine moved to
-    // the tail (now at 0x60) to make room for the §11 L/S sequence at
-    // 0x40-0x4C and the §12 block-transfer sequence at 0x50-0x58.
+    // ---- §13 smoke verification ----
+    // Cumulative program covering §7-§13. SWPB added at 0x5C; subroutine
+    // and self-loop relocated to 0x60-0x68.
     //
-    // Execution flow:
-    //   0x00..0x24  DP-imm + DP-reg sets r0..r9
-    //   0x28        B over poisoned MOV r10,#99
-    //   0x30        MOV r10, #11
-    //   0x34        BL 0x60 (subroutine) — LR=0x38
-    //   0x60        MOV r12, #13
-    //   0x64        BX r14 → return to 0x38
-    //   0x38        MOV r11, #12
-    //   0x3C        MOV r13, #0x100        (base for L/S)
-    //   0x40        STR r0, [r13]          (mem[0x100] ← 5)
-    //   0x44        LDR r10, [r13]         (r10 ← 5)
-    //   0x48        STRB r1, [r13, #4]     (mem[0x104] byte0 ← 7)
-    //   0x4C        LDRB r11, [r13, #4]    (r11 ← 7)
-    //   0x50        MOV r5, #0x200         (base for LDM/STM — overwrites r5)
-    //   0x54        STMIA r5, {r0,r1,r2}   (mem[0x200..0x208] ← r0,r1,r2)
-    //   0x58        LDMIA r5, {r6,r7,r8}   (r6,r7,r8 ← mem[0x200..0x208])
-    //   0x5C        MOV r15, #0x5C         (self-loop)
+    // Execution flow (only highlights beyond §12):
+    //   ...existing §7-§12 sequence runs to mem[0x200..0x208] holding 5,7,0xFF
+    //   0x5C        SWPB r12, r1, [r5]   (mem[0x200] byte0: 5→7;  r12 ← 5)
+    //   0x60        MOV r15, #0x60       (self-loop)
+    //   0x64        MOV r12, #13         (subroutine)
+    //   0x68        BX r14
     //
-    // LDM/STM with 3 registers takes 2 (fetch+execute) + 3×2 (per-register
-    // addr+data) = 8 cycles each. Total ≈ 80 cycles after reset; 150
-    // gives plenty of headroom.
+    // SWPB does an atomic 6-cycle read-modify-write with LOCK held high
+    // across S_SWP_RADDR / RDATA / WADDR / WDATA. The byte read becomes
+    // r12 (zero-extended); r1's low byte gets written back to memory.
+    // Total ≈ 86 cycles after reset; 150-cycle wait remains comfortable.
     int unsigned smoke_errors = 0;
 
     task automatic check_reg(input int idx, input logic [31:0] expected, input string name);
@@ -295,8 +284,9 @@ module arm7tdmis_tb_top
         check_reg(4, 32'h0000000C, "r4=r0+r1");
         check_reg(9, 32'h00000280, "r9=r0<<r1");
 
-        // §10 branch coverage (subroutine + post-return path)
-        check_reg(12, 32'h0000000D, "r12=13 (executed inside BL target)");
+        // §10 branch coverage (subroutine + post-return path). r12 was
+        // initially set to 13 by the BL subroutine, then overwritten to
+        // 5 by SWPB; the §13 check below verifies that update.
         check_reg(26, 32'h00000038, "r14_svc=LR set by BL");
 
         // §11 single-L/S
@@ -312,12 +302,18 @@ module arm7tdmis_tb_top
         check_reg(6,  32'h00000005, "r6=LDM[r0] = 5");
         check_reg(7,  32'h00000007, "r7=LDM[r1] = 7");
         check_reg(8,  32'h000000FF, "r8=LDM[r2] = 0xFF");
-        check_mem(128, 32'h00000005, "mem[0x200]=STM r0");
         check_mem(129, 32'h00000007, "mem[0x204]=STM r1");
         check_mem(130, 32'h000000FF, "mem[0x208]=STM r2");
 
-        if (u_dut.u_core.pc_q !== 32'h0000005C) begin
-            $display("[smoke] FAIL pc_q: expected 0x0000005C (self-loop), got %08x",
+        // §13 SWPB. mem[0x200] started at 5 (STMIA r0). SWPB:
+        //   - tmp byte = mem[0x200][7:0] = 5
+        //   - mem[0x200][7:0] ← r1[7:0] = 7  → mem[0x200] = 0x00000007
+        //   - r12 ← {24'h0, tmp} = 5
+        check_reg(12, 32'h00000005, "r12=SWPB old byte from mem[0x200]");
+        check_mem(128, 32'h00000007, "mem[0x200]=SWPB wrote r1 byte");
+
+        if (u_dut.u_core.pc_q !== 32'h00000060) begin
+            $display("[smoke] FAIL pc_q: expected 0x00000060 (self-loop), got %08x",
                      u_dut.u_core.pc_q);
             smoke_errors = smoke_errors + 1;
         end

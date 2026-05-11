@@ -50,18 +50,25 @@ module arm7tdmis_core
 );
 
     // ---- FSM state.
-    //   Non-L/S         : FETCH → EXECUTE → FETCH                          (2 cycles)
-    //   Single LDR/STR  : FETCH → EXECUTE → DADDR → DDATA → FETCH          (4 cycles)
+    //   Non-L/S         : FETCH → EXECUTE → FETCH                          (2)
+    //   Single LDR/STR  : FETCH → EXECUTE → DADDR → DDATA → FETCH          (4)
     //   LDM/STM         : FETCH → EXECUTE → BLOCK_ADDR → BLOCK_DATA → …    (2+2n)
-    //                     repeating ADDR/DATA per register in the list,
-    //                     low-numbered first.
-    typedef enum logic [2:0] {
-        S_FETCH      = 3'd0,
-        S_EXECUTE    = 3'd1,
-        S_DADDR      = 3'd2,    // single L/S address phase
-        S_DDATA      = 3'd3,    // single L/S data phase
-        S_BLOCK_ADDR = 3'd4,    // LDM/STM per-register address phase
-        S_BLOCK_DATA = 3'd5     // LDM/STM per-register data phase
+    //   SWP / SWPB      : FETCH → EXECUTE → SWP_RADDR → SWP_RDATA →
+    //                     SWP_WADDR → SWP_WDATA → FETCH                    (6)
+    //                     LOCK asserted across all four SWP_* states so the
+    //                     bus arbiter can't grant another master between
+    //                     the read and the write (TRM §30.13).
+    typedef enum logic [3:0] {
+        S_FETCH      = 4'd0,
+        S_EXECUTE    = 4'd1,
+        S_DADDR      = 4'd2,    // single L/S address phase
+        S_DDATA      = 4'd3,    // single L/S data phase
+        S_BLOCK_ADDR = 4'd4,    // LDM/STM per-register address phase
+        S_BLOCK_DATA = 4'd5,    // LDM/STM per-register data phase
+        S_SWP_RADDR  = 4'd6,    // SWP read address phase
+        S_SWP_RDATA  = 4'd7,    // SWP read data phase
+        S_SWP_WADDR  = 4'd8,    // SWP write address phase
+        S_SWP_WDATA  = 4'd9     // SWP write data phase + Rd commit
     } state_e;
 
     state_e       state_q;
@@ -87,6 +94,16 @@ module arm7tdmis_core
     logic [31:0]  block_curr_addr_q;
     logic [3:0]   block_curr_reg_q;
     logic         block_load_q;
+
+    // SWP latches. swp_loaded_q holds the value read in S_SWP_RDATA
+    // for commit to Rd at the end of S_SWP_WDATA — Rd is only updated
+    // after the full read/write sequence completes (TRM §13).
+    logic [31:0]  swp_addr_q;
+    logic [31:0]  swp_store_q;
+    logic [31:0]  swp_loaded_q;
+    logic [3:0]   swp_rd_q;
+    logic         swp_byte_q;
+    logic [1:0]   swp_addr_lo_q;
 
     // ---- PSR ----
     psr_t         cpsr;
@@ -277,16 +294,26 @@ module arm7tdmis_core
     wire [15:0] block_after_curr = block_remaining_q & ~(16'h1 << block_curr_reg_q);
     wire        block_has_more   = (block_after_curr != 16'h0);
 
+    // SWP: take the 4-state read-modify-write detour. dec.ls_byte
+    // shares the bit-22 position with SWP's B bit, so it carries SWPB
+    // correctly without a new decoder field.
+    wire swp_take_cycle = passes_cond && (dec.instr_class == INSTR_SWP);
+
     always_comb begin
         unique case (state_q)
             S_FETCH:      state_next = S_EXECUTE;
             S_EXECUTE:    state_next = ls_take_data_cycle    ? S_DADDR
                                      : block_take_cycle      ? S_BLOCK_ADDR
+                                     : swp_take_cycle        ? S_SWP_RADDR
                                                              : S_FETCH;
             S_DADDR:      state_next = S_DDATA;
             S_DDATA:      state_next = S_FETCH;
             S_BLOCK_ADDR: state_next = S_BLOCK_DATA;
             S_BLOCK_DATA: state_next = block_has_more ? S_BLOCK_ADDR : S_FETCH;
+            S_SWP_RADDR:  state_next = S_SWP_RDATA;
+            S_SWP_RDATA:  state_next = S_SWP_WADDR;
+            S_SWP_WADDR:  state_next = S_SWP_WDATA;
+            S_SWP_WDATA:  state_next = S_FETCH;
             default:      state_next = S_FETCH;
         endcase
     end
@@ -367,6 +394,14 @@ module arm7tdmis_core
     // being transferred (for LDM only — STM is a memory write).
     wire block_writes_ldm = (state_q == S_BLOCK_DATA) && block_load_q;
 
+    // S_SWP_WDATA: commit the value loaded in S_SWP_RDATA (held in
+    // swp_loaded_q) to Rd. Byte form zero-extends from swp_addr_lo lane.
+    wire swp_writes_rd = (state_q == S_SWP_WDATA);
+
+    wire [4:0]  swp_byte_shift = {swp_addr_lo_q, 3'b000};
+    wire [31:0] swp_byte_val   = (swp_loaded_q >> swp_byte_shift) & 32'h0000_00FF;
+    wire [31:0] swp_load_value = swp_byte_q ? swp_byte_val : swp_loaded_q;
+
     // ---- Regfile write port mux ----
     // Priorities (only one fires per cycle by construction):
     //   - S_DDATA load   : ls_rd_q ← load_value     (single LDR/LDRB)
@@ -385,6 +420,10 @@ module arm7tdmis_core
         end else if (block_writes_ldm) begin
             rf_write_addr = block_curr_reg_q;
             rf_write_data = RDATA;
+            rf_write_en   = 1'b1;
+        end else if (swp_writes_rd) begin
+            rf_write_addr = swp_rd_q;
+            rf_write_data = swp_load_value;
             rf_write_en   = 1'b1;
         end else if (branch_link_writes) begin
             rf_write_addr = 4'd14;
@@ -419,6 +458,12 @@ module arm7tdmis_core
                 block_curr_addr_q <= 32'h0;
                 block_curr_reg_q  <= 4'h0;
                 block_load_q      <= 1'b0;
+                swp_addr_q        <= 32'h0;
+                swp_store_q       <= 32'h0;
+                swp_loaded_q      <= 32'h0;
+                swp_rd_q          <= 4'h0;
+                swp_byte_q        <= 1'b0;
+                swp_addr_lo_q     <= 2'h0;
             end else begin
                 state_q <= state_next;
 
@@ -462,6 +507,22 @@ module arm7tdmis_core
                         block_curr_addr_q <= block_curr_addr_q + 32'd4;
                     end
                 end
+
+                // Snapshot SWP at end of EXECUTE.
+                if (state_q == S_EXECUTE && swp_take_cycle) begin
+                    swp_addr_q    <= rf_ra_data;        // [Rn]
+                    swp_store_q   <= rf_rb_data;        // value from Rm
+                    swp_rd_q      <= dec.rd;            // destination
+                    swp_byte_q    <= dec.ls_byte;       // B bit (bit 22)
+                    swp_addr_lo_q <= rf_ra_data[1:0];   // for SWPB byte lane
+                end
+
+                // Capture the read value at the end of S_SWP_RDATA so
+                // the write phase can drive memory while we hold the
+                // loaded value for the Rd writeback at S_SWP_WDATA.
+                if (state_q == S_SWP_RDATA) begin
+                    swp_loaded_q <= RDATA;
+                end
             end
         end
     end
@@ -471,6 +532,10 @@ module arm7tdmis_core
 
     wire [31:0] store_byte_data = {4{ls_store_data_q[7:0]}};
     wire [31:0] store_wdata     = ls_byte_q ? store_byte_data : ls_store_data_q;
+
+    // SWP store-side WDATA: byte form replicates Rm[7:0] across all lanes
+    // so the memory's lane-mux picks the right one.
+    wire [31:0] swp_wdata = swp_byte_q ? {4{swp_store_q[7:0]}} : swp_store_q;
 
     always_comb begin
         // Default: idle, post-S_EXECUTE shape
@@ -532,6 +597,42 @@ module arm7tdmis_core
                 SIZE  = 2'(SIZE_WORD);
                 PROT  = {is_priv, 1'b1};
                 WDATA = block_load_q ? 32'h0 : rf_rc_data;
+            end
+            S_SWP_RADDR: begin
+                // SWP read phase: drive Rn address, LOCK asserted across
+                // both read and write halves so no other master sneaks in.
+                ADDR  = swp_addr_q;
+                TRANS = 2'(TRANS_N);
+                WRITE = WRITE_READ;
+                SIZE  = swp_byte_q ? 2'(SIZE_BYTE) : 2'(SIZE_WORD);
+                PROT  = {is_priv, 1'b1};
+                LOCK  = LOCK_LOCKED;
+            end
+            S_SWP_RDATA: begin
+                ADDR  = swp_addr_q;
+                TRANS = 2'(TRANS_I);
+                WRITE = WRITE_READ;
+                SIZE  = swp_byte_q ? 2'(SIZE_BYTE) : 2'(SIZE_WORD);
+                PROT  = {is_priv, 1'b1};
+                LOCK  = LOCK_LOCKED;
+            end
+            S_SWP_WADDR: begin
+                // SWP write phase
+                ADDR  = swp_addr_q;
+                TRANS = 2'(TRANS_N);
+                WRITE = WRITE_WRITE;
+                SIZE  = swp_byte_q ? 2'(SIZE_BYTE) : 2'(SIZE_WORD);
+                PROT  = {is_priv, 1'b1};
+                LOCK  = LOCK_LOCKED;
+            end
+            S_SWP_WDATA: begin
+                ADDR  = swp_addr_q;
+                TRANS = 2'(TRANS_I);
+                WRITE = WRITE_WRITE;
+                SIZE  = swp_byte_q ? 2'(SIZE_BYTE) : 2'(SIZE_WORD);
+                PROT  = {is_priv, 1'b1};
+                LOCK  = LOCK_LOCKED;
+                WDATA = swp_wdata;
             end
             default: ;
         endcase
