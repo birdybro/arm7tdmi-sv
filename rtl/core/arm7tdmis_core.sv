@@ -732,6 +732,16 @@ module arm7tdmis_core
                     end
                 end
 
+                // LDR Rd=PC: the loaded value replaces pc_q at the end
+                // of S_DDATA. The regfile would otherwise update slot 15
+                // (which it suppresses), so this is the only place the
+                // PC can change from a data load. Pipeline flush is
+                // implicit in our 2/4-state model: the next S_FETCH
+                // simply uses the new pc_q.
+                if (state_q == S_DDATA && ls_load_q && ls_rd_q == 4'd15) begin
+                    pc_q <= load_value;
+                end
+
                 // Snapshot the L/S micro-op at end of EXECUTE so the data
                 // bus cycles can drive memory without the decoder context.
                 if (state_q == S_EXECUTE && ls_take_data_cycle) begin
