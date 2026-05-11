@@ -49,7 +49,14 @@ module arm7tdmis_psr
     input  logic [3:0]  spsr_write_mask,
 
     // Restore CPSR ← SPSR-of-current-mode (exception return path)
-    input  logic        cpsr_restore_en
+    input  logic        cpsr_restore_en,
+
+    // Architectural T-bit set from BX (ARM↔Thumb interworking). This path
+    // bypasses the MSR T-drop policy in §30.8.3 because BX is the legal
+    // way to change CPSR.T — and is the only way prior to ARMv5 where
+    // BLX or load-to-PC don't exist.
+    input  logic        bx_set_t_en,
+    input  logic        bx_set_t_value
 );
 
     // ---- Storage ----
@@ -126,6 +133,14 @@ module arm7tdmis_psr
                 // architectural intent of MOVS/SUBS PC,...).
                 if (cpsr_restore_en && mode_has_spsr(cur_mode)) begin
                     cpsr_next = spsr_q[cur_spsr_ix];
+                end
+
+                // BX writes CPSR.T explicitly (and only that bit). Applied
+                // last so BX during exception return — which shouldn't
+                // happen architecturally but is defined here — would let
+                // BX dominate.
+                if (bx_set_t_en) begin
+                    cpsr_next[PSR_BIT_T] = bx_set_t_value;
                 end
 
                 cpsr_q <= cpsr_next;

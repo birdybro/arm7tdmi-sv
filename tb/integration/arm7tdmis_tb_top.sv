@@ -232,12 +232,28 @@ module arm7tdmis_tb_top
         $finish;
     end
 
-    // ---- §9 smoke verification ----
-    // The smoke program exercises both DP-immediate (the first four MOVs)
-    // and DP-register (ADD/MOV-LSL/MOV-LSR/ORR/AND, plus a register-shifted-
-    // register MOV r9, r0, LSL r1). Each instruction takes 2 cycles in the
-    // non-pipelined model, so 50 post-reset cycles is comfortably above
-    // the 11-instruction × 2-cycle = 22-cycle budget.
+    // ---- §10 smoke verification ----
+    // The smoke program covers everything implemented so far:
+    //   §7-§8  DP-immediate (r0..r3)
+    //   §9     DP-register, immediate-shift, register-shift (r4..r9)
+    //   §10    B (skip over a poisoned MOV), BL (saves LR),
+    //          BX r14 (return to caller, LSB=0 stays ARM)
+    //
+    // Program layout (each entry = 1 word at PC offset):
+    //   0x00..0x0C   MOV r0..r3 immediates              (§7-§8)
+    //   0x10..0x24   ADD/MOV-shift/ORR/AND/MOV-reg-shift (§9)
+    //   0x28         B  0x30                            (skip 0x2C)
+    //   0x2C         MOV r10, #99  ← MUST NOT EXECUTE
+    //   0x30         MOV r10, #11
+    //   0x34         BL 0x40                            (LR <- 0x38)
+    //   0x38         MOV r11, #12
+    //   0x3C         MOV r15, #0x3C  (self-loop)
+    //   0x40         MOV r12, #13
+    //   0x44         BX r14                             (PC <- 0x38)
+    //
+    // Execution flow: ... 0x28→0x30, 0x34→0x40, 0x44→0x38, 0x3C self-loop.
+    // 17 instructions execute (0x2C is skipped). At 2 cycles each plus
+    // reset-sync slack we need ~40 cycles; 80 is comfortable.
     int unsigned smoke_errors = 0;
 
     task automatic check_reg(input int idx, input logic [31:0] expected, input string name);
@@ -254,24 +270,34 @@ module arm7tdmis_tb_top
         $display("[smoke] mem[0..4] = %08x %08x %08x %08x %08x",
                  u_mem.mem[0], u_mem.mem[1], u_mem.mem[2],
                  u_mem.mem[3], u_mem.mem[4]);
-        repeat (50) @(posedge CLK);
+        repeat (80) @(posedge CLK);
 
-        // DP-immediate results from the first four MOVs
+        // DP-immediate (§7-§8)
         check_reg(0, 32'h00000005, "r0=5");
         check_reg(1, 32'h00000007, "r1=7");
         check_reg(2, 32'h000000FF, "r2=0xFF");
         check_reg(3, 32'hFF000000, "r3=0xFF000000");
 
-        // DP-register results
-        check_reg(4, 32'h0000000C, "r4=r0+r1");                  // ADD
-        check_reg(5, 32'h0000000A, "r5=r0<<1");                  // MOV LSL #1
-        check_reg(6, 32'h00000003, "r6=r1>>1");                  // MOV LSR #1
-        check_reg(7, 32'h00000007, "r7=r0|r1");                  // ORR
-        check_reg(8, 32'h00000005, "r8=r2&r0");                  // AND
-        check_reg(9, 32'h00000280, "r9=r0<<r1");                 // MOV r0,LSL r1
+        // DP-register (§9)
+        check_reg(4, 32'h0000000C, "r4=r0+r1");
+        check_reg(5, 32'h0000000A, "r5=r0<<1");
+        check_reg(6, 32'h00000003, "r6=r1>>1");
+        check_reg(7, 32'h00000007, "r7=r0|r1");
+        check_reg(8, 32'h00000005, "r8=r2&r0");
+        check_reg(9, 32'h00000280, "r9=r0<<r1");
 
-        if (u_dut.u_core.pc_q !== 32'h00000028) begin
-            $display("[smoke] FAIL pc_q: expected 0x00000028 (self-loop), got %08x",
+        // §10 branch coverage. r10 must be 11 (not 99 — proves the B
+        // branch skipped the poisoned MOV); r11=12 (post-BL return);
+        // r12=13 (executed inside the BL target); r14_svc=0x38 (LR set
+        // by BL — the core boots in Supervisor mode so the banked
+        // r14_svc lives at flat-index 26, not 14).
+        check_reg(10, 32'h0000000B, "r10=11 (B skipped MOV r10,#99)");
+        check_reg(11, 32'h0000000C, "r11=12 (post-BL return via BX r14)");
+        check_reg(12, 32'h0000000D, "r12=13 (executed inside BL target)");
+        check_reg(26, 32'h00000038, "r14_svc=LR set by BL");
+
+        if (u_dut.u_core.pc_q !== 32'h0000003C) begin
+            $display("[smoke] FAIL pc_q: expected 0x0000003C (self-loop), got %08x",
                      u_dut.u_core.pc_q);
             smoke_errors = smoke_errors + 1;
         end

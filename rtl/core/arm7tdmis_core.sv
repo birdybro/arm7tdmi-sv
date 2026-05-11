@@ -69,8 +69,12 @@ module arm7tdmis_core
     // cpsr_restore is for "exception return via data-processing": MOVS PC,
     // LR / SUBS PC, R14, #N etc. — when an S=1 DP instruction writes Rd=15,
     // CPSR is restored from the current-mode SPSR (TRM §2.9 / ARM ARM).
-    // Computed below alongside writes_pc / writes_flags.
+    // bx_set_t_* is the BX-architecture path that flips CPSR.T to switch
+    // between ARM and Thumb states. Both are computed below alongside
+    // writes_pc / writes_flags.
     logic cpsr_restore_now;
+    logic bx_set_t_en;
+    logic bx_set_t_value;
 
     arm7tdmis_psr u_psr (
         .CLK             (CLK),
@@ -85,7 +89,9 @@ module arm7tdmis_core
         .spsr_write_en   (1'b0),
         .spsr_write_data (32'h0),
         .spsr_write_mask (4'h0),
-        .cpsr_restore_en (cpsr_restore_now)
+        .cpsr_restore_en (cpsr_restore_now),
+        .bx_set_t_en     (bx_set_t_en),
+        .bx_set_t_value  (bx_set_t_value)
     );
 
     // ---- Decoder ----
@@ -208,25 +214,67 @@ module arm7tdmis_core
         endcase
     end
 
-    // ---- Writeback control. §9: every DP variant commits. Non-DP classes
-    //      (LDR/STR, branch, multiply, ...) still execute as NOP until
-    //      §10-§13 wire their paths. MOVS PC, LR (S=1 + Rd=15) restores
-    //      CPSR from SPSR — the PSR module's restore path overrides any
-    //      flag write from this same instruction.
+    // ---- Writeback control. §10: DP, BRANCH (B/BL) and BX all commit.
+    //      Other classes (LDR/STR, multiply, ...) still NOP until their
+    //      execute paths land in §11–§13.
+    //
+    //   DP class:
+    //     writes_dest_reg = Rd unless TST/TEQ/CMP/CMN
+    //     writes_pc       = Rd == 15
+    //     writes_flags    = S = 1
+    //     cpsr_restore    = writes_pc && S = 1  (MOVS PC, LR family)
+    //
+    //   BRANCH class (B/BL):
+    //     writes_pc       = always (target = pc_q + 8 + offset)
+    //     writes_dest_reg = BL only (LR ← pc_q + 4)
+    //     no flag update
+    //
+    //   BX class:
+    //     writes_pc       = always (target = Rm & ~1)
+    //     bx_set_t        = Rm[0]  (ARM↔Thumb interworking)
+    //     no register write
+    //     no flag update
     wire executing       = (state_q == S_EXECUTE);
     wire passes_cond     = executing && condition_pass && !dec_is_unimplemented;
-    wire writes_dest     = passes_cond && !dec.is_test_op;
-    wire writes_pc       = writes_dest && (dec.rd == 4'd15);
-    wire writes_flags    = passes_cond && dec.s_bit;
 
-    assign cpsr_restore_now = writes_pc && dec.s_bit;
+    wire instr_is_dp     = (dec.instr_class == INSTR_DP);
+    wire instr_is_branch = (dec.instr_class == INSTR_BRANCH);
+    wire instr_is_bx     = (dec.instr_class == INSTR_BX);
 
+    wire dp_writes_dest     = passes_cond && instr_is_dp && !dec.is_test_op;
+    wire dp_writes_pc       = dp_writes_dest && (dec.rd == 4'd15);
+    wire branch_link_writes = passes_cond && instr_is_branch && dec.branch_link;
+    wire branch_writes_pc   = passes_cond && instr_is_branch;
+    wire bx_writes_pc       = passes_cond && instr_is_bx;
+
+    wire writes_pc      = dp_writes_pc || branch_writes_pc || bx_writes_pc;
+    wire writes_dest    = dp_writes_dest || branch_link_writes;
+    wire writes_flags   = passes_cond && instr_is_dp && dec.s_bit;
+
+    assign cpsr_restore_now = dp_writes_pc && dec.s_bit;
+    assign bx_set_t_en      = bx_writes_pc;
+    assign bx_set_t_value   = rf_rb_data[0];     // Rm[0] selects new state
+
+    // PC target per class:
+    //   DP/Rd=15:  ALU result
+    //   B/BL:      pc_q + 8 (= ARM-visible PC) + sign-extended (offset24<<2)
+    //   BX:        Rm with LSB cleared (LSB is the new T bit, handled above)
+    wire [31:0] dp_pc_target     = alu_result;
+    wire [31:0] branch_pc_target = pc_q + 32'd8 + dec.branch_offset;
+    wire [31:0] bx_pc_target     = rf_rb_data & 32'hFFFFFFFE;
+
+    wire [31:0] pc_target = instr_is_branch ? branch_pc_target :
+                            instr_is_bx     ? bx_pc_target     :
+                                              dp_pc_target;
+
+    // Regfile write port mux: BL writes LR (r14) with return address;
+    // everything else uses Rd / alu_result.
     logic [3:0]  rf_write_addr;
     logic [31:0] rf_write_data;
     logic        rf_write_en;
 
-    assign rf_write_addr = dec.rd;
-    assign rf_write_data = alu_result;
+    assign rf_write_addr = branch_link_writes ? 4'd14    : dec.rd;
+    assign rf_write_data = branch_link_writes ? (pc_q + 32'd4) : alu_result;
     assign rf_write_en   = writes_dest;
 
     // CPSR flag update: only the _f byte (bits [31:24]) per the ALU
@@ -247,7 +295,7 @@ module arm7tdmis_core
                 // Advance PC at end of EXECUTE
                 if (state_q == S_EXECUTE) begin
                     if (writes_pc) begin
-                        pc_q <= alu_result;
+                        pc_q <= pc_target;
                     end else begin
                         pc_q <= pc_q + 32'd4;
                     end

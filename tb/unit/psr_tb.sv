@@ -37,6 +37,8 @@ module psr_tb
     logic [3:0]  spsr_write_mask;
 
     logic        cpsr_restore_en;
+    logic        bx_set_t_en;
+    logic        bx_set_t_value;
 
     arm7tdmis_psr dut (.*);
 
@@ -87,6 +89,8 @@ module psr_tb
         spsr_write_data = 32'h0;
         spsr_write_mask = 4'b0000;
         cpsr_restore_en = 1'b0;
+        bx_set_t_en     = 1'b0;
+        bx_set_t_value  = 1'b0;
 
         repeat (4) @(posedge CLK);
         @(negedge CLK);
@@ -181,6 +185,25 @@ module psr_tb
         @(negedge CLK);
         cpsr_restore_en = 1'b0;
         check32("cpsr after restore from spsr_fiq", 32'(cpsr), 32'h11111111);
+
+        // T7: BX path sets CPSR.T even though the MSR T-drop policy would
+        //     normally suppress it. After T6, CPSR=0x11111111 with bit 5=0.
+        @(negedge CLK);
+        bx_set_t_en    = 1'b1;
+        bx_set_t_value = 1'b1;
+        @(posedge CLK);
+        @(negedge CLK);
+        bx_set_t_en    = 1'b0;
+        check1("cpsr.t after BX set", cpsr.t, 1'b1);
+
+        // T8: BX clears T (the only path that can — MSR would drop the write).
+        @(negedge CLK);
+        bx_set_t_en    = 1'b1;
+        bx_set_t_value = 1'b0;
+        @(posedge CLK);
+        @(negedge CLK);
+        bx_set_t_en    = 1'b0;
+        check1("cpsr.t after BX clear", cpsr.t, 1'b0);
 
         // Wrap up
         if (errors == 0) begin
