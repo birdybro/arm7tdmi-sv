@@ -66,6 +66,12 @@ module arm7tdmis_core
     logic [31:0]  cpsr_write_data;
     logic [3:0]   cpsr_write_mask;
 
+    // cpsr_restore is for "exception return via data-processing": MOVS PC,
+    // LR / SUBS PC, R14, #N etc. — when an S=1 DP instruction writes Rd=15,
+    // CPSR is restored from the current-mode SPSR (TRM §2.9 / ARM ARM).
+    // Computed below alongside writes_pc / writes_flags.
+    logic cpsr_restore_now;
+
     arm7tdmis_psr u_psr (
         .CLK             (CLK),
         .CLKEN           (CLKEN),
@@ -79,7 +85,7 @@ module arm7tdmis_core
         .spsr_write_en   (1'b0),
         .spsr_write_data (32'h0),
         .spsr_write_mask (4'h0),
-        .cpsr_restore_en (1'b0)
+        .cpsr_restore_en (cpsr_restore_now)
     );
 
     // ---- Decoder ----
@@ -131,9 +137,9 @@ module arm7tdmis_core
         .mode            (cpsr.m),
         .t_bit           (cpsr.t),
         .pc_in           (pc_q),
-        .ra_addr         (dec.rn),
-        .rb_addr         (dec.rm),
-        .rc_addr         (4'h0),
+        .ra_addr         (dec.rn),         // Rn → ALU op_a
+        .rb_addr         (dec.rm),         // Rm → shifter input (DP-reg)
+        .rc_addr         (dec.rs),         // Rs → shifter amount (DP-reg-reg)
         .ra_data         (rf_ra_data),
         .rb_data         (rf_rb_data),
         .rc_data         (rf_rc_data),
@@ -148,14 +154,25 @@ module arm7tdmis_core
     logic [31:0] sh_result;
     logic        sh_carry_out;
 
-    // For §7 we only feed the shifter from the DP-immediate path
-    // (dp_imm_value with ROR-by-2*rot4). DP-register and other classes
-    // get their shifter wiring in §9.
+    // ---- Operand2 muxes (§9):
+    //   - DP-imm:                shifter input = imm8 zero-extended;
+    //                            amount = 2*rot4 (in dec.shifter_amount).
+    //   - DP-register:           shifter input = Rm; amount comes from
+    //                            either dec.shifter_amount (imm-shift) or
+    //                            Rs[7:0] (reg-shift, selected by
+    //                            dec.shifter_use_rs).
+    wire [31:0] op2_shifter_in     = dec.dp_use_imm
+                                     ? {24'h0, RDATA[7:0]}
+                                     : rf_rb_data;
+    wire [7:0]  op2_shifter_amount = dec.shifter_use_rs
+                                     ? rf_rc_data[7:0]
+                                     : dec.shifter_amount;
+
     arm7tdmis_shifter u_shifter (
         .op        (dec.shifter_op),
-        .amount    (dec.shifter_amount),
+        .amount    (op2_shifter_amount),
         .is_rrx    (dec.shifter_is_rrx),
-        .in_data   ({24'h0, RDATA[7:0]}),    // imm8 zero-extended; matches DP-imm
+        .in_data   (op2_shifter_in),
         .carry_in  (cpsr.c),
         .result    (sh_result),
         .carry_out (sh_carry_out)
@@ -191,14 +208,18 @@ module arm7tdmis_core
         endcase
     end
 
-    // ---- Writeback control. Still §7-style: only DP-immediate commits;
-    //      every other class (now properly classified by the §8 decoder)
-    //      is treated as a NOP until §9-§13 wire its execute path.
+    // ---- Writeback control. §9: every DP variant commits. Non-DP classes
+    //      (LDR/STR, branch, multiply, ...) still execute as NOP until
+    //      §10-§13 wire their paths. MOVS PC, LR (S=1 + Rd=15) restores
+    //      CPSR from SPSR — the PSR module's restore path overrides any
+    //      flag write from this same instruction.
     wire executing       = (state_q == S_EXECUTE);
     wire passes_cond     = executing && condition_pass && !dec_is_unimplemented;
     wire writes_dest     = passes_cond && !dec.is_test_op;
     wire writes_pc       = writes_dest && (dec.rd == 4'd15);
     wire writes_flags    = passes_cond && dec.s_bit;
+
+    assign cpsr_restore_now = writes_pc && dec.s_bit;
 
     logic [3:0]  rf_write_addr;
     logic [31:0] rf_write_data;

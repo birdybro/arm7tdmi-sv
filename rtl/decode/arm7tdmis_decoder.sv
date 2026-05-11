@@ -233,9 +233,11 @@ module arm7tdmis_decoder
         dec.cp_num           = instr[11:8];
     end
 
-    // ---- Scalar shortcuts. is_unimplemented stays at "DP-imm only" until
-    //      the §9 core wires the DP-register execute path.
+    // ---- Scalar shortcuts. With §9 the core's execute path covers every
+    //      DP variant (immediate, register, register-shifted-imm,
+    //      register-shifted-register, RRX), so is_unimplemented is true
+    //      only for non-DP classes. Subsequent milestones extend.
     assign is_dataproc      = (c == INSTR_DP);
-    assign is_unimplemented = (c != INSTR_DP) || !dec.dp_use_imm;
+    assign is_unimplemented = (c != INSTR_DP);
 
 endmodule

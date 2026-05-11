@@ -232,8 +232,21 @@ module arm7tdmis_tb_top
         $finish;
     end
 
-    // ---- §7 smoke verification ----
+    // ---- §9 smoke verification ----
+    // The smoke program exercises both DP-immediate (the first four MOVs)
+    // and DP-register (ADD/MOV-LSL/MOV-LSR/ORR/AND, plus a register-shifted-
+    // register MOV r9, r0, LSL r1). Each instruction takes 2 cycles in the
+    // non-pipelined model, so 50 post-reset cycles is comfortably above
+    // the 11-instruction × 2-cycle = 22-cycle budget.
     int unsigned smoke_errors = 0;
+
+    task automatic check_reg(input int idx, input logic [31:0] expected, input string name);
+        if (u_dut.u_core.u_regfile.regs[idx] !== expected) begin
+            $display("[smoke] FAIL %s (r%0d): expected %08x, got %08x",
+                     name, idx, expected, u_dut.u_core.u_regfile.regs[idx]);
+            smoke_errors = smoke_errors + 1;
+        end
+    endtask
 
     initial begin
         wait (nRESET);
@@ -241,30 +254,24 @@ module arm7tdmis_tb_top
         $display("[smoke] mem[0..4] = %08x %08x %08x %08x %08x",
                  u_mem.mem[0], u_mem.mem[1], u_mem.mem[2],
                  u_mem.mem[3], u_mem.mem[4]);
-        repeat (30) @(posedge CLK);
+        repeat (50) @(posedge CLK);
 
-        if (u_dut.u_core.u_regfile.regs[0] !== 32'h00000005) begin
-            $display("[smoke] FAIL r0: expected 0x00000005, got %08x",
-                     u_dut.u_core.u_regfile.regs[0]);
-            smoke_errors = smoke_errors + 1;
-        end
-        if (u_dut.u_core.u_regfile.regs[1] !== 32'h00000007) begin
-            $display("[smoke] FAIL r1: expected 0x00000007, got %08x",
-                     u_dut.u_core.u_regfile.regs[1]);
-            smoke_errors = smoke_errors + 1;
-        end
-        if (u_dut.u_core.u_regfile.regs[2] !== 32'h000000FF) begin
-            $display("[smoke] FAIL r2: expected 0x000000FF, got %08x",
-                     u_dut.u_core.u_regfile.regs[2]);
-            smoke_errors = smoke_errors + 1;
-        end
-        if (u_dut.u_core.u_regfile.regs[3] !== 32'hFF000000) begin
-            $display("[smoke] FAIL r3: expected 0xFF000000, got %08x",
-                     u_dut.u_core.u_regfile.regs[3]);
-            smoke_errors = smoke_errors + 1;
-        end
-        if (u_dut.u_core.pc_q !== 32'h00000010) begin
-            $display("[smoke] FAIL pc_q: expected 0x00000010 (self-loop), got %08x",
+        // DP-immediate results from the first four MOVs
+        check_reg(0, 32'h00000005, "r0=5");
+        check_reg(1, 32'h00000007, "r1=7");
+        check_reg(2, 32'h000000FF, "r2=0xFF");
+        check_reg(3, 32'hFF000000, "r3=0xFF000000");
+
+        // DP-register results
+        check_reg(4, 32'h0000000C, "r4=r0+r1");                  // ADD
+        check_reg(5, 32'h0000000A, "r5=r0<<1");                  // MOV LSL #1
+        check_reg(6, 32'h00000003, "r6=r1>>1");                  // MOV LSR #1
+        check_reg(7, 32'h00000007, "r7=r0|r1");                  // ORR
+        check_reg(8, 32'h00000005, "r8=r2&r0");                  // AND
+        check_reg(9, 32'h00000280, "r9=r0<<r1");                 // MOV r0,LSL r1
+
+        if (u_dut.u_core.pc_q !== 32'h00000028) begin
+            $display("[smoke] FAIL pc_q: expected 0x00000028 (self-loop), got %08x",
                      u_dut.u_core.pc_q);
             smoke_errors = smoke_errors + 1;
         end
