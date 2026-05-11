@@ -285,16 +285,51 @@ module arm7tdmis_core
     wire ls_take_data_cycle = passes_cond
                             && (dec.instr_class == INSTR_LDR_STR);
 
-    // Block (LDM/STM) §12 minimum: IA mode (P=0, U=1), no writeback,
-    // no User-mode override, no PC in list, non-empty list.
+    // §12b: every Addressing-Mode-4 form accepted — IA / IB / DA / DB
+    // with optional base writeback. Still no User-mode override (^ form)
+    // and no PC-in-list (LDM with r15 loads PC and would need pipeline
+    // flush + optional CPSR-from-SPSR for the ^ variant). Empty register
+    // list is still UNPREDICTABLE and we treat it as NOP.
     wire block_take_cycle = passes_cond
                           && (dec.instr_class == INSTR_LDM_STM)
-                          && !dec.block_pre_index
-                          && dec.block_up
                           && !dec.block_user_mode
-                          && !dec.block_writeback
                           && !dec.block_reg_list[15]
                           && (dec.block_reg_list != 16'h0);
+
+    // Popcount of the register list — needed for the start-address
+    // computation in DA/DB modes and for the writeback delta.
+    function automatic logic [4:0] popcount16(input logic [15:0] mask);
+        logic [4:0] sum;
+        sum = 5'd0;
+        for (int i = 0; i < 16; i = i + 1) sum = sum + {4'h0, mask[i]};
+        return sum;
+    endfunction
+
+    wire [4:0]  block_reg_count    = popcount16(dec.block_reg_list);
+    wire [31:0] block_reg_count_x4 = {25'h0, block_reg_count, 2'h0};
+
+    // Start-of-burst address per mode (TRM Addressing-Mode-4):
+    //   IA (P=0, U=1): start = Rn
+    //   IB (P=1, U=1): start = Rn + 4
+    //   DA (P=0, U=0): start = Rn - 4*(n-1) = Rn - 4n + 4
+    //   DB (P=1, U=0): start = Rn - 4n
+    logic [31:0] block_start_addr;
+    always_comb begin
+        unique case ({dec.block_pre_index, dec.block_up})
+            2'b01:   block_start_addr = rf_ra_data;
+            2'b11:   block_start_addr = rf_ra_data + 32'd4;
+            2'b00:   block_start_addr = rf_ra_data - block_reg_count_x4 + 32'd4;
+            2'b10:   block_start_addr = rf_ra_data - block_reg_count_x4;
+            default: block_start_addr = rf_ra_data;
+        endcase
+    end
+
+    // Post-modified base (for W=1 writeback): Rn ± 4n.
+    wire [31:0] block_writeback_addr = dec.block_up
+                                       ? (rf_ra_data + block_reg_count_x4)
+                                       : (rf_ra_data - block_reg_count_x4);
+
+    wire block_does_writeback = block_take_cycle && dec.block_writeback;
 
     // Block iteration: clearing the current bit yields the remaining set.
     wire [15:0] block_after_curr = block_remaining_q & ~(16'h1 << block_curr_reg_q);
@@ -484,6 +519,13 @@ module arm7tdmis_core
             rf_write_addr = dec.rn;
             rf_write_data = ls_data_addr_calc;
             rf_write_en   = 1'b1;
+        end else if (block_does_writeback) begin
+            // LDM/STM base writeback: Rn ± 4n. Per-register loads land
+            // in S_BLOCK_DATA (later cycles), so if Rn is in the list
+            // the LDM write wins over this writeback — matching ARM ARM.
+            rf_write_addr = dec.rn;
+            rf_write_data = block_writeback_addr;
+            rf_write_en   = 1'b1;
         end else begin
             rf_write_addr = dec.rd;
             rf_write_data = alu_result;
@@ -547,7 +589,7 @@ module arm7tdmis_core
                 // Snapshot the LDM/STM micro-op + start the iteration.
                 if (state_q == S_EXECUTE && block_take_cycle) begin
                     block_remaining_q <= dec.block_reg_list;
-                    block_curr_addr_q <= rf_ra_data;           // IA: start = Rn
+                    block_curr_addr_q <= block_start_addr;
                     block_curr_reg_q  <= lowest_set_idx(dec.block_reg_list);
                     block_load_q      <= dec.block_load;
                 end
