@@ -337,15 +337,14 @@ module arm7tdmis_core
                         || (dec.instr_class == INSTR_LDRH_STRH);
     wire ls_take_data_cycle = passes_cond && instr_is_ls_any;
 
-    // §12b: every Addressing-Mode-4 form accepted — IA / IB / DA / DB
-    // with optional base writeback. Still no User-mode override (^ form)
-    // and no PC-in-list (LDM with r15 loads PC and would need pipeline
-    // flush + optional CPSR-from-SPSR for the ^ variant). Empty register
-    // list is still UNPREDICTABLE and we treat it as NOP.
+    // §12b/c: every Addressing-Mode-4 form accepted, including PC in
+    // the register list (§12c — LDM ... PC). The User-mode-override
+    // (^ form, S=1) still isn't wired because it has subtle CPSR-from-
+    // SPSR semantics when PC is also in the list. Empty register list
+    // is still UNPREDICTABLE and we treat it as NOP.
     wire block_take_cycle = passes_cond
                           && (dec.instr_class == INSTR_LDM_STM)
                           && !dec.block_user_mode
-                          && !dec.block_reg_list[15]
                           && (dec.block_reg_list != 16'h0);
 
     // Popcount of the register list — needed for the start-address
@@ -740,6 +739,17 @@ module arm7tdmis_core
                 // simply uses the new pc_q.
                 if (state_q == S_DDATA && ls_load_q && ls_rd_q == 4'd15) begin
                     pc_q <= load_value;
+                end
+
+                // LDM with PC in list: same idea, but the active register
+                // is block_curr_reg_q. When LDM lands on r15 the load
+                // value (RDATA) becomes the new PC. The iteration may
+                // still have more registers to transfer afterward — those
+                // are smaller-indexed registers per the ascending-order
+                // rule, so r15 is always the LAST register loaded by LDM.
+                if (state_q == S_BLOCK_DATA && block_load_q
+                  && block_curr_reg_q == 4'd15) begin
+                    pc_q <= RDATA;
                 end
 
                 // Snapshot the L/S micro-op at end of EXECUTE so the data
