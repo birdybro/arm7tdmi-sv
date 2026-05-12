@@ -202,8 +202,25 @@ module arm7tdmis_ice_rt (
     wire wp1_full_match = wp1_addr_match && wp1_data_match && wp1_ctrl_match
                        && wp1_enable;
 
+    // §22: Vector Catch (ICE-RT register 0x02, 8 bits) — trap on opcode
+    // fetch of an exception vector address. Each bit corresponds to one
+    // vector (TRM §5.27):
+    //   [0] Reset       — vector 0x00
+    //   [1] Undef       — 0x04
+    //   [2] SWI         — 0x08
+    //   [3] PrefAbort   — 0x0C
+    //   [4] DataAbort   — 0x10
+    //   [5] reserved    — 0x14
+    //   [6] IRQ         — 0x18
+    //   [7] FIQ         — 0x1C
+    wire [7:0]  vector_catch = regs[5'h02][7:0];
+    wire        is_vec_fetch = !watch_nopc && (watch_addr[31:5] == 27'h0);
+    wire [2:0]  vec_index    = watch_addr[4:2];
+    wire        vec_catch_hit = is_vec_fetch && vector_catch[vec_index];
+
     // §30.22.1: DBGEN=0 forces all debug outputs LOW.
-    assign dbg_break_internal = DBGEN && (wp0_full_match || wp1_full_match);
+    assign dbg_break_internal = DBGEN &&
+                                (wp0_full_match || wp1_full_match || vec_catch_hit);
 
     // §30.22.6: DBGACK_pin = ICE_control[0] OR DBGACKI (from debug state
     // machine). DBGACKI comes in when the FSM lands; for now the
