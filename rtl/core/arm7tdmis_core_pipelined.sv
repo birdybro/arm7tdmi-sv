@@ -129,7 +129,8 @@ module arm7tdmis_core_pipelined
         S_SWP_RDATA  = 4'd6,
         S_SWP_WADDR  = 4'd7,
         S_SWP_WDATA  = 4'd8,
-        S_MULL_HI    = 4'd9     // §9d: 64-bit multiply RdHi writeback cycle
+        S_MULL_HI    = 4'd9,    // §9d: 64-bit multiply RdHi writeback cycle
+        S_MUL_BUSY   = 4'd10    // §18: multiplier I cycles (early termination m)
     } state_e;
 
     state_e state_q;
@@ -299,6 +300,14 @@ module arm7tdmis_core_pipelined
     // after de_q has moved on.
     logic [3:0]   mull_rdhi_q;
     logic [31:0]  mull_result_hi_q;
+
+    // §18: multiplier internal-cycle accounting. Latched at end of S_EXEC
+    // for MUL/MULL: m parameter from the multiplier (1..4 depending on Rs
+    // significant-bit-count) drives mul_busy_remaining_q for S_MUL_BUSY
+    // countdown; mull_active_q tells the FSM whether to land at S_MULL_HI
+    // or back at S_EXEC after the busy cycles complete.
+    logic [2:0]   mul_busy_remaining_q;
+    logic         mull_active_q;
 
     // ---- PSR + exception entry plumbing ----
     psr_t         spsr_value;
@@ -542,6 +551,13 @@ module arm7tdmis_core_pipelined
     wire mull_take_cycle = passes_cond && instr_class_is_mull
                         && !dec.mul_accumulate;
 
+    // §18: any MUL or MULL takes the S_MUL_BUSY internal-cycle detour
+    // for m cycles where m is determined by the multiplier from Rs's
+    // significant-bit-count (TRM §7.7). m ranges 1..4 → MUL completes
+    // in 2..5 cycles, MULL completes in 3..6 cycles.
+    wire mul_take_busy = passes_cond
+                      && (instr_is_mul || (instr_class_is_mull && !dec.mul_accumulate));
+
     // E-stage substate transitions. Single-cycle "execute" loops back to
     // S_EXEC; multi-cycle ops take the appropriate substate detour.
     // While in S_EXEC, an invalid de_q (bubble) still loops to S_EXEC —
@@ -552,7 +568,7 @@ module arm7tdmis_core_pipelined
             S_EXEC:       state_next = ls_take_data_cycle ? S_DADDR
                                      : block_take_cycle   ? S_BLOCK_ADDR
                                      : swp_take_cycle     ? S_SWP_RADDR
-                                     : mull_take_cycle    ? S_MULL_HI
+                                     : mul_take_busy      ? S_MUL_BUSY
                                                           : S_EXEC;
             S_DADDR:      state_next = S_DDATA;
             S_DDATA:      state_next = S_EXEC;
@@ -563,6 +579,9 @@ module arm7tdmis_core_pipelined
             S_SWP_WADDR:  state_next = S_SWP_WDATA;
             S_SWP_WDATA:  state_next = S_EXEC;
             S_MULL_HI:    state_next = S_EXEC;
+            S_MUL_BUSY:   state_next = (mul_busy_remaining_q == 3'd1)
+                                       ? (mull_active_q ? S_MULL_HI : S_EXEC)
+                                       : S_MUL_BUSY;
             default:      state_next = S_EXEC;
         endcase
     end
@@ -964,8 +983,10 @@ module arm7tdmis_core_pipelined
                 swp_rd_q            <= 4'h0;
                 swp_byte_q          <= 1'b0;
                 swp_addr_lo_q       <= 2'h0;
-                mull_rdhi_q         <= 4'h0;
-                mull_result_hi_q    <= 32'h0;
+                mull_rdhi_q          <= 4'h0;
+                mull_result_hi_q     <= 32'h0;
+                mul_busy_remaining_q <= 3'h0;
+                mull_active_q        <= 1'b0;
             end else begin
                 state_q <= state_next;
 
@@ -1019,6 +1040,19 @@ module arm7tdmis_core_pipelined
                 if (state_q == S_EXEC && mull_take_cycle) begin
                     mull_rdhi_q      <= dec.rn;
                     mull_result_hi_q <= mul_result_hi;
+                end
+
+                // §18: at S_EXEC end for MUL/MULL, latch the m parameter
+                // (cycle_count, 1..4 from the multiplier) and remember
+                // whether this is a long form so the FSM knows where to
+                // land after S_MUL_BUSY ends.
+                if (state_q == S_EXEC && mul_take_busy) begin
+                    mul_busy_remaining_q <= mul_cycle_count;
+                    mull_active_q        <= instr_class_is_mull;
+                end
+                // Countdown each S_MUL_BUSY cycle.
+                if (state_q == S_MUL_BUSY && mul_busy_remaining_q != 3'h0) begin
+                    mul_busy_remaining_q <= mul_busy_remaining_q - 3'd1;
                 end
             end
         end
@@ -1205,7 +1239,6 @@ module arm7tdmis_core_pipelined
         ls_data_addr_calc[31:12],
         ls_store_data_q[31:8],
         mul_flag_we,
-        mul_cycle_count,
         dec.dp_imm_value,
         dec.hs_signed, dec.hs_halfword, dec.hs_use_imm, dec.hs_imm_offset,
         dec.psr_use_spsr, dec.msr_field_mask, dec.msr_use_imm,
