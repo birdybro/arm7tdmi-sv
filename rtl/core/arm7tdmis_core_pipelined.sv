@@ -72,6 +72,11 @@ module arm7tdmis_core_pipelined
         logic [31:0] instr;
         logic [31:0] pc;       // PC that produced `instr`
         logic        thumb;    // T-bit when the fetch was issued
+        logic        pabort;   // §17: ABORT asserted during this fetch's data
+                               //      cycle → prefetch abort when the instr
+                               //      reaches execute. Named `pabort` not
+                               //      `abort` because Verilator warns on the
+                               //      C++ reserved word.
         logic        valid;
     } fd_t;
 
@@ -80,6 +85,7 @@ module arm7tdmis_core_pipelined
         logic [31:0] instr;   // raw instruction bits — needed for DP-imm raw imm8
         logic [31:0] pc;       // PC of this instruction
         logic        thumb;    // T-bit when fetched
+        logic        pabort;   // §17: carried from fd_q
         logic        valid;
     } de_t;
 
@@ -182,7 +188,8 @@ module arm7tdmis_core_pipelined
                 fetch_pc_q       <= 32'h0;
                 inflight_pc_q    <= 32'h0;
                 inflight_valid_q <= 1'b0;
-                fd_q             <= '{instr:32'h0, pc:32'h0, thumb:1'b0, valid:1'b0};
+                fd_q             <= '{instr:32'h0, pc:32'h0, thumb:1'b0,
+                                  pabort:1'b0, valid:1'b0};
             end else if (flush) begin
                 fetch_pc_q       <= flush_target_pc;
                 inflight_valid_q <= 1'b0;
@@ -200,6 +207,7 @@ module arm7tdmis_core_pipelined
                     fd_q.instr <= RDATA;
                     fd_q.pc    <= inflight_pc_q;
                     fd_q.thumb <= cpsr.t;
+                    fd_q.pabort <= ABORT;       // §17: sample at fetch landing
                     fd_q.valid <= 1'b1;
                 end else if (d_advance) begin
                     fd_q.valid <= 1'b0;
@@ -212,7 +220,8 @@ module arm7tdmis_core_pipelined
     always_ff @(posedge CLK) begin
         if (CLKEN) begin
             if (!nRESET) begin
-                de_q <= '{dec:'0, instr:32'h0, pc:32'h0, thumb:1'b0, valid:1'b0};
+                de_q <= '{dec:'0, instr:32'h0, pc:32'h0, thumb:1'b0,
+                          pabort:1'b0, valid:1'b0};
             end else if (flush) begin
                 de_q.valid <= 1'b0;
             end else if (!e_busy) begin
@@ -221,6 +230,7 @@ module arm7tdmis_core_pipelined
                     de_q.instr <= fd_q.instr;
                     de_q.pc    <= fd_q.pc;
                     de_q.thumb <= fd_q.thumb;
+                    de_q.pabort <= fd_q.pabort;
                     de_q.valid <= 1'b1;
                 end else begin
                     de_q.valid <= 1'b0;
@@ -566,7 +576,41 @@ module arm7tdmis_core_pipelined
     wire irq_fires   = irq_pending && !fiq_pending
                     && !swi_fires && !undef_fires;
 
-    wire any_exc_fires    = swi_fires || undef_fires || irq_fires || fiq_fires;
+    // §17: prefetch abort fires when an aborted instruction reaches execute.
+    // The abort bit was sampled at the fetch landing (F-stage latch) and
+    // carried through fd_q/de_q. PABT takes precedence over UNDEF for the
+    // same instruction; the architecturally correct order is PABT before
+    // any decode-based traps.
+    wire pabt_fires = executing && de_q.pabort;
+
+    // §17: data abort fires when ABORT is asserted during the active data
+    // cycle of an LDR/STR/LDM/STM/SWP. Latched so the exception can be
+    // raised at the boundary back to S_EXEC.
+    wire data_abort_now = ABORT && ((state_q == S_DDATA)
+                                  || (state_q == S_BLOCK_DATA)
+                                  || (state_q == S_SWP_RDATA)
+                                  || (state_q == S_SWP_WDATA));
+
+    logic data_abort_q;
+    always_ff @(posedge CLK) begin
+        if (CLKEN) begin
+            if (!nRESET) begin
+                data_abort_q <= 1'b0;
+            end else if (state_q == S_EXEC) begin
+                data_abort_q <= 1'b0;             // clear on entering a new instr
+            end else if (data_abort_now) begin
+                data_abort_q <= 1'b1;
+            end
+        end
+    end
+
+    // Fire DABT at the end of the memory-substate sequence — i.e., on the
+    // transition back to S_EXEC. This is the cycle where commits would
+    // otherwise complete and the next instruction would normally enter.
+    wire dabt_fires = data_abort_q && (state_next == S_EXEC) && (state_q != S_EXEC);
+
+    wire any_exc_fires    = swi_fires || undef_fires || irq_fires || fiq_fires
+                         || pabt_fires || dabt_fires;
 
     // §9d: MUL/MLA write Rd at bits[19:16] (= dec.rn) in S_EXEC.
     // UMULL/SMULL write RdLo at bits[15:12] (= dec.rd) in S_EXEC and
@@ -593,13 +637,25 @@ module arm7tdmis_core_pipelined
     logic [31:0] exc_pc_target_addr;
 
     always_comb begin
+        // Default: SWI (most common entry path)
         exc_mode_target    = 5'(MODE_SUPERVISOR);
         exc_spsr_target    = 3'd2;
         exc_pc_target_addr = 32'h0000_0008;
+        // Priority order matters: TRM §2.9 puts UNDEF/SWI ahead of PABT,
+        // PABT ahead of FIQ, FIQ ahead of IRQ. DABT ranks above FIQ as
+        // well (TRM Fig. 2-1). We layer the if/else chain to match.
         if (undef_fires) begin
             exc_mode_target    = 5'(MODE_UNDEFINED);
             exc_spsr_target    = 3'd4;
             exc_pc_target_addr = 32'h0000_0004;
+        end else if (pabt_fires) begin
+            exc_mode_target    = 5'(MODE_ABORT);
+            exc_spsr_target    = 3'd3;
+            exc_pc_target_addr = 32'h0000_000C;
+        end else if (dabt_fires) begin
+            exc_mode_target    = 5'(MODE_ABORT);
+            exc_spsr_target    = 3'd3;
+            exc_pc_target_addr = 32'h0000_0010;
         end else if (fiq_fires) begin
             exc_mode_target    = 5'(MODE_FIQ);
             exc_spsr_target    = 3'd0;
@@ -682,9 +738,13 @@ module arm7tdmis_core_pipelined
                                 : ls_byte_q    ? load_byte_val
                                                 : load_word_val;
 
-    wire ddata_writes_rd  = (state_q == S_DDATA) && ls_load_q;
-    wire block_writes_ldm = (state_q == S_BLOCK_DATA) && block_load_q;
-    wire swp_writes_rd    = (state_q == S_SWP_WDATA);
+    // §17: writeback suppression on data abort. ddata_writes_rd suppressed
+    // when the current data cycle aborted; block load writeback suppressed
+    // similarly. SWP Rd commit also suppressed if any abort fired during
+    // the locked read/write window.
+    wire ddata_writes_rd  = (state_q == S_DDATA) && ls_load_q && !data_abort_now;
+    wire block_writes_ldm = (state_q == S_BLOCK_DATA) && block_load_q && !data_abort_now;
+    wire swp_writes_rd    = (state_q == S_SWP_WDATA) && !data_abort_q;
 
     wire [4:0]  swp_byte_shift = {swp_addr_lo_q, 3'b000};
     wire [31:0] swp_byte_val   = (swp_loaded_q >> swp_byte_shift) & 32'h0000_00FF;
@@ -989,7 +1049,7 @@ module arm7tdmis_core_pipelined
     // ---- Unused-signal drain ----
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused = &{1'b0,
-        CFGBIGEND, ABORT,
+        CFGBIGEND,
         spsr_valid,
         arm_is_dataproc_w, thumb_is_dataproc_w,
         rf_pc_written,
