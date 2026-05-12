@@ -30,6 +30,9 @@ module arm7tdmis_thumb_decoder
     wire is_fmt3     = (thumb_instr[15:13] == 3'b001);              // MOV/CMP/ADD/SUB imm
     wire is_fmt4     = (thumb_instr[15:10] == 6'b010000);           // ALU reg-reg
     wire is_fmt5_bx  = (thumb_instr[15:8] == 8'b0100_0111);          // BX (also BLX in v5)
+    wire is_fmt7_8   = (thumb_instr[15:12] == 4'b0101);             // L/S reg-offset family
+    wire is_fmt8     = is_fmt7_8 && thumb_instr[9];                  // halfword/signed
+    wire is_fmt7     = is_fmt7_8 && !thumb_instr[9];                 // word/byte
     wire is_fmt9     = (thumb_instr[15:13] == 3'b011);              // L/S imm offset
     wire is_fmt11    = (thumb_instr[15:12] == 4'b1001);             // SP-rel L/S
     wire is_fmt12    = (thumb_instr[15:12] == 4'b1010);             // load address
@@ -99,6 +102,15 @@ module arm7tdmis_thumb_decoder
     endfunction
 
     wire [3:0]  fmt5_rm    = thumb_instr[6:3];
+
+    // Format 7 / 8 share Ro/Rb/Rd positions but differ in L/B vs S/H bits.
+    wire        fmt7_load  = thumb_instr[11];
+    wire        fmt7_byte  = thumb_instr[10];
+    wire        fmt8_H     = thumb_instr[11];
+    wire        fmt8_S     = thumb_instr[10];
+    wire [2:0]  fmt78_ro   = thumb_instr[8:6];
+    wire [2:0]  fmt78_rb   = thumb_instr[5:3];
+    wire [2:0]  fmt78_rd   = thumb_instr[2:0];
 
     // Format 9 (L/S with immediate offset): the 5-bit immediate is
     // scaled by 4 for word and by 1 for byte.
@@ -263,6 +275,38 @@ module arm7tdmis_thumb_decoder
             dec.shifter_amount = 8'h00;
             dec.shifter_is_rrx = 1'b0;
             dec.shifter_use_rs = 1'b0;
+        end else if (is_fmt7) begin
+            // LDR/STR/LDRB/STRB Rd, [Rb, Ro] (register offset, no shift).
+            dec.instr_class    = INSTR_LDR_STR;
+            dec.rd             = {1'b0, fmt78_rd};
+            dec.rn             = {1'b0, fmt78_rb};
+            dec.rm             = {1'b0, fmt78_ro};
+            dec.ls_pre_index   = 1'b1;
+            dec.ls_up          = 1'b1;
+            dec.ls_byte        = fmt7_byte;
+            dec.ls_writeback   = 1'b0;
+            dec.ls_load        = fmt7_load;
+            dec.ls_use_imm     = 1'b0;
+            // The shifter feeds the L/S offset path: Rm with no shift.
+            dec.shifter_op     = SHIFT_LSL;
+            dec.shifter_amount = 8'h00;
+        end else if (is_fmt8) begin
+            // LDSB / STRH / LDRH / LDSH Rd, [Rb, Ro]
+            //   S=0 H=0: STRH    (store halfword, unsigned)
+            //   S=1 H=0: LDSB    (load signed byte)
+            //   S=0 H=1: LDRH    (load halfword unsigned)
+            //   S=1 H=1: LDSH    (load signed halfword)
+            dec.instr_class    = INSTR_LDRH_STRH;
+            dec.rd             = {1'b0, fmt78_rd};
+            dec.rn             = {1'b0, fmt78_rb};
+            dec.rm             = {1'b0, fmt78_ro};
+            dec.ls_pre_index   = 1'b1;
+            dec.ls_up          = 1'b1;
+            dec.ls_writeback   = 1'b0;
+            dec.ls_load        = fmt8_S | fmt8_H;          // 0 only for STRH
+            dec.hs_use_imm     = 1'b0;                       // register offset
+            dec.hs_halfword    = fmt8_H;
+            dec.hs_signed      = fmt8_S;
         end else if (is_fmt9) begin
             // Format 9: LDR/STR/LDRB/STRB Rd, [Rb, #imm5*(4|1)]
             //           — pre-indexed, no writeback, no shift on offset.
