@@ -31,6 +31,9 @@ module arm7tdmis_thumb_decoder
     wire is_fmt4     = (thumb_instr[15:10] == 6'b010000);           // ALU reg-reg
     wire is_fmt5_bx  = (thumb_instr[15:8] == 8'b0100_0111);          // BX (also BLX in v5)
     wire is_fmt9     = (thumb_instr[15:13] == 3'b011);              // L/S imm offset
+    wire is_fmt11    = (thumb_instr[15:12] == 4'b1001);             // SP-rel L/S
+    wire is_fmt12    = (thumb_instr[15:12] == 4'b1010);             // load address
+    wire is_fmt13    = (thumb_instr[15:8]  == 8'b1011_0000);        // SP add/sub
     wire is_fmt14    = (thumb_instr[15:12] == 4'b1011)              // PUSH / POP
                      && (thumb_instr[10:9] == 2'b10);
     wire is_fmt16_17 = (thumb_instr[15:12] == 4'b1101);             // B-cond / SWI
@@ -117,6 +120,26 @@ module arm7tdmis_thumb_decoder
                                   !fmt14_load && fmt14_R,      // LR for PUSH
                                   6'h0,
                                   fmt14_lo};
+
+    // Format 11: SP-relative LDR/STR.  Rd word-access, offset = imm8 << 2.
+    wire        fmt11_load = thumb_instr[11];
+    wire [2:0]  fmt11_rd   = thumb_instr[10:8];
+    wire [7:0]  fmt11_imm8 = thumb_instr[7:0];
+    wire [11:0] fmt11_off  = {2'h0, fmt11_imm8, 2'b00};
+
+    // Format 12: load address — Rd = (SP if S=1, else PC&~3) + imm8<<2.
+    // We support only the SP form here; PC-relative would need PC[1:0]
+    // masking on the DP-add path.
+    wire        fmt12_sp   = thumb_instr[11];
+    wire [2:0]  fmt12_rd   = thumb_instr[10:8];
+    wire [7:0]  fmt12_imm8 = thumb_instr[7:0];
+    wire [31:0] fmt12_imm  = {22'h0, fmt12_imm8, 2'b00};
+
+    // Format 13: SP +/- imm7<<2 (NO flag update — exception to "Thumb DP
+    // sets flags" rule for the ADD/SUB-SP variant).
+    wire        fmt13_sub  = thumb_instr[7];
+    wire [6:0]  fmt13_imm7 = thumb_instr[6:0];
+    wire [31:0] fmt13_imm  = {23'h0, fmt13_imm7, 2'b00};
 
     // Format 18 unsigned offset is bits[10:0]; ARM ARM scales by 2 and
     // sign-extends to 32 bits. Final branch target = PC + 4 + offset.
@@ -245,6 +268,40 @@ module arm7tdmis_thumb_decoder
             dec.ls_load        = fmt9_load;
             dec.ls_use_imm     = 1'b1;
             dec.ls_imm_offset  = fmt9_off;
+        end else if (is_fmt11) begin
+            // SP-relative LDR/STR (word only).
+            dec.instr_class    = INSTR_LDR_STR;
+            dec.rd             = {1'b0, fmt11_rd};
+            dec.rn             = 4'd13;                  // SP
+            dec.ls_pre_index   = 1'b1;
+            dec.ls_up          = 1'b1;
+            dec.ls_byte        = 1'b0;
+            dec.ls_writeback   = 1'b0;
+            dec.ls_load        = fmt11_load;
+            dec.ls_use_imm     = 1'b1;
+            dec.ls_imm_offset  = fmt11_off;
+        end else if (is_fmt12 && fmt12_sp) begin
+            // SP-form load-address: Rd = SP + imm8<<2 (no flag update).
+            dec.instr_class    = INSTR_DP;
+            dec.alu_op         = ALU_ADD;
+            dec.s_bit          = 1'b0;
+            dec.rd             = {1'b0, fmt12_rd};
+            dec.rn             = 4'd13;                  // SP
+            dec.dp_use_imm     = 1'b1;
+            dec.dp_imm_value   = fmt12_imm;
+            dec.shifter_op     = SHIFT_ROR;
+            dec.shifter_amount = 8'h00;
+        end else if (is_fmt13) begin
+            // SP += or -= imm7<<2  (no flag update).
+            dec.instr_class    = INSTR_DP;
+            dec.alu_op         = fmt13_sub ? ALU_SUB : ALU_ADD;
+            dec.s_bit          = 1'b0;
+            dec.rd             = 4'd13;
+            dec.rn             = 4'd13;
+            dec.dp_use_imm     = 1'b1;
+            dec.dp_imm_value   = fmt13_imm;
+            dec.shifter_op     = SHIFT_ROR;
+            dec.shifter_amount = 8'h00;
         end else if (is_fmt14) begin
             // Format 14: PUSH = STMDB SP!, {regs}; POP = LDMIA SP!, {regs}.
             //   PUSH (load=0): P=1, U=0 (DB), W=1.
