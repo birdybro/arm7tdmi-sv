@@ -34,6 +34,7 @@ module arm7tdmis_thumb_decoder
     wire is_fmt8     = is_fmt7_8 && thumb_instr[9];                  // halfword/signed
     wire is_fmt7     = is_fmt7_8 && !thumb_instr[9];                 // word/byte
     wire is_fmt9     = (thumb_instr[15:13] == 3'b011);              // L/S imm offset
+    wire is_fmt10    = (thumb_instr[15:12] == 4'b1000);             // halfword L/S imm
     wire is_fmt11    = (thumb_instr[15:12] == 4'b1001);             // SP-rel L/S
     wire is_fmt12    = (thumb_instr[15:12] == 4'b1010);             // load address
     wire is_fmt13    = (thumb_instr[15:8]  == 8'b1011_0000);        // SP add/sub
@@ -121,6 +122,13 @@ module arm7tdmis_thumb_decoder
     wire [2:0]  fmt9_rd    = thumb_instr[2:0];
     wire [11:0] fmt9_off   = fmt9_byte ? {7'h0, fmt9_imm5}
                                        : {5'h0, fmt9_imm5, 2'b00};
+
+    // Format 10: LDRH/STRH Rd, [Rb, #imm5*2]
+    wire        fmt10_load = thumb_instr[11];
+    wire [4:0]  fmt10_imm5 = thumb_instr[10:6];
+    wire [2:0]  fmt10_rb   = thumb_instr[5:3];
+    wire [2:0]  fmt10_rd   = thumb_instr[2:0];
+    wire [7:0]  fmt10_off  = {2'h0, fmt10_imm5, 1'b0};   // imm5 << 1
 
     // Format 14 (PUSH/POP) — maps to STMDB SP!, {…} / LDMIA SP!, {…}.
     //   bit[11] = L : 0 = PUSH (store, DB), 1 = POP (load, IA)
@@ -320,6 +328,19 @@ module arm7tdmis_thumb_decoder
             dec.ls_load        = fmt9_load;
             dec.ls_use_imm     = 1'b1;
             dec.ls_imm_offset  = fmt9_off;
+        end else if (is_fmt10) begin
+            // LDRH/STRH Rd, [Rb, #imm5*2] — pre-indexed, no writeback.
+            dec.instr_class    = INSTR_LDRH_STRH;
+            dec.rd             = {1'b0, fmt10_rd};
+            dec.rn             = {1'b0, fmt10_rb};
+            dec.ls_pre_index   = 1'b1;
+            dec.ls_up          = 1'b1;
+            dec.ls_writeback   = 1'b0;
+            dec.ls_load        = fmt10_load;
+            dec.hs_use_imm     = 1'b1;
+            dec.hs_halfword    = 1'b1;
+            dec.hs_signed      = 1'b0;
+            dec.hs_imm_offset  = fmt10_off;
         end else if (is_fmt11) begin
             // SP-relative LDR/STR (word only).
             dec.instr_class    = INSTR_LDR_STR;
