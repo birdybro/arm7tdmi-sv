@@ -190,24 +190,43 @@ module arm7tdmis_top
     logic         ice_scan_we;
     logic [31:0]  ice_scan_rdata;
 
+    logic [31:0] tap_inject_instr;
+    logic        tap_inject_break;
+    logic        tap_inject_we;
+
     arm7tdmis_jtag_tap u_tap (
-        .CLK             (CLK),
-        .DBGTCKEN        (DBGTCKEN),
-        .DBGnTRST        (DBGnTRST),
-        .DBGTMS          (DBGTMS),
-        .DBGTDI          (DBGTDI),
-        .DBGTDO          (DBGTDO),
-        .DBGnTDOEN       (DBGnTDOEN),
-        .current_ir      (tap_current_ir),
-        .in_shift_dr     (tap_in_shift_dr),
-        .in_update_dr    (tap_in_update_dr),
-        .in_capture_dr   (tap_in_capture_dr),
-        .ice_scan_addr   (ice_scan_addr),
-        .ice_scan_wdata  (ice_scan_wdata),
-        .ice_scan_we     (ice_scan_we),
-        .ice_scan_rdata  (ice_scan_rdata),
-        .tap_restart_req (tap_restart_req)
+        .CLK              (CLK),
+        .DBGTCKEN         (DBGTCKEN),
+        .DBGnTRST         (DBGnTRST),
+        .DBGTMS           (DBGTMS),
+        .DBGTDI           (DBGTDI),
+        .DBGTDO           (DBGTDO),
+        .DBGnTDOEN        (DBGnTDOEN),
+        .current_ir       (tap_current_ir),
+        .in_shift_dr      (tap_in_shift_dr),
+        .in_update_dr     (tap_in_update_dr),
+        .in_capture_dr    (tap_in_capture_dr),
+        .ice_scan_addr    (ice_scan_addr),
+        .ice_scan_wdata   (ice_scan_wdata),
+        .ice_scan_we      (ice_scan_we),
+        .ice_scan_rdata   (ice_scan_rdata),
+        .ice_inject_instr (tap_inject_instr),
+        .ice_inject_break (tap_inject_break),
+        .ice_inject_we    (tap_inject_we),
+        .tap_restart_req  (tap_restart_req)
     );
+
+    // §22 chain-1 instruction injection: the TAP latches the 33-bit
+    // value on Update-DR; the core-side path that scans this into the
+    // pipeline during halt-mode debug state lands when the debug-state
+    // instruction-inject FSM does. For now the latch contents are
+    // observable for testbench-level JTAG flows but don't yet affect
+    // core execution.
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire _unused_inject = &{1'b0,
+        tap_inject_instr, tap_inject_break, tap_inject_we
+    };
+    /* verilator lint_on UNUSEDSIGNAL */
 
     // TAP observers used by §22 debug FSM later — silence lint for now.
     /* verilator lint_off UNUSEDSIGNAL */

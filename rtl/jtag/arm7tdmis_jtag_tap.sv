@@ -45,6 +45,15 @@ module arm7tdmis_jtag_tap
     output logic        ice_scan_we,      // pulse high on Update-DR when chain 2 active and R/W=1
     input  logic [31:0] ice_scan_rdata,   // captured at Capture-DR
 
+    // ---- Scan chain 1 (33-bit) — debug instruction injection.
+    // Held register, written when held IR == INTEST AND scan_n_q == 1
+    // at Update-DR. Layout per TRM §30.23.6:
+    //   [32]    DBGBREAK control cell (debug-speed vs system-speed)
+    //   [31:0]  Instruction to inject
+    output logic [31:0] ice_inject_instr,
+    output logic        ice_inject_break,
+    output logic        ice_inject_we,    // pulse high on Update-DR when chain 1 active
+
     // §22 debug-state exit: pulses HIGH on Update-IR when IR=RESTART
     output logic        tap_restart_req
 );
@@ -168,10 +177,11 @@ module arm7tdmis_jtag_tap
                         4'(IR_SCAN_N):
                             dr_shift_q <= {34'h0, DBGTDI, dr_shift_q[3:1]};
                         4'(IR_INTEST): begin
-                            if (scan_n_q == 4'd2)
-                                dr_shift_q <= {DBGTDI, dr_shift_q[37:1]};
-                            else
-                                dr_shift_q <= {37'h0, DBGTDI};
+                            unique case (scan_n_q)
+                                4'd2:    dr_shift_q <= {DBGTDI, dr_shift_q[37:1]};
+                                4'd1:    dr_shift_q <= {5'h0, DBGTDI, dr_shift_q[32:1]};
+                                default: dr_shift_q <= {37'h0, DBGTDI};
+                            endcase
                         end
                         default:
                             dr_shift_q <= {37'h0, DBGTDI};
@@ -215,6 +225,14 @@ module arm7tdmis_jtag_tap
                          && (ir_hold_q == 4'(IR_INTEST))
                          && (scan_n_q == 4'd2)
                          && dr_shift_q[37];      // R/W=1 (write)
+
+    // ---- Chain 1 outputs to the debug-state instruction-inject path.
+    assign ice_inject_instr = dr_shift_q[31:0];
+    assign ice_inject_break = dr_shift_q[32];
+    assign ice_inject_we    = DBGTCKEN
+                           && (tap_q == UDR)
+                           && (ir_hold_q == 4'(IR_INTEST))
+                           && (scan_n_q == 4'd1);
 
     // RESTART pulse: when the TAP latches IR=RESTART at Update-IR, signal
     // the ICE-RT FSM to exit halt. Re-asserts each time the user re-issues
