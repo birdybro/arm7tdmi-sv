@@ -32,7 +32,7 @@ RUN_ARTIFACTS  := cycle.csv waves.fst
 
 UNIT_TESTS := regfile psr reset_sync shifter alu multiplier condition decoder jtag_tap ice_rt
 
-INTEG_TESTS := umull
+INTEG_TESTS := umull umlal
 
 .PHONY: all lint lint-tb sim run wave clean help \
         $(addprefix unit-, $(UNIT_TESTS)) unit

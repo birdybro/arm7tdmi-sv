@@ -132,7 +132,9 @@ module arm7tdmis_core_pipelined
         S_SWP_RDATA  = 4'd3,    // SWP read data + drive write addr
         S_SWP_WDATA  = 4'd4,    // SWP write data + drive next fetch
         S_MULL_HI    = 4'd5,    // §9d: 64-bit multiply RdHi writeback cycle
-        S_MUL_BUSY   = 4'd6     // §18: multiplier I cycles (early termination m)
+        S_MUL_BUSY   = 4'd6,    // §18: multiplier I cycles (early termination m)
+        S_MULL_ACC   = 4'd7     // UMLAL/SMLAL: read RdHi for accumulator,
+                                 //              commit RdLo result
     } state_e;
 
     state_e state_q;
@@ -307,6 +309,23 @@ module arm7tdmis_core_pipelined
     logic [2:0]   mul_busy_remaining_q;
     logic         mull_active_q;
 
+    // §9c UMLAL/SMLAL: 64-bit accumulator read across two cycles. S_EXEC
+    // reads RdLo via port A (rf_ra_data) and latches it into acc_lo_q;
+    // S_MULL_ACC reads RdHi via port A and feeds it as acc_hi to the
+    // multiplier alongside the latched acc_lo_q. RdLo writeback commits
+    // at end of S_MULL_ACC; RdHi writeback at S_MULL_HI as for UMULL/SMULL.
+    //
+    // de_q.dec advances at posedge ending S_EXEC (since !e_busy gating
+    // lets D consume fd_q), so its rn/rd/rm/rs go stale during S_MULL_ACC.
+    // We snapshot the operand values (Rm, Rs) and register destinations
+    // (RdLo for the writeback) at S_EXEC end into per-MULL latches.
+    logic [31:0]  acc_lo_q;
+    logic         mull_accumulate_active_q;
+    logic [3:0]   mull_rdlo_q;            // dec.rd at S_EXEC time
+    logic [31:0]  mull_op_a_q;            // rf_rb_data (= Rm)  at S_EXEC time
+    logic [31:0]  mull_op_b_q;            // rf_rc_data (= Rs) at S_EXEC time
+    logic         mull_signed_q;          // dec.mul_signed at S_EXEC time
+
     // ---- PSR + exception entry plumbing ----
     psr_t         spsr_value;
     logic         spsr_valid;
@@ -378,7 +397,17 @@ module arm7tdmis_core_pipelined
                                                    : dec.rs;
 
     wire instr_is_mul_decoder = (dec.instr_class == INSTR_MUL);
-    wire [3:0] ra_addr_eff    = instr_is_mul_decoder ? dec.rd : dec.rn;
+    // Port A read addr:
+    //   • S_MULL_ACC for UMLAL/SMLAL : mull_rdhi_q (latched RdHi address;
+    //                                  dec is already stale by this cycle).
+    //   • MUL / MLA / UMLAL-S_EXEC   : dec.rd (= the accumulator slot for
+    //                                  MUL/MLA, RdLo for UMLAL/SMLAL).
+    //   • Everything else            : dec.rn (DP source, L/S base).
+    wire instr_is_mull_accum_decoder = (dec.instr_class == INSTR_MULL) && dec.mul_accumulate;
+    wire [3:0] ra_addr_eff    = (state_q == S_MULL_ACC)             ? mull_rdhi_q
+                              : (instr_is_mul_decoder ||
+                                 instr_is_mull_accum_decoder)        ? dec.rd
+                              :                                        dec.rn;
 
     wire [4:0] regfile_mode_eff = any_exc_fires ? exc_mode_target : cpsr.m;
 
@@ -470,14 +499,28 @@ module arm7tdmis_core_pipelined
     // for those gets added when the cycle-shaping work (§18) lengthens E.
     wire instr_class_is_mull = (dec.instr_class == INSTR_MULL);
 
+    // §9c UMLAL/SMLAL routing. In S_MULL_ACC: op_a/op_b come from
+    // latches captured at S_EXEC (dec is stale by S_MULL_ACC because D
+    // advanced de_q to the next instruction). acc_lo from acc_lo_q,
+    // acc_hi from current port-A read (which is regs[mull_rdhi_q] —
+    // see ra_addr_eff override). In all other states the legacy live-
+    // wiring stands.
+    wire [31:0] mul_op_a_in   = (state_q == S_MULL_ACC) ? mull_op_a_q : rf_rb_data;
+    wire [31:0] mul_op_b_in   = (state_q == S_MULL_ACC) ? mull_op_b_q : rf_rc_data;
+    wire [31:0] mul_acc_lo_in = (state_q == S_MULL_ACC) ? acc_lo_q    : rf_ra_data;
+    wire [31:0] mul_acc_hi_in = (state_q == S_MULL_ACC) ? rf_ra_data  : 32'h0;
+    wire        mul_is_long_in     = (state_q == S_MULL_ACC) ? 1'b1 : instr_class_is_mull;
+    wire        mul_accumulate_in  = (state_q == S_MULL_ACC) ? 1'b1 : dec.mul_accumulate;
+    wire        mul_is_signed_in   = (state_q == S_MULL_ACC) ? mull_signed_q : dec.mul_signed;
+
     arm7tdmis_multiplier u_mul (
-        .is_signed   (dec.mul_signed),
-        .is_long     (instr_class_is_mull),
-        .accumulate  (dec.mul_accumulate),
-        .op_a        (rf_rb_data),
-        .op_b        (rf_rc_data),
-        .acc_lo      (rf_ra_data),
-        .acc_hi      (32'h0),
+        .is_signed   (mul_is_signed_in),
+        .is_long     (mul_is_long_in),
+        .accumulate  (mul_accumulate_in),
+        .op_a        (mul_op_a_in),
+        .op_b        (mul_op_b_in),
+        .acc_lo      (mul_acc_lo_in),
+        .acc_hi      (mul_acc_hi_in),
         .result_lo   (mul_result_lo),
         .result_hi   (mul_result_hi),
         .n_out       (mul_n_out),
@@ -545,14 +588,23 @@ module arm7tdmis_core_pipelined
     wire swp_take_cycle = passes_cond && (dec.instr_class == INSTR_SWP);
 
     // §9d: UMULL/SMULL take an extra cycle in S_MULL_HI to write RdHi.
-    // Accumulate forms (UMLAL/SMLAL) are deferred until §18 cycle shaping.
     wire mull_take_cycle = passes_cond && instr_class_is_mull
                         && !dec.mul_accumulate;
+
+    // §9c UMLAL/SMLAL — the 64-bit accumulate forms take an extra cycle
+    // (S_MULL_ACC) before S_MUL_BUSY to read RdHi via the regfile's
+    // single port A; RdLo comes in during S_EXEC. The multiplier sees
+    // both accumulator halves at S_MULL_ACC and produces the correct
+    // result_lo (committed there) and result_hi (latched, committed in
+    // S_MULL_HI).
+    wire mull_accum_take_cycle = passes_cond && instr_class_is_mull
+                              && dec.mul_accumulate;
 
     // §18: any MUL or MULL takes the S_MUL_BUSY internal-cycle detour
     // for m cycles where m is determined by the multiplier from Rs's
     // significant-bit-count (TRM §7.7). m ranges 1..4 → MUL completes
-    // in 2..5 cycles, MULL completes in 3..6 cycles.
+    // in 2..5 cycles, MULL completes in 3..6 cycles (or 4..7 for
+    // accumulate forms with the extra S_MULL_ACC cycle).
     wire mul_take_busy = passes_cond
                       && (instr_is_mul || (instr_class_is_mull && !dec.mul_accumulate));
 
@@ -563,11 +615,12 @@ module arm7tdmis_core_pipelined
     state_e state_next;
     always_comb begin
         unique case (state_q)
-            S_EXEC:       state_next = ls_take_data_cycle ? S_DDATA
-                                     : block_take_cycle   ? S_BLOCK_DATA
-                                     : swp_take_cycle     ? S_SWP_RDATA
-                                     : mul_take_busy      ? S_MUL_BUSY
-                                                          : S_EXEC;
+            S_EXEC:       state_next = ls_take_data_cycle    ? S_DDATA
+                                     : block_take_cycle      ? S_BLOCK_DATA
+                                     : swp_take_cycle        ? S_SWP_RDATA
+                                     : mull_accum_take_cycle ? S_MULL_ACC
+                                     : mul_take_busy         ? S_MUL_BUSY
+                                                             : S_EXEC;
             S_DDATA:      state_next = S_EXEC;
             S_BLOCK_DATA: state_next = block_has_more ? S_BLOCK_DATA : S_EXEC;
             S_SWP_RDATA:  state_next = S_SWP_WDATA;
@@ -576,6 +629,7 @@ module arm7tdmis_core_pipelined
             S_MUL_BUSY:   state_next = (mul_busy_remaining_q == 3'd1)
                                        ? (mull_active_q ? S_MULL_HI : S_EXEC)
                                        : S_MUL_BUSY;
+            S_MULL_ACC:   state_next = S_MUL_BUSY;
             default:      state_next = S_EXEC;
         endcase
     end
@@ -886,9 +940,18 @@ module arm7tdmis_core_pipelined
             rf_write_data = block_writeback_addr;
             rf_write_en   = 1'b1;
         end else if (state_q == S_MULL_HI) begin
-            // §9d: RdHi commit cycle for UMULL/SMULL.
+            // §9d: RdHi commit cycle for UMULL/SMULL/UMLAL/SMLAL.
             rf_write_addr = mull_rdhi_q;
             rf_write_data = mull_result_hi_q;
+            rf_write_en   = 1'b1;
+        end else if (state_q == S_MULL_ACC) begin
+            // §9c: RdLo commit for UMLAL/SMLAL. dec is stale by this
+            // cycle so use mull_rdlo_q (snapshotted at S_EXEC). The
+            // multiplier sees both accumulator halves this cycle
+            // (acc_lo_q + current rf_ra_data as acc_hi via the latched
+            // operand inputs) so mul_result_lo is the final value.
+            rf_write_addr = mull_rdlo_q;
+            rf_write_data = mul_result_lo;
             rf_write_en   = 1'b1;
         end else if (mull_writes_lo) begin
             // §9d: RdLo (= dec.rd) := result_lo, in the same S_EXEC cycle.
@@ -977,10 +1040,16 @@ module arm7tdmis_core_pipelined
                 swp_rd_q            <= 4'h0;
                 swp_byte_q          <= 1'b0;
                 swp_addr_lo_q       <= 2'h0;
-                mull_rdhi_q          <= 4'h0;
-                mull_result_hi_q     <= 32'h0;
-                mul_busy_remaining_q <= 3'h0;
-                mull_active_q        <= 1'b0;
+                mull_rdhi_q              <= 4'h0;
+                mull_result_hi_q         <= 32'h0;
+                mul_busy_remaining_q     <= 3'h0;
+                mull_active_q            <= 1'b0;
+                acc_lo_q                 <= 32'h0;
+                mull_accumulate_active_q <= 1'b0;
+                mull_rdlo_q              <= 4'h0;
+                mull_op_a_q              <= 32'h0;
+                mull_op_b_q              <= 32'h0;
+                mull_signed_q            <= 1'b0;
             end else begin
                 state_q <= state_next;
 
@@ -1035,16 +1104,41 @@ module arm7tdmis_core_pipelined
                 end
 
                 // §9d: snapshot RdHi register address and upper 32 bits of
-                // the product at end of S_EXEC for UMULL/SMULL.
+                // the product at end of S_EXEC for UMULL/SMULL. For UMLAL/
+                // SMLAL the upper 32 bits aren't final until S_MULL_ACC,
+                // so the result_hi latch happens there instead.
                 if (state_q == S_EXEC && mull_take_cycle) begin
                     mull_rdhi_q      <= dec.rn;
                     mull_result_hi_q <= mul_result_hi;
                 end
 
-                // §18: at S_EXEC end for MUL/MULL, latch the m parameter
-                // (cycle_count, 1..4 from the multiplier) and remember
-                // whether this is a long form so the FSM knows where to
-                // land after S_MUL_BUSY ends.
+                // §9c UMLAL/SMLAL: snapshot everything S_MULL_ACC will
+                // need from de_q.dec at S_EXEC end (D advances de_q to
+                // the next instruction at the same posedge, so live
+                // references to dec.* go stale in S_MULL_ACC).
+                if (state_q == S_EXEC && mull_accum_take_cycle) begin
+                    acc_lo_q                 <= rf_ra_data;
+                    mull_rdhi_q              <= dec.rn;
+                    mull_rdlo_q              <= dec.rd;
+                    mull_op_a_q              <= rf_rb_data;
+                    mull_op_b_q              <= rf_rc_data;
+                    mull_signed_q            <= dec.mul_signed;
+                    mull_accumulate_active_q <= 1'b1;
+                    mull_active_q            <= 1'b1;
+                end
+
+                // §9c: at S_MULL_ACC end, both accumulator halves are
+                // valid (acc_lo_q latched in S_EXEC; acc_hi from current
+                // port-A read). Latch result_hi for commit in S_MULL_HI,
+                // plus the m parameter for S_MUL_BUSY countdown.
+                if (state_q == S_MULL_ACC) begin
+                    mull_result_hi_q     <= mul_result_hi;
+                    mul_busy_remaining_q <= mul_cycle_count;
+                end
+
+                // §18: at S_EXEC end for MUL/MULL non-accumulate, latch
+                // the m parameter and whether this is a long form so the
+                // FSM knows where to land after S_MUL_BUSY ends.
                 if (state_q == S_EXEC && mul_take_busy) begin
                     mul_busy_remaining_q <= mul_cycle_count;
                     mull_active_q        <= instr_class_is_mull;
@@ -1052,6 +1146,13 @@ module arm7tdmis_core_pipelined
                 // Countdown each S_MUL_BUSY cycle.
                 if (state_q == S_MUL_BUSY && mul_busy_remaining_q != 3'h0) begin
                     mul_busy_remaining_q <= mul_busy_remaining_q - 3'd1;
+                end
+                // Clear accumulate-active when re-entering S_EXEC after
+                // a MULL completes (so a subsequent MUL/MLA doesn't see
+                // the stale mull_accumulate_active_q).
+                if (state_q == S_MULL_HI ||
+                    (state_q == S_MUL_BUSY && state_next == S_EXEC)) begin
+                    mull_accumulate_active_q <= 1'b0;
                 end
             end
         end
@@ -1190,6 +1291,10 @@ module arm7tdmis_core_pipelined
                     PROT  = {is_priv, 1'b0};
                 end
             end
+            S_MULL_ACC: begin
+                // Idle bus — no bus access during the UMLAL/SMLAL
+                // accumulator-read cycle.
+            end
             default: ;
         endcase
     end
@@ -1272,6 +1377,9 @@ module arm7tdmis_core_pipelined
                                           //   for ls_addr_lo_q lookup.
         block_first_beat_q,               // §18 overlap: first-beat distinction
                                           //   no longer needed in bus mux.
+        mull_accumulate_active_q,         // §9c: tracked but currently only
+                                          //   for symmetry (state_q checks do
+                                          //   the actual dispatch).
         ls_data_addr_calc[31:12],
         ls_store_data_q[31:8],
         mul_flag_we,
