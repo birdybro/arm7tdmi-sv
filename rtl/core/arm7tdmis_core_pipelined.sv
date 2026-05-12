@@ -110,27 +110,29 @@ module arm7tdmis_core_pipelined
     } de_t;
 
     // =====================================================================
-    // E-stage substate FSM (memory + lock holds)
+    // E-stage substate FSM — bus-pipelined per TRM §3.3 / §18
     // =====================================================================
     //
-    //   S_EXEC       : one-cycle execute. Consumes de_q (if valid). Single-
-    //                  cycle DP/branch/etc. complete here. L/S, LDM/STM,
-    //                  SWP enter their substate sequences at end of S_EXEC.
-    //   S_DADDR/...  : same shape as the non-pipelined core. Bus is owned
-    //                  by E during these states; F prefetch is stalled.
+    // S_EXEC drives the first addr-class of any memory substate (LDR/STR
+    // data addr, LDM/STM beat-1 addr, SWP read addr). The dedicated *_ADDR
+    // substates the non-pipelined model used (S_DADDR, S_BLOCK_ADDR,
+    // S_SWP_RADDR, S_SWP_WADDR) are gone — they fold into the previous
+    // state's bus cycle since the address-class signals lead the data
+    // signals by one bus cycle on a pipelined bus. Saves 1 cycle per
+    // memory op and (n-1) cycles per n-register LDM/STM.
+    //
+    // Symmetrically, the *_DATA cycles drive the NEXT addr-class while
+    // their data is on the bus, so an LDM iterates 1 cycle per beat
+    // and LDR/STR's data cycle prefetches the next instruction for free.
 
     typedef enum logic [3:0] {
         S_EXEC       = 4'd0,
-        S_DADDR      = 4'd1,
-        S_DDATA      = 4'd2,
-        S_BLOCK_ADDR = 4'd3,
-        S_BLOCK_DATA = 4'd4,
-        S_SWP_RADDR  = 4'd5,
-        S_SWP_RDATA  = 4'd6,
-        S_SWP_WADDR  = 4'd7,
-        S_SWP_WDATA  = 4'd8,
-        S_MULL_HI    = 4'd9,    // §9d: 64-bit multiply RdHi writeback cycle
-        S_MUL_BUSY   = 4'd10    // §18: multiplier I cycles (early termination m)
+        S_DDATA      = 4'd1,    // LDR/STR data cycle
+        S_BLOCK_DATA = 4'd2,    // LDM/STM beat iteration
+        S_SWP_RDATA  = 4'd3,    // SWP read data + drive write addr
+        S_SWP_WDATA  = 4'd4,    // SWP write data + drive next fetch
+        S_MULL_HI    = 4'd5,    // §9d: 64-bit multiply RdHi writeback cycle
+        S_MUL_BUSY   = 4'd6     // §18: multiplier I cycles (early termination m)
     } state_e;
 
     state_e state_q;
@@ -149,10 +151,6 @@ module arm7tdmis_core_pipelined
 
     wire [31:0]  fetch_step = cpsr.t ? 32'd2 : 32'd4;
 
-    // F is allowed to own the bus only when E isn't doing memory traffic.
-    // In any non-S_EXEC state, the E substates drive the bus.
-    wire f_owns_bus = (state_q == S_EXEC);
-
     // E-stall (Phase 5): whenever E is in a memory substate, hold F and D.
     wire e_busy = (state_q != S_EXEC);
 
@@ -160,13 +158,13 @@ module arm7tdmis_core_pipelined
     logic        flush;
     logic [31:0] flush_target_pc;
 
-    // F-stage advance control (Phase 1).
-    // issue_fetch only fires when the NEXT cycle will be S_EXEC — otherwise
-    // the prefetched result arrives during a memory substate cycle where
-    // we can't latch it, and the instruction is lost. Gating on state_next
-    // ensures we only issue a fetch when there's a downstream cycle ready
-    // to consume the result.
-    wire issue_fetch   = !flush && !e_busy && (state_next == S_EXEC);
+    // F-stage advance control. issue_fetch fires whenever the bus is
+    // driving a fetch this cycle — that is, in any cycle whose state_next
+    // is S_EXEC. With the §18 bus overlap that includes the LAST cycle of
+    // memory substates (S_DDATA, last S_BLOCK_DATA beat, S_SWP_WDATA,
+    // S_MULL_HI, last S_MUL_BUSY cycle). Result arrives next cycle when
+    // state_q == S_EXEC and latch_into_fd captures it.
+    wire issue_fetch   = !flush && (state_next == S_EXEC);
     wire latch_into_fd = !flush && !e_busy && inflight_valid_q;
 
     // D-stage advance — same shape; takes the decoded view of fd_q.
@@ -366,7 +364,7 @@ module arm7tdmis_core_pipelined
     logic        rf_write_en;
 
     wire instr_is_ls_decoder = (dec.instr_class == INSTR_LDR_STR);
-    wire block_active        = (state_q == S_BLOCK_ADDR) || (state_q == S_BLOCK_DATA);
+    wire block_active        = (state_q == S_BLOCK_DATA);
     // MCR p14 c0 reads dec.rd via port C (the source register goes to the
     // coprocessor). LDR/STR also uses port C for dec.rd as the store
     // source. cp14_mcr_dcc detection is combinational from de_q.
@@ -565,18 +563,14 @@ module arm7tdmis_core_pipelined
     state_e state_next;
     always_comb begin
         unique case (state_q)
-            S_EXEC:       state_next = ls_take_data_cycle ? S_DADDR
-                                     : block_take_cycle   ? S_BLOCK_ADDR
-                                     : swp_take_cycle     ? S_SWP_RADDR
+            S_EXEC:       state_next = ls_take_data_cycle ? S_DDATA
+                                     : block_take_cycle   ? S_BLOCK_DATA
+                                     : swp_take_cycle     ? S_SWP_RDATA
                                      : mul_take_busy      ? S_MUL_BUSY
                                                           : S_EXEC;
-            S_DADDR:      state_next = S_DDATA;
             S_DDATA:      state_next = S_EXEC;
-            S_BLOCK_ADDR: state_next = S_BLOCK_DATA;
-            S_BLOCK_DATA: state_next = block_has_more ? S_BLOCK_ADDR : S_EXEC;
-            S_SWP_RADDR:  state_next = S_SWP_RDATA;
-            S_SWP_RDATA:  state_next = S_SWP_WADDR;
-            S_SWP_WADDR:  state_next = S_SWP_WDATA;
+            S_BLOCK_DATA: state_next = block_has_more ? S_BLOCK_DATA : S_EXEC;
+            S_SWP_RDATA:  state_next = S_SWP_WDATA;
             S_SWP_WDATA:  state_next = S_EXEC;
             S_MULL_HI:    state_next = S_EXEC;
             S_MUL_BUSY:   state_next = (mul_busy_remaining_q == 3'd1)
@@ -1002,10 +996,15 @@ module arm7tdmis_core_pipelined
                     ls_addr_lo_q    <= ls_data_addr_used[1:0];
                 end
 
-                // LDM/STM snapshot + iteration start.
+                // LDM/STM snapshot + iteration start. The first beat's
+                // addr-class is driven by S_EXEC's bus mux (using
+                // block_start_addr directly); at posedge to S_BLOCK_DATA
+                // we record the second beat's addr in block_curr_addr_q,
+                // which the bus mux drives in cycle 1 of S_BLOCK_DATA
+                // for beat 2 (and so on iteratively).
                 if (state_q == S_EXEC && block_take_cycle) begin
                     block_remaining_q  <= dec.block_reg_list;
-                    block_curr_addr_q  <= block_start_addr;
+                    block_curr_addr_q  <= block_start_addr + 32'd4;   // next addr
                     block_curr_reg_q   <= lowest_set_idx(dec.block_reg_list);
                     block_load_q       <= dec.block_load;
                     block_first_beat_q <= 1'b1;
@@ -1071,79 +1070,90 @@ module arm7tdmis_core_pipelined
 
     wire [31:0] swp_wdata = swp_byte_q ? {4{swp_store_q[7:0]}} : swp_store_q;
 
+    // Helper: fetch size based on T-bit. Used in many places below.
+    wire [1:0] fetch_size_w = cpsr.t ? 2'(SIZE_HALFWORD) : 2'(SIZE_WORD);
+
     always_comb begin
-        // Default: F-stage opcode fetch (S_EXEC owns the bus).
+        // Default: idle bus with fetch_pc_q on ADDR (cosmetic).
         ADDR  = fetch_pc_q;
         WRITE = WRITE_READ;
-        SIZE  = cpsr.t ? 2'(SIZE_HALFWORD) : 2'(SIZE_WORD);
+        SIZE  = fetch_size_w;
         PROT  = {is_priv, 1'b0};
         LOCK  = LOCK_FREE;
-        TRANS = f_owns_bus ? 2'(TRANS_S) : 2'(TRANS_I);
+        TRANS = 2'(TRANS_I);
         WDATA = 32'h0;
 
         unique case (state_q)
             S_EXEC: begin
-                // F drives the fetch. On flush this cycle, the next-cycle
-                // fetch will use flush_target_pc; here we still drive
-                // fetch_pc_q (the pre-flush value), which will be discarded
-                // anyway (latch_into_fd will be 0 next cycle since flush
-                // killed inflight_valid).
-                ADDR  = fetch_pc_q;
-                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
-                SIZE  = cpsr.t ? 2'(SIZE_HALFWORD) : 2'(SIZE_WORD);
-                PROT  = {is_priv, 1'b0};
-            end
-            S_DADDR: begin
-                ADDR  = ls_data_addr_q;
-                TRANS = 2'(TRANS_N);
-                WRITE = ls_load_q ? WRITE_READ : WRITE_WRITE;
-                SIZE  = ls_halfword_q ? 2'(SIZE_HALFWORD)
-                      : ls_byte_q    ? 2'(SIZE_BYTE)
-                                     : 2'(SIZE_WORD);
-                PROT  = {is_priv, 1'b1};
+                if (ls_take_data_cycle) begin
+                    // §18 overlap: drive the data addr-class one cycle
+                    // earlier than the non-pipelined model used to —
+                    // memory captures it at posedge entering S_DDATA, and
+                    // the data appears on RDATA during S_DDATA.
+                    ADDR  = ls_data_addr_used;
+                    TRANS = 2'(TRANS_N);
+                    WRITE = dec.ls_load ? WRITE_READ : WRITE_WRITE;
+                    SIZE  = (dec.instr_class == INSTR_LDRH_STRH)
+                              ? (dec.hs_halfword ? 2'(SIZE_HALFWORD) : 2'(SIZE_BYTE))
+                              : (dec.ls_byte ? 2'(SIZE_BYTE) : 2'(SIZE_WORD));
+                    PROT  = {is_priv, 1'b1};
+                end else if (block_take_cycle) begin
+                    ADDR  = block_start_addr;
+                    TRANS = 2'(TRANS_N);
+                    WRITE = dec.block_load ? WRITE_READ : WRITE_WRITE;
+                    SIZE  = 2'(SIZE_WORD);
+                    PROT  = {is_priv, 1'b1};
+                end else if (swp_take_cycle) begin
+                    ADDR  = rf_ra_data;
+                    TRANS = 2'(TRANS_N);
+                    WRITE = WRITE_READ;
+                    SIZE  = dec.ls_byte ? 2'(SIZE_BYTE) : 2'(SIZE_WORD);
+                    PROT  = {is_priv, 1'b1};
+                    LOCK  = LOCK_LOCKED;
+                end else begin
+                    // Standard fetch.
+                    ADDR  = fetch_pc_q;
+                    TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                    SIZE  = fetch_size_w;
+                    PROT  = {is_priv, 1'b0};
+                end
             end
             S_DDATA: begin
-                ADDR  = ls_data_addr_q;
-                TRANS = 2'(TRANS_I);
-                WRITE = ls_load_q ? WRITE_READ : WRITE_WRITE;
-                SIZE  = ls_halfword_q ? 2'(SIZE_HALFWORD)
-                      : ls_byte_q    ? 2'(SIZE_BYTE)
-                                     : 2'(SIZE_WORD);
-                PROT  = {is_priv, 1'b1};
+                // RDATA carries load data this cycle (latched at end of
+                // S_EXEC). Address-class drives the next instruction
+                // fetch — §18 bus overlap saves the cycle the non-
+                // pipelined model used to spend re-fetching.
+                ADDR  = fetch_pc_q;
+                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                WRITE = WRITE_READ;
+                SIZE  = fetch_size_w;
+                PROT  = {is_priv, 1'b0};
                 WDATA = ls_load_q ? 32'h0 : store_wdata;
             end
-            S_BLOCK_ADDR: begin
-                ADDR  = block_curr_addr_q;
-                TRANS = block_first_beat_q ? 2'(TRANS_N) : 2'(TRANS_S);
-                WRITE = block_load_q ? WRITE_READ : WRITE_WRITE;
-                SIZE  = 2'(SIZE_WORD);
-                PROT  = {is_priv, 1'b1};
-            end
             S_BLOCK_DATA: begin
-                ADDR  = block_curr_addr_q;
-                TRANS = 2'(TRANS_I);
-                WRITE = block_load_q ? WRITE_READ : WRITE_WRITE;
-                SIZE  = 2'(SIZE_WORD);
-                PROT  = {is_priv, 1'b1};
+                if (block_has_more) begin
+                    // Drive the NEXT beat's addr-class. Data of the
+                    // current beat is on RDATA/WDATA via latched bus
+                    // signals captured at the previous posedge.
+                    ADDR  = block_curr_addr_q;
+                    TRANS = 2'(TRANS_S);
+                    WRITE = block_load_q ? WRITE_READ : WRITE_WRITE;
+                    SIZE  = 2'(SIZE_WORD);
+                    PROT  = {is_priv, 1'b1};
+                end else begin
+                    // Last beat — overlap with next instr fetch.
+                    ADDR  = fetch_pc_q;
+                    TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                    WRITE = WRITE_READ;
+                    SIZE  = fetch_size_w;
+                    PROT  = {is_priv, 1'b0};
+                end
                 WDATA = block_load_q ? 32'h0 : rf_rc_data;
             end
-            S_SWP_RADDR: begin
-                ADDR  = swp_addr_q;
-                TRANS = 2'(TRANS_N);
-                WRITE = WRITE_READ;
-                SIZE  = swp_byte_q ? 2'(SIZE_BYTE) : 2'(SIZE_WORD);
-                PROT  = {is_priv, 1'b1};
-                LOCK  = LOCK_LOCKED;
-            end
             S_SWP_RDATA: begin
-                ADDR  = swp_addr_q;
-                TRANS = 2'(TRANS_I);
-                WRITE = WRITE_READ;
-                SIZE  = swp_byte_q ? 2'(SIZE_BYTE) : 2'(SIZE_WORD);
-                PROT  = {is_priv, 1'b1};
-                LOCK  = LOCK_LOCKED;
-            end
-            S_SWP_WADDR: begin
+                // Drive the SWP write addr-class so the memory commits
+                // the write at posedge entering S_SWP_WDATA. LOCK still
+                // held across the locked read-write window.
                 ADDR  = swp_addr_q;
                 TRANS = 2'(TRANS_N);
                 WRITE = WRITE_WRITE;
@@ -1152,13 +1162,33 @@ module arm7tdmis_core_pipelined
                 LOCK  = LOCK_LOCKED;
             end
             S_SWP_WDATA: begin
-                ADDR  = swp_addr_q;
-                TRANS = 2'(TRANS_I);
-                WRITE = WRITE_WRITE;
-                SIZE  = swp_byte_q ? 2'(SIZE_BYTE) : 2'(SIZE_WORD);
-                PROT  = {is_priv, 1'b1};
-                LOCK  = LOCK_LOCKED;
+                // WDATA drives the write; memory commits at next posedge.
+                // Addr-class overlaps with next instr fetch — LOCK
+                // drops since the locked sequence has ended.
+                ADDR  = fetch_pc_q;
+                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                WRITE = WRITE_READ;
+                SIZE  = fetch_size_w;
+                PROT  = {is_priv, 1'b0};
+                LOCK  = LOCK_FREE;
                 WDATA = swp_wdata;
+            end
+            S_MULL_HI: begin
+                // No bus access for the multiply — drive the next fetch.
+                ADDR  = fetch_pc_q;
+                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                SIZE  = fetch_size_w;
+                PROT  = {is_priv, 1'b0};
+            end
+            S_MUL_BUSY: begin
+                // Only the last busy cycle (state_next == S_EXEC) drives
+                // the next fetch — earlier cycles let the bus stay idle.
+                if (state_next == S_EXEC) begin
+                    ADDR  = fetch_pc_q;
+                    TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                    SIZE  = fetch_size_w;
+                    PROT  = {is_priv, 1'b0};
+                end
             end
             default: ;
         endcase
@@ -1236,6 +1266,12 @@ module arm7tdmis_core_pipelined
         rf_pc_written,
         alu_flag_we,
         cpsr[27:6],
+        ls_data_addr_q,                   // §18 overlap: data addr is now
+                                          //   driven from S_EXEC directly;
+                                          //   the latched value is only used
+                                          //   for ls_addr_lo_q lookup.
+        block_first_beat_q,               // §18 overlap: first-beat distinction
+                                          //   no longer needed in bus mux.
         ls_data_addr_calc[31:12],
         ls_store_data_q[31:8],
         mul_flag_we,
