@@ -36,6 +36,7 @@ module arm7tdmis_thumb_decoder
     wire is_fmt13    = (thumb_instr[15:8]  == 8'b1011_0000);        // SP add/sub
     wire is_fmt14    = (thumb_instr[15:12] == 4'b1011)              // PUSH / POP
                      && (thumb_instr[10:9] == 2'b10);
+    wire is_fmt15    = (thumb_instr[15:12] == 4'b1100);             // LDMIA / STMIA
     wire is_fmt16_17 = (thumb_instr[15:12] == 4'b1101);             // B-cond / SWI
     wire is_fmt17_swi = is_fmt16_17 && (thumb_instr[11:8] == 4'b1111);
     wire is_fmt16_b  = is_fmt16_17 && !is_fmt17_swi;
@@ -140,6 +141,13 @@ module arm7tdmis_thumb_decoder
     wire        fmt13_sub  = thumb_instr[7];
     wire [6:0]  fmt13_imm7 = thumb_instr[6:0];
     wire [31:0] fmt13_imm  = {23'h0, fmt13_imm7, 2'b00};
+
+    // Format 15: LDMIA/STMIA Rb!, {r0..r7 mask}. Always IA, always
+    // writeback. PC is not in the list (those are Format 14 POP).
+    wire        fmt15_load = thumb_instr[11];
+    wire [2:0]  fmt15_rb   = thumb_instr[10:8];
+    wire [7:0]  fmt15_lo   = thumb_instr[7:0];
+    wire [15:0] fmt15_reglist = {8'h0, fmt15_lo};
 
     // Format 18 unsigned offset is bits[10:0]; ARM ARM scales by 2 and
     // sign-extends to 32 bits. Final branch target = PC + 4 + offset.
@@ -317,6 +325,16 @@ module arm7tdmis_thumb_decoder
             dec.block_writeback  = 1'b1;
             dec.block_user_mode  = 1'b0;
             dec.block_reg_list   = fmt14_reglist;
+        end else if (is_fmt15) begin
+            // Format 15: LDMIA/STMIA Rb!, {r0..r7 mask}.
+            dec.instr_class      = INSTR_LDM_STM;
+            dec.rn               = {1'b0, fmt15_rb};
+            dec.block_load       = fmt15_load;
+            dec.block_pre_index  = 1'b0;
+            dec.block_up         = 1'b1;
+            dec.block_writeback  = 1'b1;
+            dec.block_user_mode  = 1'b0;
+            dec.block_reg_list   = fmt15_reglist;
         end else if (is_fmt5_bx) begin
             dec.instr_class = INSTR_BX;
             dec.rm          = fmt5_rm;
