@@ -102,7 +102,8 @@ module arm7tdmis_core_pipelined
         S_SWP_RADDR  = 4'd5,
         S_SWP_RDATA  = 4'd6,
         S_SWP_WADDR  = 4'd7,
-        S_SWP_WDATA  = 4'd8
+        S_SWP_WDATA  = 4'd8,
+        S_MULL_HI    = 4'd9     // §9d: 64-bit multiply RdHi writeback cycle
     } state_e;
 
     state_e state_q;
@@ -261,6 +262,12 @@ module arm7tdmis_core_pipelined
     logic         swp_byte_q;
     logic [1:0]   swp_addr_lo_q;
 
+    // §9d MULL latches — capture RdHi register address and the upper 32 bits
+    // of the product at end of S_EXEC, so S_MULL_HI can commit them even
+    // after de_q has moved on.
+    logic [3:0]   mull_rdhi_q;
+    logic [31:0]  mull_result_hi_q;
+
     // ---- PSR + exception entry plumbing ----
     psr_t         spsr_value;
     logic         spsr_valid;
@@ -401,9 +408,17 @@ module arm7tdmis_core_pipelined
     logic [3:0]  mul_flag_we;
     logic [2:0]  mul_cycle_count;
 
+    // §9d: is_long=1 for MULL forms (UMULL/SMULL/UMLAL/SMLAL); is_signed=1
+    // for SMULL/SMLAL (decoder sets dec.mul_signed accordingly). MUL/MLA
+    // keep is_long=0 / is_signed=0. UMLAL/SMLAL accumulate forms aren't
+    // wired yet — they need a 4th regfile read port (RdHi as accumulator
+    // high half) which the 3-port regfile can't supply in one cycle. Path
+    // for those gets added when the cycle-shaping work (§18) lengthens E.
+    wire instr_class_is_mull = (dec.instr_class == INSTR_MULL);
+
     arm7tdmis_multiplier u_mul (
-        .is_signed   (1'b0),
-        .is_long     (1'b0),
+        .is_signed   (dec.mul_signed),
+        .is_long     (instr_class_is_mull),
         .accumulate  (dec.mul_accumulate),
         .op_a        (rf_rb_data),
         .op_b        (rf_rc_data),
@@ -469,6 +484,11 @@ module arm7tdmis_core_pipelined
 
     wire swp_take_cycle = passes_cond && (dec.instr_class == INSTR_SWP);
 
+    // §9d: UMULL/SMULL take an extra cycle in S_MULL_HI to write RdHi.
+    // Accumulate forms (UMLAL/SMLAL) are deferred until §18 cycle shaping.
+    wire mull_take_cycle = passes_cond && instr_class_is_mull
+                        && !dec.mul_accumulate;
+
     // E-stage substate transitions. Single-cycle "execute" loops back to
     // S_EXEC; multi-cycle ops take the appropriate substate detour.
     // While in S_EXEC, an invalid de_q (bubble) still loops to S_EXEC —
@@ -479,6 +499,7 @@ module arm7tdmis_core_pipelined
             S_EXEC:       state_next = ls_take_data_cycle ? S_DADDR
                                      : block_take_cycle   ? S_BLOCK_ADDR
                                      : swp_take_cycle     ? S_SWP_RADDR
+                                     : mull_take_cycle    ? S_MULL_HI
                                                           : S_EXEC;
             S_DADDR:      state_next = S_DDATA;
             S_DDATA:      state_next = S_EXEC;
@@ -488,6 +509,7 @@ module arm7tdmis_core_pipelined
             S_SWP_RDATA:  state_next = S_SWP_WADDR;
             S_SWP_WADDR:  state_next = S_SWP_WDATA;
             S_SWP_WDATA:  state_next = S_EXEC;
+            S_MULL_HI:    state_next = S_EXEC;
             default:      state_next = S_EXEC;
         endcase
     end
@@ -545,8 +567,16 @@ module arm7tdmis_core_pipelined
                     && !swi_fires && !undef_fires;
 
     wire any_exc_fires    = swi_fires || undef_fires || irq_fires || fiq_fires;
+
+    // §9d: MUL/MLA write Rd at bits[19:16] (= dec.rn) in S_EXEC.
+    // UMULL/SMULL write RdLo at bits[15:12] (= dec.rd) in S_EXEC and
+    // RdHi at bits[19:16] (= dec.rn) in S_MULL_HI. Flag updates (NZ from
+    // the full result) happen in S_EXEC for both — the multiplier's
+    // result_hi is combinational, so we can sample flags in the first
+    // execute cycle even though RdHi commits a cycle later.
     wire mul_writes_dest  = passes_cond && instr_is_mul;
-    wire mul_writes_flags = mul_writes_dest && dec.s_bit;
+    wire mull_writes_lo   = mull_take_cycle;
+    wire mul_writes_flags = (mul_writes_dest || mull_take_cycle) && dec.s_bit;
 
     wire writes_pc_exec   = dp_writes_pc || branch_writes_pc || bx_writes_pc
                           || any_exc_fires;
@@ -692,6 +722,16 @@ module arm7tdmis_core_pipelined
             rf_write_addr = dec.rn;
             rf_write_data = block_writeback_addr;
             rf_write_en   = 1'b1;
+        end else if (state_q == S_MULL_HI) begin
+            // §9d: RdHi commit cycle for UMULL/SMULL.
+            rf_write_addr = mull_rdhi_q;
+            rf_write_data = mull_result_hi_q;
+            rf_write_en   = 1'b1;
+        end else if (mull_writes_lo) begin
+            // §9d: RdLo (= dec.rd) := result_lo, in the same S_EXEC cycle.
+            rf_write_addr = dec.rd;
+            rf_write_data = mul_result_lo;
+            rf_write_en   = 1'b1;
         end else if (mul_writes_dest) begin
             rf_write_addr = dec.rn;
             rf_write_data = mul_result_lo;
@@ -762,6 +802,8 @@ module arm7tdmis_core_pipelined
                 swp_rd_q            <= 4'h0;
                 swp_byte_q          <= 1'b0;
                 swp_addr_lo_q       <= 2'h0;
+                mull_rdhi_q         <= 4'h0;
+                mull_result_hi_q    <= 32'h0;
             end else begin
                 state_q <= state_next;
 
@@ -806,6 +848,13 @@ module arm7tdmis_core_pipelined
 
                 if (state_q == S_SWP_RDATA) begin
                     swp_loaded_q <= RDATA;
+                end
+
+                // §9d: snapshot RdHi register address and upper 32 bits of
+                // the product at end of S_EXEC for UMULL/SMULL.
+                if (state_q == S_EXEC && mull_take_cycle) begin
+                    mull_rdhi_q      <= dec.rn;
+                    mull_result_hi_q <= mul_result_hi;
                 end
             end
         end
@@ -925,7 +974,9 @@ module arm7tdmis_core_pipelined
     // an instruction actually completes its execute phase (state_q==S_EXEC
     // with valid de_q). Lets the TB compare against absolute addresses
     // without worrying about which pipeline stage to look at.
+    /* verilator lint_off UNUSEDSIGNAL */
     logic [31:0] pc_q;
+    /* verilator lint_on UNUSEDSIGNAL */
     always_ff @(posedge CLK) begin
         if (CLKEN) begin
             if (!nRESET)
@@ -946,11 +997,9 @@ module arm7tdmis_core_pipelined
         cpsr[27:6],
         ls_data_addr_calc[31:12],
         ls_store_data_q[31:8],
-        mul_result_hi,
         mul_flag_we,
         mul_cycle_count,
         dec.dp_imm_value,
-        dec.mul_accumulate, dec.mul_signed,
         dec.hs_signed, dec.hs_halfword, dec.hs_use_imm, dec.hs_imm_offset,
         dec.psr_use_spsr, dec.msr_field_mask, dec.msr_use_imm,
         dec.swi_comment, dec.cp_num
