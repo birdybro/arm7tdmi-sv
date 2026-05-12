@@ -32,6 +32,8 @@ RUN_ARTIFACTS  := cycle.csv waves.fst
 
 UNIT_TESTS := regfile psr reset_sync shifter alu multiplier condition decoder jtag_tap ice_rt
 
+INTEG_TESTS := umull
+
 .PHONY: all lint lint-tb sim run wave clean help \
         $(addprefix unit-, $(UNIT_TESTS)) unit
 
@@ -72,6 +74,25 @@ endef
 $(foreach t,$(UNIT_TESTS),$(eval $(call UNIT_RULE,$(t))))
 
 unit: $(addprefix unit-, $(UNIT_TESTS))
+
+# Per-integration-test recipe. Each test has its top module named
+# `arm7tdmis_<name>_tb` in tb/integration/arm7tdmis_<name>_tb.sv and pulls
+# the shared integration TB infrastructure (memory model, cycle logger,
+# assertions) via tb.f.
+define INTEG_RULE
+integ-$(1):
+	mkdir -p $$(OBJ_DIR)
+	$$(VERILATOR) $$(VFLAGS_BUILD) -Wno-SYNCASYNCNET \
+	    --top-module arm7tdmis_$(1)_tb \
+	    --Mdir $$(OBJ_DIR)/integ_$(1) -f $$(SIM_F) \
+	    ../tb/integration/arm7tdmis_memory.sv \
+	    ../tb/integration/arm7tdmis_$(1)_tb.sv
+	./$$(OBJ_DIR)/integ_$(1)/Varm7tdmis_$(1)_tb
+endef
+
+$(foreach t,$(INTEG_TESTS),$(eval $(call INTEG_RULE,$(t))))
+
+integ: $(addprefix integ-, $(INTEG_TESTS))
 
 clean:
 	rm -rf $(OBJ_DIR) $(RUN_ARTIFACTS)
