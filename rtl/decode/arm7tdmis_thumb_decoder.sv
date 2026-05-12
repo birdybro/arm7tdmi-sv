@@ -30,6 +30,7 @@ module arm7tdmis_thumb_decoder
     wire is_fmt3     = (thumb_instr[15:13] == 3'b001);              // MOV/CMP/ADD/SUB imm
     wire is_fmt4     = (thumb_instr[15:10] == 6'b010000);           // ALU reg-reg
     wire is_fmt5_bx  = (thumb_instr[15:8] == 8'b0100_0111);          // BX (also BLX in v5)
+    wire is_fmt6     = (thumb_instr[15:11] == 5'b01001);            // PC-rel LDR
     wire is_fmt7_8   = (thumb_instr[15:12] == 4'b0101);             // L/S reg-offset family
     wire is_fmt8     = is_fmt7_8 && thumb_instr[9];                  // halfword/signed
     wire is_fmt7     = is_fmt7_8 && !thumb_instr[9];                 // word/byte
@@ -103,6 +104,13 @@ module arm7tdmis_thumb_decoder
     endfunction
 
     wire [3:0]  fmt5_rm    = thumb_instr[6:3];
+
+    // Format 6: LDR Rd, [PC, #imm8*4] — PC-relative load. The core
+    // masks bits[1:0] of the r15 read so the effective base is
+    // word-aligned even in Thumb state (where PC+4 may have bit 1 set).
+    wire [2:0]  fmt6_rd    = thumb_instr[10:8];
+    wire [7:0]  fmt6_imm8  = thumb_instr[7:0];
+    wire [11:0] fmt6_off   = {2'h0, fmt6_imm8, 2'b00};   // imm8 << 2
 
     // Format 7 / 8 share Ro/Rb/Rd positions but differ in L/B vs S/H bits.
     wire        fmt7_load  = thumb_instr[11];
@@ -283,6 +291,19 @@ module arm7tdmis_thumb_decoder
             dec.shifter_amount = 8'h00;
             dec.shifter_is_rrx = 1'b0;
             dec.shifter_use_rs = 1'b0;
+        end else if (is_fmt6) begin
+            // LDR Rd, [PC, #imm8*4]. Word load, pre-indexed, no writeback.
+            // The core's ls_rn_value mux force-aligns the r15 base.
+            dec.instr_class    = INSTR_LDR_STR;
+            dec.rd             = {1'b0, fmt6_rd};
+            dec.rn             = 4'd15;                  // PC
+            dec.ls_pre_index   = 1'b1;
+            dec.ls_up          = 1'b1;
+            dec.ls_byte        = 1'b0;
+            dec.ls_writeback   = 1'b0;
+            dec.ls_load        = 1'b1;                   // always load
+            dec.ls_use_imm     = 1'b1;
+            dec.ls_imm_offset  = fmt6_off;
         end else if (is_fmt7) begin
             // LDR/STR/LDRB/STRB Rd, [Rb, Ro] (register offset, no shift).
             dec.instr_class    = INSTR_LDR_STR;

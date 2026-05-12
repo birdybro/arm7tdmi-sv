@@ -573,9 +573,18 @@ module arm7tdmis_core
           ? (dec.hs_use_imm ? {24'h0, dec.hs_imm_offset} : rf_rb_data)
           : (dec.ls_use_imm ? {20'h0, dec.ls_imm_offset} : sh_result);
 
+    // When Rn = r15 (PC-relative L/S), the architectural rule is that
+    // the base address has bits[1:0] forced to 0 — i.e., word-aligned.
+    // In ARM state the regfile already returns pc_q+8 which is naturally
+    // word-aligned, so the mask is a no-op; in Thumb state pc_q+4 may
+    // have bit 1 set (depending on pc_q[1]), and the mask brings it
+    // back to word-alignment. Matches the ARM ARM Format 6 semantics.
+    wire [31:0] ls_rn_value      = (dec.rn == 4'd15)
+                                   ? (rf_ra_data & 32'hFFFF_FFFC)
+                                   : rf_ra_data;
     wire [31:0] ls_data_addr_calc = dec.ls_up
-                                    ? (rf_ra_data + ls_offset_value)
-                                    : (rf_ra_data - ls_offset_value);
+                                    ? (ls_rn_value + ls_offset_value)
+                                    : (ls_rn_value - ls_offset_value);
 
     // Pre-indexed uses the offset-applied address for the memory access;
     // post-indexed uses Rn directly (then writes back the post-modified
