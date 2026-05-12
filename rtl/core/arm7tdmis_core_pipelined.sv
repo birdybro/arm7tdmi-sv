@@ -81,7 +81,14 @@ module arm7tdmis_core_pipelined
     // core_dcc_rdata is the current DCC TX register (mirror of ICE-RT 0x04).
     output logic        core_dcc_we,
     output logic [31:0] core_dcc_wdata,
-    input  logic [31:0] core_dcc_rdata
+    input  logic [31:0] core_dcc_rdata,
+
+    // §22 scan-chain-1 instruction injection. When dbg_inject_we pulses
+    // HIGH, the F-stage overrides fd_q with dbg_inject_instr (skipping
+    // the normal RDATA latch path). Used while in debug-halt state to
+    // run debugger-supplied instructions one at a time.
+    input  logic        dbg_inject_we,
+    input  logic [31:0] dbg_inject_instr
 );
 
     // =====================================================================
@@ -215,6 +222,20 @@ module arm7tdmis_core_pipelined
                 fetch_pc_q       <= flush_target_pc;
                 inflight_valid_q <= 1'b0;
                 fd_q.valid       <= 1'b0;
+            end else if (dbg_inject_we) begin
+                // §22 scan-chain-1 injection: bypass the F-stage's
+                // normal RDATA latch and force fd_q to the debugger-
+                // supplied instruction. pc and thumb are set to the
+                // current execution context so the decoder produces a
+                // valid decoded_t (the exact pc doesn't matter for the
+                // architecturally-allowed debug instructions — DP, L/S,
+                // LDM/STM, MSR/MRS — none of which read r15 in a way
+                // that would care about the spoofed value).
+                fd_q.instr  <= dbg_inject_instr;
+                fd_q.pc     <= de_q.pc;
+                fd_q.thumb  <= cpsr.t;
+                fd_q.pabort <= 1'b0;
+                fd_q.valid  <= 1'b1;
             end else begin
                 if (issue_fetch) begin
                     fetch_pc_q       <= fetch_pc_q + fetch_step;

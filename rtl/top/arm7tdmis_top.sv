@@ -117,9 +117,11 @@ module arm7tdmis_top
         .CPB       (CPB),
         .DBGnEXEC      (DBGnEXEC),
         .DBGINSTRVALID (DBGINSTRVALID),
-        .core_dcc_we    (core_dcc_we),
-        .core_dcc_wdata (core_dcc_wdata),
-        .core_dcc_rdata (core_dcc_rdata)
+        .core_dcc_we      (core_dcc_we),
+        .core_dcc_wdata   (core_dcc_wdata),
+        .core_dcc_rdata   (core_dcc_rdata),
+        .dbg_inject_we    (dbg_inject_we),
+        .dbg_inject_instr (dbg_inject_instr)
     );
 
     // ---- EmbeddedICE-RT (§22 scaffold) ----
@@ -135,6 +137,8 @@ module arm7tdmis_top
     logic        core_dcc_we;
     logic [31:0] core_dcc_wdata;
     logic [31:0] core_dcc_rdata;
+    logic        dbg_inject_we;
+    logic [31:0] dbg_inject_instr;
 
     arm7tdmis_ice_rt u_ice (
         .CLK                (CLK),
@@ -163,7 +167,11 @@ module arm7tdmis_top
         .scan_rdata         (ice_scan_rdata),
         .core_dcc_we        (core_dcc_we),
         .core_dcc_wdata     (core_dcc_wdata),
-        .core_dcc_rdata     (core_dcc_rdata)
+        .core_dcc_rdata     (core_dcc_rdata),
+        .tap_inject_we      (tap_inject_we),
+        .tap_inject_instr   (tap_inject_instr),
+        .dbg_inject_we      (dbg_inject_we),
+        .dbg_inject_instr   (dbg_inject_instr)
     );
 
     assign DBGRNG = ice_dbgrng;
@@ -194,6 +202,10 @@ module arm7tdmis_top
     logic        tap_inject_break;
     logic        tap_inject_we;
 
+    // tap_inject_break (DBGBREAK control cell from chain 1) consumed by
+    // the debug-state FSM later; the actual instruction routing happens
+    // through ice_rt → core via dbg_inject_we/instr.
+
     arm7tdmis_jtag_tap u_tap (
         .CLK              (CLK),
         .DBGTCKEN         (DBGTCKEN),
@@ -216,16 +228,11 @@ module arm7tdmis_top
         .tap_restart_req  (tap_restart_req)
     );
 
-    // §22 chain-1 instruction injection: the TAP latches the 33-bit
-    // value on Update-DR; the core-side path that scans this into the
-    // pipeline during halt-mode debug state lands when the debug-state
-    // instruction-inject FSM does. For now the latch contents are
-    // observable for testbench-level JTAG flows but don't yet affect
-    // core execution.
+    // tap_inject_break (DBGBREAK control cell from chain 1) is still a
+    // placeholder consumed only by the future "system-speed vs debug-speed"
+    // distinction in the debug-state FSM.
     /* verilator lint_off UNUSEDSIGNAL */
-    wire _unused_inject = &{1'b0,
-        tap_inject_instr, tap_inject_break, tap_inject_we
-    };
+    wire _unused_inject = &{1'b0, tap_inject_break};
     /* verilator lint_on UNUSEDSIGNAL */
 
     // TAP observers used by §22 debug FSM later — silence lint for now.
