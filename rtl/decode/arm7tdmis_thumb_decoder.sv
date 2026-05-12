@@ -31,6 +31,8 @@ module arm7tdmis_thumb_decoder
     wire is_fmt4     = (thumb_instr[15:10] == 6'b010000);           // ALU reg-reg
     wire is_fmt5_bx  = (thumb_instr[15:8] == 8'b0100_0111);          // BX (also BLX in v5)
     wire is_fmt9     = (thumb_instr[15:13] == 3'b011);              // L/S imm offset
+    wire is_fmt14    = (thumb_instr[15:12] == 4'b1011)              // PUSH / POP
+                     && (thumb_instr[10:9] == 2'b10);
     wire is_fmt16_17 = (thumb_instr[15:12] == 4'b1101);             // B-cond / SWI
     wire is_fmt17_swi = is_fmt16_17 && (thumb_instr[11:8] == 4'b1111);
     wire is_fmt16_b  = is_fmt16_17 && !is_fmt17_swi;
@@ -103,6 +105,18 @@ module arm7tdmis_thumb_decoder
     wire [2:0]  fmt9_rd    = thumb_instr[2:0];
     wire [11:0] fmt9_off   = fmt9_byte ? {7'h0, fmt9_imm5}
                                        : {5'h0, fmt9_imm5, 2'b00};
+
+    // Format 14 (PUSH/POP) — maps to STMDB SP!, {…} / LDMIA SP!, {…}.
+    //   bit[11] = L : 0 = PUSH (store, DB), 1 = POP (load, IA)
+    //   bit[8]  = R : when set, include LR for PUSH or PC for POP
+    //   bits[7:0]   = r0..r7 mask
+    wire        fmt14_load = thumb_instr[11];
+    wire        fmt14_R    = thumb_instr[8];
+    wire [7:0]  fmt14_lo   = thumb_instr[7:0];
+    wire [15:0] fmt14_reglist = {fmt14_load && fmt14_R,        // PC for POP
+                                  !fmt14_load && fmt14_R,      // LR for PUSH
+                                  6'h0,
+                                  fmt14_lo};
 
     // Format 18 unsigned offset is bits[10:0]; ARM ARM scales by 2 and
     // sign-extends to 32 bits. Final branch target = PC + 4 + offset.
@@ -231,6 +245,21 @@ module arm7tdmis_thumb_decoder
             dec.ls_load        = fmt9_load;
             dec.ls_use_imm     = 1'b1;
             dec.ls_imm_offset  = fmt9_off;
+        end else if (is_fmt14) begin
+            // Format 14: PUSH = STMDB SP!, {regs}; POP = LDMIA SP!, {regs}.
+            //   PUSH (load=0): P=1, U=0 (DB), W=1.
+            //   POP  (load=1): P=0, U=1 (IA), W=1.
+            // R bit pulls in LR for PUSH (bit 14) or PC for POP (bit 15).
+            // PC-in-list is handled by §12c (pc_q ← RDATA during the
+            // S_BLOCK_DATA tail).
+            dec.instr_class      = INSTR_LDM_STM;
+            dec.rn               = 4'd13;                  // SP = r13 (banked)
+            dec.block_load       = fmt14_load;
+            dec.block_pre_index  = !fmt14_load;             // PUSH=1, POP=0
+            dec.block_up         = fmt14_load;              // PUSH=0, POP=1
+            dec.block_writeback  = 1'b1;
+            dec.block_user_mode  = 1'b0;
+            dec.block_reg_list   = fmt14_reglist;
         end else if (is_fmt5_bx) begin
             dec.instr_class = INSTR_BX;
             dec.rm          = fmt5_rm;
