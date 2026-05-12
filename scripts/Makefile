@@ -30,7 +30,7 @@ OBJ_DIR        := obj_dir
 TB_BIN         := $(OBJ_DIR)/V$(TOP_TB)
 RUN_ARTIFACTS  := cycle.csv waves.fst
 
-UNIT_TESTS := regfile psr reset_sync shifter alu multiplier condition decoder jtag_tap
+UNIT_TESTS := regfile psr reset_sync shifter alu multiplier condition decoder jtag_tap ice_rt
 
 .PHONY: all lint lint-tb sim run wave clean help \
         $(addprefix unit-, $(UNIT_TESTS)) unit
