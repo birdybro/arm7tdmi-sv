@@ -140,8 +140,10 @@ module arm7tdmis_core_pipelined
         S_SWP_WDATA  = 4'd4,    // SWP write data + drive next fetch
         S_MULL_HI    = 4'd5,    // §9d: 64-bit multiply RdHi writeback cycle
         S_MUL_BUSY   = 4'd6,    // §18: multiplier I cycles (early termination m)
-        S_MULL_ACC   = 4'd7     // UMLAL/SMLAL: read RdHi for accumulator,
+        S_MULL_ACC   = 4'd7,    // UMLAL/SMLAL: read RdHi for accumulator,
                                  //              commit RdLo result
+        S_BLOCK_WB   = 4'd8     // LDM/STM Rn-writeback cycle (deferred from
+                                 // S_EXEC so abort restart preserves Rn)
     } state_e;
 
     state_e state_q;
@@ -308,6 +310,15 @@ module arm7tdmis_core_pipelined
     logic         block_first_beat_q;
     logic         block_user_mode_q;     // LDM/STM ^ — force user-bank regs
     logic         block_has_pc_q;        // r15 in this block's reg list?
+
+    // §17 LDM/STM restart-safety: Rn writeback is deferred to a dedicated
+    // S_BLOCK_WB cycle (was: committed at S_EXEC) so that if any beat
+    // aborts, Rn stays at its original value and the LDM can be restarted
+    // by the abort handler. Latched at S_EXEC end alongside the rest of
+    // the block state.
+    logic         block_writeback_q;
+    logic [31:0]  block_writeback_addr_q;
+    logic [3:0]   block_rn_q;
 
     logic [31:0]  swp_addr_q;
     logic [31:0]  swp_store_q;
@@ -601,7 +612,14 @@ module arm7tdmis_core_pipelined
                                        ? (rf_ra_data + block_reg_count_x4)
                                        : (rf_ra_data - block_reg_count_x4);
 
-    wire block_does_writeback = block_take_cycle && dec.block_writeback;
+    // §17 restart: Rn writeback fires in the dedicated S_BLOCK_WB cycle
+    // (after all beats complete) and only if no abort fired during the
+    // transfer. data_abort_q clears when state_q==S_EXEC (so the next
+    // LDM gets a fresh signal); during S_BLOCK_WB the latched bit
+    // reflects "any beat aborted."
+    wire block_does_writeback = (state_q == S_BLOCK_WB)
+                             && block_writeback_q
+                             && !data_abort_q;
 
     wire [15:0] block_after_curr = block_remaining_q & ~(16'h1 << block_curr_reg_q);
     wire        block_has_more   = (block_after_curr != 16'h0);
@@ -643,7 +661,8 @@ module arm7tdmis_core_pipelined
                                      : mul_take_busy         ? S_MUL_BUSY
                                                              : S_EXEC;
             S_DDATA:      state_next = S_EXEC;
-            S_BLOCK_DATA: state_next = block_has_more ? S_BLOCK_DATA : S_EXEC;
+            S_BLOCK_DATA: state_next = block_has_more ? S_BLOCK_DATA : S_BLOCK_WB;
+            S_BLOCK_WB:   state_next = S_EXEC;
             S_SWP_RDATA:  state_next = S_SWP_WDATA;
             S_SWP_WDATA:  state_next = S_EXEC;
             S_MULL_HI:    state_next = S_EXEC;
@@ -957,8 +976,10 @@ module arm7tdmis_core_pipelined
             rf_write_data = ls_data_addr_calc;
             rf_write_en   = 1'b1;
         end else if (block_does_writeback) begin
-            rf_write_addr = dec.rn;
-            rf_write_data = block_writeback_addr;
+            // dec.* is stale by S_BLOCK_WB (de_q advanced); use latched
+            // block_rn_q and block_writeback_addr_q snapshotted at S_EXEC.
+            rf_write_addr = block_rn_q;
+            rf_write_data = block_writeback_addr_q;
             rf_write_en   = 1'b1;
         end else if (state_q == S_MULL_HI) begin
             // §9d: RdHi commit cycle for UMULL/SMULL/UMLAL/SMLAL.
@@ -1053,8 +1074,11 @@ module arm7tdmis_core_pipelined
                 block_curr_reg_q    <= 4'h0;
                 block_load_q        <= 1'b0;
                 block_first_beat_q  <= 1'b0;
-                block_user_mode_q   <= 1'b0;
-                block_has_pc_q      <= 1'b0;
+                block_user_mode_q      <= 1'b0;
+                block_has_pc_q         <= 1'b0;
+                block_writeback_q      <= 1'b0;
+                block_writeback_addr_q <= 32'h0;
+                block_rn_q             <= 4'h0;
                 swp_addr_q          <= 32'h0;
                 swp_store_q         <= 32'h0;
                 swp_loaded_q        <= 32'h0;
@@ -1093,13 +1117,16 @@ module arm7tdmis_core_pipelined
                 // which the bus mux drives in cycle 1 of S_BLOCK_DATA
                 // for beat 2 (and so on iteratively).
                 if (state_q == S_EXEC && block_take_cycle) begin
-                    block_remaining_q  <= dec.block_reg_list;
-                    block_curr_addr_q  <= block_start_addr + 32'd4;   // next addr
-                    block_curr_reg_q   <= lowest_set_idx(dec.block_reg_list);
-                    block_load_q       <= dec.block_load;
-                    block_first_beat_q <= 1'b1;
-                    block_user_mode_q  <= dec.block_user_mode;
-                    block_has_pc_q     <= dec.block_reg_list[15];
+                    block_remaining_q      <= dec.block_reg_list;
+                    block_curr_addr_q      <= block_start_addr + 32'd4;   // next addr
+                    block_curr_reg_q       <= lowest_set_idx(dec.block_reg_list);
+                    block_load_q           <= dec.block_load;
+                    block_first_beat_q     <= 1'b1;
+                    block_user_mode_q      <= dec.block_user_mode;
+                    block_has_pc_q         <= dec.block_reg_list[15];
+                    block_writeback_q      <= dec.block_writeback;
+                    block_writeback_addr_q <= block_writeback_addr;
+                    block_rn_q             <= dec.rn;
                 end
 
                 if (state_q == S_BLOCK_DATA) begin
@@ -1315,6 +1342,16 @@ module arm7tdmis_core_pipelined
             S_MULL_ACC: begin
                 // Idle bus — no bus access during the UMLAL/SMLAL
                 // accumulator-read cycle.
+            end
+            S_BLOCK_WB: begin
+                // §17: LDM/STM Rn writeback cycle. The actual writeback
+                // happens via the regfile mux below; bus drives the next
+                // instr fetch addr-class (overlap, same pattern as
+                // S_DDATA-last etc.).
+                ADDR  = fetch_pc_q;
+                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                SIZE  = fetch_size_w;
+                PROT  = {is_priv, 1'b0};
             end
             default: ;
         endcase
