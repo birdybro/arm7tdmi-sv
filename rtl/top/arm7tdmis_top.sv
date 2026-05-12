@@ -75,13 +75,21 @@ module arm7tdmis_top
     );
 
     // ---- Core (§16 — 3-stage Fetch/Decode/Execute pipeline) ----
+    // §22: IFEN from the ICE-RT macrocell gates the IRQ/FIQ inputs.
+    // IFEN=0 forces nIRQ_eff/nFIQ_eff HIGH (= no interrupt pending), which
+    // is how INTDIS in the Debug Control Register masks interrupts even
+    // outside debug state. With DBGEN=0 the ICE drives IFEN=1, so this
+    // is a pass-through.
+    wire nIRQ_eff = nIRQ | ~ice_ifen;
+    wire nFIQ_eff = nFIQ | ~ice_ifen;
+
     arm7tdmis_core_pipelined u_core (
         .CLK       (CLK),
         .CLKEN     (CLKEN),
         .nRESET    (core_nreset),
         .CFGBIGEND (CFGBIGEND),
-        .nIRQ      (nIRQ),
-        .nFIQ      (nFIQ),
+        .nIRQ      (nIRQ_eff),
+        .nFIQ      (nFIQ_eff),
         .ABORT     (ABORT),
         .ADDR      (ADDR),
         .WRITE     (WRITE),
@@ -111,6 +119,7 @@ module arm7tdmis_top
     logic [1:0] ice_dbgrng;
 
     logic ice_dbg_ack;
+    logic ice_ifen;
 
     arm7tdmis_ice_rt u_ice (
         .CLK                (CLK),
@@ -126,6 +135,7 @@ module arm7tdmis_top
         .watch_extern       (DBGEXT),
         .dbg_break_internal (ice_dbg_break),
         .dbg_ack            (ice_dbg_ack),
+        .ifen               (ice_ifen),
         .DBGRNG             (ice_dbgrng),
         .scan_we            (ice_scan_we),
         .scan_addr          (ice_scan_addr),

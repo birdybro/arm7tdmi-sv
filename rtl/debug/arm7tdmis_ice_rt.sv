@@ -44,6 +44,11 @@ module arm7tdmis_ice_rt (
     output logic        dbg_ack,             // §22: forced via Debug Control[0],
                                               //      or set by debug state machine
                                               //      when the FSM lands.
+    output logic        ifen,                 // §22: interrupt-enable gate.
+                                              //      LOW masks IRQ/FIQ to core.
+                                              //      Per TRM §30.22.6 derived
+                                              //      from INTDIS (ctrl[2]) and
+                                              //      DBGACKI (debug FSM signal).
     output logic [1:0]  DBGRNG,
 
     // Scan-chain-2 placeholder — currently tied off in the wrapper that
@@ -180,6 +185,14 @@ module arm7tdmis_ice_rt (
     // Index 0x00 is the Debug Control register.
     wire ice_dbg_ack_forced = regs[5'h00][0];
     assign dbg_ack = DBGEN && ice_dbg_ack_forced;
+
+    // §30.22.6: IFEN_to_core = !((INTDIS) | DBGACKI). INTDIS is
+    // Debug Control bit 2. Without the debug FSM the DBGACKI term is 0,
+    // so IFEN is simply !INTDIS. DBGEN=0 disables the entire macrocell
+    // so IFEN reverts to "interrupts enabled" — which matches the
+    // pass-through behavior we want when debug is off.
+    wire ice_intdis = regs[5'h00][2];
+    assign ifen = !(DBGEN && ice_intdis);
 
     // Scan chain 2 upper bits (R/W flag + 5-bit addr field), DBGEN gating
     // outside the macrocell, and SIZE field (size_in not yet folded into

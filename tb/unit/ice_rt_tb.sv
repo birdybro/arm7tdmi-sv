@@ -33,6 +33,7 @@ module ice_rt_tb
 
     logic        dbg_break_internal;
     logic        dbg_ack;
+    logic        ifen;
     logic [1:0]  DBGRNG;
 
     logic        scan_we;
@@ -54,6 +55,7 @@ module ice_rt_tb
         .watch_extern       (watch_extern),
         .dbg_break_internal (dbg_break_internal),
         .dbg_ack            (dbg_ack),
+        .ifen               (ifen),
         .DBGRNG             (DBGRNG),
         .scan_we            (scan_we),
         .scan_addr          (scan_addr),
@@ -160,7 +162,7 @@ module ice_rt_tb
     end
 
     /* verilator lint_off UNUSEDSIGNAL */
-    wire _unused = &{1'b0, DBGRNG[1], dbg_ack};
+    wire _unused = &{1'b0, DBGRNG[1], dbg_ack, ifen};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule
