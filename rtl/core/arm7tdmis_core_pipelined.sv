@@ -278,6 +278,7 @@ module arm7tdmis_core_pipelined
     logic [3:0]   block_curr_reg_q;
     logic         block_load_q;
     logic         block_first_beat_q;
+    logic         block_user_mode_q;     // LDM/STM ^ — force user-bank regs
 
     logic [31:0]  swp_addr_q;
     logic [31:0]  swp_store_q;
@@ -359,6 +360,14 @@ module arm7tdmis_core_pipelined
 
     wire [4:0] regfile_mode_eff = any_exc_fires ? exc_mode_target : cpsr.m;
 
+    // LDM/STM with S=1 forces the user-bank registers for r8-r14
+    // regardless of the current mode (TRM §12.4). Drives the regfile's
+    // force_user_bank input during block_active cycles when this LDM/STM
+    // is the ^ form. CPSR-from-SPSR variant (PC in list + S=1) is
+    // excluded by block_user_with_pc above and therefore doesn't reach
+    // this path.
+    wire force_user_bank_eff = block_active && block_user_mode_q;
+
     arm7tdmis_regfile u_regfile (
         .CLK             (CLK),
         .CLKEN           (CLKEN),
@@ -375,7 +384,7 @@ module arm7tdmis_core_pipelined
         .wa_addr         (rf_write_addr),
         .wa_data         (rf_write_data),
         .wa_enable       (rf_write_en),
-        .force_user_bank (1'b0),
+        .force_user_bank (force_user_bank_eff),
         .pc_written      (rf_pc_written)
     );
 
@@ -471,9 +480,17 @@ module arm7tdmis_core_pipelined
                         || (dec.instr_class == INSTR_LDRH_STRH);
     wire ls_take_data_cycle = passes_cond && instr_is_ls_any;
 
+    // LDM ^ with PC in the register list is the CPSR-from-SPSR variant
+    // (TRM §12.4): on the cycle r15 loads, CPSR atomically := SPSR-of-
+    // current-mode. That coupling isn't wired here yet — we exclude it
+    // from block_take_cycle so it NOPs rather than misbehaves. Plain
+    // LDM/STM ^ without PC in the list is supported via force_user_bank
+    // routing into the regfile during the block phase.
+    wire block_user_with_pc = dec.block_user_mode && dec.block_load
+                           && dec.block_reg_list[15];
     wire block_take_cycle = passes_cond
                           && (dec.instr_class == INSTR_LDM_STM)
-                          && !dec.block_user_mode
+                          && !block_user_with_pc
                           && (dec.block_reg_list != 16'h0);
 
     function automatic logic [4:0] popcount16(input logic [15:0] mask);
@@ -883,6 +900,7 @@ module arm7tdmis_core_pipelined
                 block_curr_reg_q    <= 4'h0;
                 block_load_q        <= 1'b0;
                 block_first_beat_q  <= 1'b0;
+                block_user_mode_q   <= 1'b0;
                 swp_addr_q          <= 32'h0;
                 swp_store_q         <= 32'h0;
                 swp_loaded_q        <= 32'h0;
@@ -913,6 +931,7 @@ module arm7tdmis_core_pipelined
                     block_curr_reg_q   <= lowest_set_idx(dec.block_reg_list);
                     block_load_q       <= dec.block_load;
                     block_first_beat_q <= 1'b1;
+                    block_user_mode_q  <= dec.block_user_mode;
                 end
 
                 if (state_q == S_BLOCK_DATA) begin
