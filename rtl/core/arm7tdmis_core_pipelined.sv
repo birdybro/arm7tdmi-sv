@@ -570,14 +570,17 @@ module arm7tdmis_core_pipelined
     wire instr_is_mrs    = (dec.instr_class == INSTR_MRS);
     wire instr_is_undef  = (dec.instr_class == INSTR_UNDEF);
 
-    // §19: coprocessor instructions. With no external coprocessor present,
-    // any of these should trap UNDEF. CPA=1 means "no coprocessor accepted
-    // the instruction" — for our greenfield core (no built-in CP14/CP15
-    // yet), CPA is always 1 from the outside world.
+    // §19/§20: coprocessor instructions. With no external coprocessor
+    // present (CPA=1 from the top), CP instructions trap UNDEF — EXCEPT
+    // CP14 (Debug Communications Channel) is an internal coprocessor per
+    // TRM §5.18, so MCR/MRC p14 must NOT trap. Full DCC data transfer
+    // semantics land later; for now CP14 accesses execute as NOPs so
+    // debug-aware code (e.g. JTAG probe stubs) doesn't crash.
     wire instr_is_cp = (dec.instr_class == INSTR_CDP)
                     || (dec.instr_class == INSTR_MCR_MRC)
                     || (dec.instr_class == INSTR_LDC_STC);
-    wire cp_undef_trap = executing && instr_is_cp && CPA;
+    wire instr_is_cp14 = instr_is_cp && (dec.cp_num == 4'd14);
+    wire cp_undef_trap = executing && instr_is_cp && CPA && !instr_is_cp14;
 
     wire msr_fires   = passes_cond && instr_is_msr;
     wire mrs_fires   = passes_cond && instr_is_mrs;
