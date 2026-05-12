@@ -99,13 +99,15 @@ module arm7tdmis_top
         .CPTBIT    (CPTBIT),
         .CPnI      (CPnI),
         .CPA       (CPA),
-        .CPB       (CPB)
+        .CPB       (CPB),
+        .DBGnEXEC      (DBGnEXEC),
+        .DBGINSTRVALID (DBGINSTRVALID)
     );
 
-    // ---- Debug status (idle until §22) ----
+    // ---- Debug status (DBGACK / DBGRNG / DBGCOMM* land with §22 ICE-RT,
+    //      §20 DCC; DBGnEXEC and DBGINSTRVALID are now driven by the core
+    //      directly per §24).
     assign DBGACK        = 1'b0;
-    assign DBGnEXEC      = 1'b1;     // active-low: HIGH = no instruction in EX
-    assign DBGINSTRVALID = 1'b0;
     assign DBGRNG        = 2'b00;
     assign DBGCOMMTX     = 1'b0;
     assign DBGCOMMRX     = 1'b0;

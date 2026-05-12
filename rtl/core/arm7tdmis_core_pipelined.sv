@@ -71,7 +71,11 @@ module arm7tdmis_core_pipelined
     output logic        CPTBIT,
     output logic        CPnI,
     input  logic        CPA,
-    input  logic        CPB
+    input  logic        CPB,
+
+    // §24: ETM-facing pipeline-state outputs
+    output logic        DBGnEXEC,
+    output logic        DBGINSTRVALID
 );
 
     // =====================================================================
@@ -1074,6 +1078,20 @@ module arm7tdmis_core_pipelined
     assign CPnOPC   =  PROT[PROT_BIT_DATA];   // mirror — opcode fetch → CPnOPC=0
     assign CPTBIT   = cpsr.t;
     assign CPnI     = !(executing && instr_is_cp);
+
+    // =====================================================================
+    // §24: ETM-facing pipeline-state outputs
+    // =====================================================================
+    //
+    // DBGINSTRVALID: HIGH when E has a valid decoded instruction this cycle
+    //                (= executing). Bubble cycles → LOW.
+    // DBGnEXEC     : LOW when the instruction is actually executing
+    //                (passes_cond gate). HIGH for unexecuted instructions
+    //                (condition failed). See TRM Table 7-23 — even
+    //                cond-fail instructions consume cycles but signal
+    //                DBGnEXEC HIGH so ETM can distinguish.
+    assign DBGINSTRVALID = executing;
+    assign DBGnEXEC      = !passes_cond;
 
 
     // ---- TB / debug observability ----
