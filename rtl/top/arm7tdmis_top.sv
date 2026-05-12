@@ -134,10 +134,7 @@ module arm7tdmis_top
         .watch_tbit         (CPTBIT),
         .watch_extern       (DBGEXT),
         .watch_priv         (PROT[1]),     // current privilege bit
-        .dbg_rq_in          (DBGRQ),       // §22 sync is a 2-flop synchronizer
-                                            //   inside the macrocell — for now
-                                            //   wired directly (TODO: add the
-                                            //   synchronizer per §30.22.6).
+        .dbg_rq_in          (DBGRQ),       // §22: synchronized inside ICE-RT
         .dbg_break_internal (ice_dbg_break),
         .dbg_ack            (ice_dbg_ack),
         .ifen               (ice_ifen),

@@ -104,6 +104,17 @@ module arm7tdmis_ice_rt (
         end
     end
 
+    // §30.22.6: 2-flop synchronizer for asynchronous DBGRQ. The external
+    // DBGRQ pin can fire any time relative to CLK; metastability mitigated
+    // with the standard two-flop chain. Reset shared with the rest of the
+    // macrocell (DBGnTRST async clear).
+    logic [1:0] dbg_rq_sync_q;
+    always_ff @(posedge CLK or negedge DBGnTRST) begin
+        if (!DBGnTRST)        dbg_rq_sync_q <= 2'b00;
+        else if (CLKEN)       dbg_rq_sync_q <= {dbg_rq_sync_q[0], dbg_rq_in};
+    end
+    wire dbg_rq_synced = dbg_rq_sync_q[1];
+
     // §30.22.5: Debug Status Register (addr 0x01) is read-only and
     // exposes live signals — TBIT, TRANS[1], IFEN, synced DBGRQ, synced
     // DBGACK. Override the regs[] read for this address so the debugger
@@ -112,8 +123,8 @@ module arm7tdmis_ice_rt (
         watch_tbit,         // [4] TBIT
         watch_priv,         // [3] TRANS[1] (privileged mode bit)
         ifen,               // [2] IFEN
-        dbg_rq_in,          // [1] synced DBGRQ
-        dbg_ack             // [0] synced DBGACK
+        dbg_rq_synced,      // [1] synced DBGRQ (2-flop CDC chain)
+        dbg_ack             // [0] DBGACK
     };
     assign scan_rdata = (scan_addr == 5'h01) ? {27'h0, dbg_status}
                                               : regs[scan_addr];
