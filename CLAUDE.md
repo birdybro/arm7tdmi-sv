@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Greenfield. The repo contains planning + reference material plus the empty directory skeleton (`rtl/{core,decode,datapath,memory,coproc,debug,jtag,etm,top}/`, `tb/{unit,integration,formal,programs}/`, `docs/`, `scripts/`) — no RTL, testbench, scripts, or build system have been written yet. The first code task in any session is almost certainly to scaffold the first SystemVerilog files into one of those existing directories, not to create new top-level paths or modify existing sources.
+Sections §1–§17 and §19 / §23 / §24 done; current head implements a working 3-stage Fetch/Decode/Execute pipelined ARM7TDMI-S core (`rtl/core/arm7tdmis_core_pipelined.sv`) with full ARM + Thumb decode coverage, branch/BL/BX, all addressing modes for LDR/STR/LDM/STM/SWP, MUL/MLA/UMULL/SMULL, ARM↔Thumb interworking, exception entry for SWI/UNDEF/IRQ/FIQ/PABT/DABT, ABORT sampling, coprocessor handshake outputs + UNDEF trap for unaccepted coprocessor instructions, JTAG TAP with IDCODE, and ETM-facing DBGnEXEC / DBGINSTRVALID. Smoke (§7-§15 coverage) + 9 unit tests pass. The simple non-pipelined §7 core has been removed; the pipelined core is the sole build target.
+
+What's left: §18 cycle accuracy, §20 CP14 DCC, §21 CP15 system control, §22 EmbeddedICE-RT (the big remaining block), §25 scan/test wrapper, §26 timing constraints + Cyclone V part selection, §27 conformance test expansion, §28-§29 milestone checklists. Older "deferred until X" notes throughout: UMLAL/SMLAL accumulate forms wait on §18 cycle-shaping, LDM ^ user-bank variant, full LDM data-abort restart semantics.
 
 ## Authoritative sources
 
@@ -52,7 +54,7 @@ The `rtl/` tree must be **synthesizable SystemVerilog that describes parallel ha
 These are the non-obvious traps the TRM and TASKS.md flag — internalize them before writing execution logic:
 
 - **Build verification before the CPU.** TASKS.md §2 deliberately puts the testbench, behavioral memory model, cycle logger, and reference-model path *before* the core. Don't skip ahead to RTL without the surrounding harness.
-- **Two execution models, in sequence.** §7 builds a deliberately non-pipelined "known-good" core to validate architectural state; §16 *replaces* it with the real 3-stage Fetch/Decode/Execute pipeline. Cycle-accurate timing (§18) only makes sense after §16.
+- **Pipeline structure.** §16 landed: F (continuous prefetch via `fetch_pc_q` + `inflight_pc_q` + F→D register), D (combinational decode through `arm7tdmis_decoder` / `arm7tdmis_thumb_decoder` muxed on the latched T-bit, D→E register), and E (single S_EXEC cycle plus the existing 10-state memory/multiply substate FSM as substates). Flush triggers (branch, BX, exception, DP-to-PC, LDR-to-PC, LDM-with-PC) invalidate F and D and redirect `fetch_pc_q`. The non-obvious-but-load-bearing trick: F's `issue_fetch` is gated by `state_next == S_EXEC` to avoid speculatively prefetching the cycle E enters a multi-cycle substate (else the result arrives during a cycle F can't latch and the instruction is lost). Cycle-accurate timing (§18) refines from here.
 - **PC pipeline semantics.** In ARM state the executing instruction sees PC ahead of itself due to the pipeline; Thumb has its own offset rule. Any code that reads or writes PC must respect this — a write to PC also forces a pipeline flush + refill.
 - **Conditional execution is universal in ARM state.** Every ARM instruction has a `cond[31:28]` field; condition-fail must suppress register writes, memory writes, and CPSR writes — but cycles still elapse and `DBGnEXEC` must be driven correctly. Thumb only has conditional branches.
 - **Banked registers depend on mode.** 31 GPRs + 6 SPSRs across User/FIQ/IRQ/Supervisor/Abort/Undefined/System; FIQ banks r8–r14, the others bank only r13/r14. Register read/write mapping is mode-driven and must be implemented for every mode (§3).
