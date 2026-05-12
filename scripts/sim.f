@@ -19,7 +19,6 @@
 ../rtl/decode/arm7tdmis_thumb_decoder.sv
 ../rtl/core/arm7tdmis_psr.sv
 ../rtl/core/arm7tdmis_reset_sync.sv
-../rtl/core/arm7tdmis_core.sv
 ../rtl/core/arm7tdmis_core_pipelined.sv
 
 ../rtl/jtag/arm7tdmis_jtag_tap.sv
