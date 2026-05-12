@@ -333,6 +333,16 @@ module arm7tdmis_tb_top
             smoke_errors = smoke_errors + 1;
         end
 
+        // §17/§19 sanity: no unexpected exception traps. The smoke flow
+        // returns to MODE_SUPERVISOR after the SWI handler completes; any
+        // mode other than Supervisor means an exception (UNDEF/PABT/DABT/
+        // IRQ/FIQ) fired that the test didn't intend.
+        if (u_dut.u_core.cpsr.m !== 5'b10011) begin
+            $display("[smoke] FAIL cpsr.m: expected SUPERVISOR (0x13), got %05b",
+                     u_dut.u_core.cpsr.m);
+            smoke_errors = smoke_errors + 1;
+        end
+
         if (smoke_errors == 0) begin
             $display("[smoke] PASS");
         end else begin
