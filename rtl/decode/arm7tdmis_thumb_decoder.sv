@@ -46,6 +46,8 @@ module arm7tdmis_thumb_decoder
     wire is_fmt17_swi = is_fmt16_17 && (thumb_instr[11:8] == 4'b1111);
     wire is_fmt16_b  = is_fmt16_17 && !is_fmt17_swi;
     wire is_fmt18_b  = (thumb_instr[15:11] == 5'b11100);            // B unconditional
+    wire is_fmt19_pfx = (thumb_instr[15:11] == 5'b11110);           // BL prefix (high offset)
+    wire is_fmt19_sfx = (thumb_instr[15:11] == 5'b11111);           // BL suffix (low offset)
 
     // ---- Field extraction ----
     wire [1:0]  fmt1_op    = thumb_instr[12:11];      // 00=LSL 01=LSR 10=ASR
@@ -182,6 +184,14 @@ module arm7tdmis_thumb_decoder
     // We hand the core the 32-bit signed value; the core's
     // branch_pc_target adds pc_q + 4 (Thumb) or pc_q + 8 (ARM).
     wire [31:0] fmt18_offset = {{20{thumb_instr[10]}}, thumb_instr[10:0], 1'b0};
+
+    // Format 19 BL — encoded as TWO Thumb halfwords.
+    //   Prefix (11110 + hi11): LR = PC + sign_extended(hi11) << 12
+    //   Suffix (11111 + lo11): target = LR + (lo11 << 1)
+    //                          LR     = (PC_of_suffix + 2) | 1
+    wire [31:0] fmt19_pfx_offset = {{9{thumb_instr[10]}},
+                                     thumb_instr[10:0], 12'h0};
+    wire [31:0] fmt19_sfx_offset = {20'h0, thumb_instr[10:0], 1'b0};
 
     // ---- ALU op for Format 3 ----
     function automatic alu_op_e fmt3_alu_op(input logic [1:0] op);
@@ -445,6 +455,31 @@ module arm7tdmis_thumb_decoder
             // path already drives exc_new_cpsr.t = 0.
             dec.instr_class    = INSTR_SWI;
             dec.swi_comment    = {16'h0, thumb_instr[7:0]};
+        end else if (is_fmt19_pfx) begin
+            // BL prefix: LR = PC(visible) + sign_extended(hi11) << 12.
+            // Reuses the DP-imm path with dp_use_raw_imm — the addend
+            // can't be expressed as imm8-ROR, so the core feeds
+            // dp_imm_value straight into the ALU's op_b.
+            dec.instr_class    = INSTR_DP;
+            dec.alu_op         = ALU_ADD;
+            dec.s_bit          = 1'b0;
+            dec.rd             = 4'd14;                  // LR
+            dec.rn             = 4'd15;                  // PC (= pc_q+4 in Thumb)
+            dec.dp_use_imm     = 1'b1;
+            dec.dp_use_raw_imm = 1'b1;
+            dec.dp_imm_value   = fmt19_pfx_offset;
+        end else if (is_fmt19_sfx) begin
+            // BL suffix: target = LR + (lo11 << 1); LR_new = (PC+2)|1.
+            // Routes through INSTR_BRANCH with branch_use_rn_base so
+            // the core's branch_pc_target = LR + offset rather than
+            // PC + 4 + offset, and branch_thumb_link so the LR write
+            // uses (pc_q + 2) | 1 instead of (pc_q + 4).
+            dec.instr_class         = INSTR_BRANCH;
+            dec.branch_link         = 1'b1;
+            dec.branch_offset       = fmt19_sfx_offset;
+            dec.rn                  = 4'd14;             // LR base for target
+            dec.branch_use_rn_base  = 1'b1;
+            dec.branch_thumb_link   = 1'b1;
         end else begin
             dec.instr_class = INSTR_UNDEF;
         end

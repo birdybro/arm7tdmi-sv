@@ -73,6 +73,10 @@ package arm7tdmis_instr_pkg;
 
         // Operand2 routing for DP
         logic         dp_use_imm;    // 1 = use dp_imm_value; 0 = shift Rm
+        logic         dp_use_raw_imm; // §15m: bypass shifter — use dp_imm_value
+                                      //       directly as op_b. Used for Thumb BL
+                                      //       prefix where the addend (hi << 12)
+                                      //       can't be expressed as imm8 ROR.
         logic [31:0]  dp_imm_value;  // imm8 ROR (2*rot4) — DP-imm path
         shift_op_e    shifter_op;
         logic [7:0]   shifter_amount;
@@ -86,6 +90,11 @@ package arm7tdmis_instr_pkg;
         // Branch
         logic         branch_link;
         logic [31:0]  branch_offset;  // sign-extended (offset24 << 2)
+        // §15m Thumb BL extensions:
+        logic         branch_use_rn_base;  // target = rf_ra_data + branch_offset
+                                            //          (rather than pc_q + 4/8 + offset)
+        logic         branch_thumb_link;   // LR write = (pc_q + 2) | 1
+                                            //          (Thumb BL suffix's return-addr form)
 
         // Load/Store single
         logic         ls_pre_index;

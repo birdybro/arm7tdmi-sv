@@ -294,10 +294,15 @@ module arm7tdmis_core
     logic        alu_n, alu_z, alu_c, alu_v;
     logic [3:0]  alu_flag_we;
 
+    // §15m: Thumb BL prefix uses dp_use_raw_imm to bypass the shifter
+    // (the addend is too large to express as imm8-ROR). All other paths
+    // continue to take operand 2 from the shifter.
+    wire [31:0] alu_op_b = dec.dp_use_raw_imm ? dec.dp_imm_value : sh_result;
+
     arm7tdmis_alu u_alu (
         .op            (dec.alu_op),
         .op_a          (rf_ra_data),
-        .op_b          (sh_result),
+        .op_b          (alu_op_b),
         .cpsr_c        (cpsr.c),
         .shifter_carry (sh_carry_out),
         .result        (alu_result),
@@ -554,8 +559,12 @@ module arm7tdmis_core
     wire [31:0] dp_pc_target     = alu_result;
     // The architectural "visible PC" is +8 in ARM state and +4 in Thumb
     // state due to the prefetch pipeline depth. Branch offsets are
-    // relative to that, so add the right value here.
-    wire [31:0] branch_pc_target = pc_q + (cpsr.t ? 32'd4 : 32'd8) + dec.branch_offset;
+    // relative to that, so add the right value here. §15m Thumb BL
+    // suffix instead bases its target on LR (rf_ra_data via Rn=14).
+    wire [31:0] branch_base = dec.branch_use_rn_base
+                              ? rf_ra_data
+                              : pc_q + (cpsr.t ? 32'd4 : 32'd8);
+    wire [31:0] branch_pc_target = branch_base + dec.branch_offset;
     wire [31:0] bx_pc_target     = rf_rb_data & 32'hFFFFFFFE;
 
     wire [31:0] pc_target = any_exc_fires   ? exc_pc_target_addr :
@@ -675,8 +684,12 @@ module arm7tdmis_core
             rf_write_data = pc_q + 32'd4;
             rf_write_en   = 1'b1;
         end else if (branch_link_writes) begin
+            // §15m: Thumb BL suffix saves LR = (pc_q + 2) | 1 (= return
+            // address in Thumb mode). ARM BL saves pc_q + 4.
             rf_write_addr = 4'd14;
-            rf_write_data = pc_q + 32'd4;
+            rf_write_data = dec.branch_thumb_link
+                            ? ((pc_q + 32'd2) | 32'h1)
+                            : (pc_q + 32'd4);
             rf_write_en   = 1'b1;
         end else if (ls_writeback_in_exec) begin
             // L/S base writeback: post-modified Rn for both pre-with-W
