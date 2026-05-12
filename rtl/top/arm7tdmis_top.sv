@@ -116,7 +116,10 @@ module arm7tdmis_top
         .CPA       (CPA),
         .CPB       (CPB),
         .DBGnEXEC      (DBGnEXEC),
-        .DBGINSTRVALID (DBGINSTRVALID)
+        .DBGINSTRVALID (DBGINSTRVALID),
+        .core_dcc_we    (core_dcc_we),
+        .core_dcc_wdata (core_dcc_wdata),
+        .core_dcc_rdata (core_dcc_rdata)
     );
 
     // ---- EmbeddedICE-RT (§22 scaffold) ----
@@ -129,6 +132,9 @@ module arm7tdmis_top
     logic ice_ifen;
     logic ice_core_halt;
     logic tap_restart_req;
+    logic        core_dcc_we;
+    logic [31:0] core_dcc_wdata;
+    logic [31:0] core_dcc_rdata;
 
     arm7tdmis_ice_rt u_ice (
         .CLK                (CLK),
@@ -154,7 +160,10 @@ module arm7tdmis_top
         .scan_we            (ice_scan_we),
         .scan_addr          (ice_scan_addr),
         .scan_wdata         (ice_scan_wdata),
-        .scan_rdata         (ice_scan_rdata)
+        .scan_rdata         (ice_scan_rdata),
+        .core_dcc_we        (core_dcc_we),
+        .core_dcc_wdata     (core_dcc_wdata),
+        .core_dcc_rdata     (core_dcc_rdata)
     );
 
     assign DBGRNG = ice_dbgrng;

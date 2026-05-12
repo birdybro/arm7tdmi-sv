@@ -75,7 +75,13 @@ module arm7tdmis_core_pipelined
 
     // §24: ETM-facing pipeline-state outputs
     output logic        DBGnEXEC,
-    output logic        DBGINSTRVALID
+    output logic        DBGINSTRVALID,
+
+    // §20: CP14 DCC data path. core_dcc_we asserts when MCR p14 c0 commits;
+    // core_dcc_rdata is the current DCC TX register (mirror of ICE-RT 0x04).
+    output logic        core_dcc_we,
+    output logic [31:0] core_dcc_wdata,
+    input  logic [31:0] core_dcc_rdata
 );
 
     // =====================================================================
@@ -352,8 +358,16 @@ module arm7tdmis_core_pipelined
 
     wire instr_is_ls_decoder = (dec.instr_class == INSTR_LDR_STR);
     wire block_active        = (state_q == S_BLOCK_ADDR) || (state_q == S_BLOCK_DATA);
+    // MCR p14 c0 reads dec.rd via port C (the source register goes to the
+    // coprocessor). LDR/STR also uses port C for dec.rd as the store
+    // source. cp14_mcr_dcc detection is combinational from de_q.
+    wire instr_mcr_p14_decoder = (dec.instr_class == INSTR_MCR_MRC)
+                              && (dec.cp_num == 4'd14)
+                              && !de_q.instr[20]
+                              && (de_q.instr[19:16] == 4'd0);
     wire [3:0] rc_addr_eff   = block_active        ? block_curr_reg_q
                              : instr_is_ls_decoder ? dec.rd
+                             : instr_mcr_p14_decoder ? dec.rd
                                                    : dec.rs;
 
     wire instr_is_mul_decoder = (dec.instr_class == INSTR_MUL);
@@ -598,7 +612,11 @@ module arm7tdmis_core_pipelined
     wire instr_is_cp14 = instr_is_cp && (dec.cp_num == 4'd14);
     wire instr_is_cp15 = instr_is_cp && (dec.cp_num == 4'd15);
     wire instr_is_mrc  = (dec.instr_class == INSTR_MCR_MRC) && de_q.instr[20];
+    wire instr_is_mcr  = (dec.instr_class == INSTR_MCR_MRC) && !de_q.instr[20];
+    wire cp14_crn0     = (de_q.instr[19:16] == 4'd0);
     wire cp15_crn0     = (de_q.instr[19:16] == 4'd0);
+    wire cp14_mrc_dcc  = instr_is_cp14 && instr_is_mrc && cp14_crn0;
+    wire cp14_mcr_dcc  = instr_is_cp14 && instr_is_mcr && cp14_crn0;
     wire cp15_mrc_id   = instr_is_cp15 && instr_is_mrc && cp15_crn0;
     wire cp_undef_trap = executing && instr_is_cp && CPA
                       && !instr_is_cp14
@@ -612,6 +630,14 @@ module arm7tdmis_core_pipelined
     //   [3:0  ] Revision    = 3 (p3)
     localparam logic [31:0] CP15_MAIN_ID = 32'h41429243;
     wire cp15_mrc_id_fires = passes_cond && cp15_mrc_id;
+    wire cp14_mcr_dcc_fires = passes_cond && cp14_mcr_dcc;
+    wire cp14_mrc_dcc_fires = passes_cond && cp14_mrc_dcc;
+
+    // §20: DCC TX write — when MCR p14 c0 commits, push rf_rc_data
+    // (= dec.rd's value, routed via port C above) into the ICE-RT
+    // DCC Data register.
+    assign core_dcc_we    = cp14_mcr_dcc_fires;
+    assign core_dcc_wdata = rf_rc_data;
 
     wire msr_fires   = passes_cond && instr_is_msr;
     wire mrs_fires   = passes_cond && instr_is_mrs;
@@ -868,6 +894,11 @@ module arm7tdmis_core_pipelined
             // §21: MRC p15, 0, Rd, c0, c0, 0 — Main ID Register read.
             rf_write_addr = dec.rd;
             rf_write_data = CP15_MAIN_ID;
+            rf_write_en   = 1'b1;
+        end else if (cp14_mrc_dcc_fires) begin
+            // §20: MRC p14, 0, Rd, c0, c0, 0 — DCC RX read.
+            rf_write_addr = dec.rd;
+            rf_write_data = core_dcc_rdata;
             rf_write_en   = 1'b1;
         end else begin
             rf_write_addr = dec.rd;

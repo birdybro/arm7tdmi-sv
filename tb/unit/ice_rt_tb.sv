@@ -70,8 +70,12 @@ module ice_rt_tb
         .scan_we            (scan_we),
         .scan_addr          (scan_addr),
         .scan_wdata         (scan_wdata),
-        .scan_rdata         (scan_rdata)
+        .scan_rdata         (scan_rdata),
+        .core_dcc_we        (1'b0),
+        .core_dcc_wdata     (32'h0),
+        .core_dcc_rdata     (tb_dcc_rdata)
     );
+    logic [31:0] tb_dcc_rdata;
 
     int errors = 0;
 
@@ -176,7 +180,7 @@ module ice_rt_tb
     end
 
     /* verilator lint_off UNUSEDSIGNAL */
-    wire _unused = &{1'b0, DBGRNG[1], dbg_ack, ifen, core_halt};
+    wire _unused = &{1'b0, DBGRNG[1], dbg_ack, ifen, core_halt, tb_dcc_rdata};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule

@@ -46,7 +46,15 @@ module arm7tdmis_ice_rt
     input  logic        dbg_break_in,      // §22: external DBGBREAK pin
     input  logic        tap_restart_req,   // §22: TAP RESTART instruction
                                             //      pulse (Update-IR with
-                                            //      IR_RESTART loaded)    // DBGEXT[1:0] from outside
+                                            //      IR_RESTART loaded)
+
+    // §20: CP14 DCC data path from/to the core. core_dcc_we/data writes
+    // the DCC Data register (addr 0x04) from the core side (MCR p14 c0);
+    // core_dcc_rd_data exposes the register for the core to read on
+    // MRC p14 c0.
+    input  logic        core_dcc_we,
+    input  logic [31:0] core_dcc_wdata,
+    output logic [31:0] core_dcc_rdata,
 
     // Outputs
     output logic        dbg_break_internal,
@@ -103,14 +111,24 @@ module arm7tdmis_ice_rt
     localparam logic [4:0] WP1_CTRL_VAL  = 5'h14;
     localparam logic [4:0] WP1_CTRL_MASK = 5'h15;
 
-    // Async reset (DBGnTRST) per TRM. Synchronous write port for now.
+    // Async reset (DBGnTRST) per TRM. Two write ports: JTAG scan chain 2
+    // (scan_we) and the core's CP14 DCC TX path (core_dcc_we). Scan wins
+    // on simultaneous writes — the architectural rule is "don't issue
+    // both at once" but we resolve deterministically rather than fault.
+    localparam logic [4:0] DCC_DATA_ADDR = 5'h04;
     always_ff @(posedge CLK or negedge DBGnTRST) begin
         if (!DBGnTRST) begin
             for (int i = 0; i < 32; i = i + 1) regs[i] <= 32'h0;
-        end else if (CLKEN && scan_we) begin
-            regs[scan_addr] <= scan_wdata[31:0];
+        end else if (CLKEN) begin
+            if (scan_we) begin
+                regs[scan_addr] <= scan_wdata[31:0];
+            end else if (core_dcc_we) begin
+                regs[DCC_DATA_ADDR] <= core_dcc_wdata;
+            end
         end
     end
+
+    assign core_dcc_rdata = regs[DCC_DATA_ADDR];
 
     // §30.22.6: 2-flop synchronizer for asynchronous DBGRQ. The external
     // DBGRQ pin can fire any time relative to CLK; metastability mitigated
