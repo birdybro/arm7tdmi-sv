@@ -23,15 +23,37 @@ module arm7tdmis_thumb_decoder
     output logic        is_unimplemented
 );
 
-    // ---- Format detection (priority order) ----
-    wire is_fmt3 = (thumb_instr[15:13] == 3'b001);                 // MOV/CMP/ADD/SUB imm
-    wire is_fmt5_bx = (thumb_instr[15:8] == 8'b0100_0111);          // BX (also BLX in v5)
+    // ---- Format detection (priority order matters: Format 2 is a more
+    //      specific subset of the bits-13:11=000 region than Format 1) ----
+    wire is_fmt2     = (thumb_instr[15:11] == 5'b00011);            // ADD/SUB reg/imm
+    wire is_fmt1     = (thumb_instr[15:13] == 3'b000) && !is_fmt2;  // MOV shifted reg
+    wire is_fmt3     = (thumb_instr[15:13] == 3'b001);              // MOV/CMP/ADD/SUB imm
+    wire is_fmt5_bx  = (thumb_instr[15:8] == 8'b0100_0111);          // BX (also BLX in v5)
+    wire is_fmt18_b  = (thumb_instr[15:11] == 5'b11100);            // B unconditional
 
     // ---- Field extraction ----
-    wire [1:0]  fmt3_op   = thumb_instr[12:11];
-    wire [2:0]  fmt3_rd   = thumb_instr[10:8];
-    wire [7:0]  fmt3_imm8 = thumb_instr[7:0];
-    wire [3:0]  fmt5_rm   = thumb_instr[6:3];
+    wire [1:0]  fmt1_op    = thumb_instr[12:11];      // 00=LSL 01=LSR 10=ASR
+    wire [4:0]  fmt1_imm5  = thumb_instr[10:6];
+    wire [2:0]  fmt1_rs    = thumb_instr[5:3];
+    wire [2:0]  fmt1_rd    = thumb_instr[2:0];
+
+    wire        fmt2_imm   = thumb_instr[10];          // 0=register, 1=imm3
+    wire        fmt2_op    = thumb_instr[9];           // 0=ADD, 1=SUB
+    wire [2:0]  fmt2_rn3   = thumb_instr[8:6];         // Rn or imm3
+    wire [2:0]  fmt2_rs    = thumb_instr[5:3];
+    wire [2:0]  fmt2_rd    = thumb_instr[2:0];
+
+    wire [1:0]  fmt3_op    = thumb_instr[12:11];
+    wire [2:0]  fmt3_rd    = thumb_instr[10:8];
+    wire [7:0]  fmt3_imm8  = thumb_instr[7:0];
+
+    wire [3:0]  fmt5_rm    = thumb_instr[6:3];
+
+    // Format 18 unsigned offset is bits[10:0]; ARM ARM scales by 2 and
+    // sign-extends to 32 bits. Final branch target = PC + 4 + offset.
+    // We hand the core the 32-bit signed value; the core's
+    // branch_pc_target adds pc_q + 4 (Thumb) or pc_q + 8 (ARM).
+    wire [31:0] fmt18_offset = {{20{thumb_instr[10]}}, thumb_instr[10:0], 1'b0};
 
     // ---- ALU op for Format 3 ----
     function automatic alu_op_e fmt3_alu_op(input logic [1:0] op);
@@ -46,15 +68,50 @@ module arm7tdmis_thumb_decoder
 
     always_comb begin
         dec = '0;
-        dec.cond = COND_AL;     // Thumb data-processing is unconditional
+        dec.cond = COND_AL;     // Thumb DP/branch is unconditional
 
-        if (is_fmt3) begin
+        if (is_fmt1) begin
+            // Format 1: MOV Rd, Rs, <LSL/LSR/ASR> #imm5  (S=1 implicit)
+            dec.instr_class    = INSTR_DP;
+            dec.alu_op         = ALU_MOV;
+            dec.s_bit          = 1'b1;
+            dec.rd             = {1'b0, fmt1_rd};
+            dec.rm             = {1'b0, fmt1_rs};
+            dec.dp_use_imm     = 1'b0;            // operand2 = Rm shifted
+            dec.shifter_op     = shift_op_e'(fmt1_op);
+            dec.shifter_amount = {3'h0, fmt1_imm5};
+            dec.shifter_is_rrx = 1'b0;
+            dec.shifter_use_rs = 1'b0;
+        end else if (is_fmt2) begin
+            // Format 2: ADD/SUB Rd, Rs, {Rn | #imm3}     (S=1 implicit)
+            dec.instr_class    = INSTR_DP;
+            dec.alu_op         = fmt2_op ? ALU_SUB : ALU_ADD;
+            dec.s_bit          = 1'b1;
+            dec.rd             = {1'b0, fmt2_rd};
+            dec.rn             = {1'b0, fmt2_rs};
+            if (fmt2_imm) begin
+                // 3-bit immediate, zero-extended
+                dec.dp_use_imm     = 1'b1;
+                dec.dp_imm_value   = {29'h0, fmt2_rn3};
+                dec.shifter_op     = SHIFT_ROR;
+                dec.shifter_amount = 8'h00;
+            end else begin
+                // Register form: operand2 = Rm = fmt2_rn3 (no shift)
+                dec.rm             = {1'b0, fmt2_rn3};
+                dec.dp_use_imm     = 1'b0;
+                dec.shifter_op     = SHIFT_LSL;
+                dec.shifter_amount = 8'h00;
+            end
+            dec.shifter_is_rrx = 1'b0;
+            dec.shifter_use_rs = 1'b0;
+        end else if (is_fmt3) begin
+            // Format 3: MOV/CMP/ADD/SUB Rd, #imm8        (S=1 implicit)
             dec.instr_class    = INSTR_DP;
             dec.alu_op         = fmt3_alu_op(fmt3_op);
-            dec.s_bit          = 1'b1;                       // Thumb DP always sets flags
-            dec.is_test_op     = (fmt3_op == 2'b01);         // CMP — no Rd write
+            dec.s_bit          = 1'b1;
+            dec.is_test_op     = (fmt3_op == 2'b01);       // CMP — no Rd write
             dec.rd             = {1'b0, fmt3_rd};
-            dec.rn             = {1'b0, fmt3_rd};            // both source and dest = Rd
+            dec.rn             = {1'b0, fmt3_rd};
             dec.dp_use_imm     = 1'b1;
             dec.dp_imm_value   = {24'h0, fmt3_imm8};
             dec.shifter_op     = SHIFT_ROR;
@@ -64,6 +121,13 @@ module arm7tdmis_thumb_decoder
         end else if (is_fmt5_bx) begin
             dec.instr_class = INSTR_BX;
             dec.rm          = fmt5_rm;
+        end else if (is_fmt18_b) begin
+            // Unconditional Thumb branch — target = PC + 4 + offset
+            // The core's branch_pc_target adds pc_q + 4 (when T=1) +
+            // dec.branch_offset, so we just pass the scaled signed offset.
+            dec.instr_class    = INSTR_BRANCH;
+            dec.branch_link    = 1'b0;
+            dec.branch_offset  = fmt18_offset;
         end else begin
             dec.instr_class = INSTR_UNDEF;
         end

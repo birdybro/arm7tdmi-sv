@@ -552,7 +552,10 @@ module arm7tdmis_core
     //   BX:        Rm with LSB cleared (LSB is the new T bit, handled above)
     //   Exception: exc_pc_target_addr (vector for SWI / undef / ...)
     wire [31:0] dp_pc_target     = alu_result;
-    wire [31:0] branch_pc_target = pc_q + 32'd8 + dec.branch_offset;
+    // The architectural "visible PC" is +8 in ARM state and +4 in Thumb
+    // state due to the prefetch pipeline depth. Branch offsets are
+    // relative to that, so add the right value here.
+    wire [31:0] branch_pc_target = pc_q + (cpsr.t ? 32'd4 : 32'd8) + dec.branch_offset;
     wire [31:0] bx_pc_target     = rf_rb_data & 32'hFFFFFFFE;
 
     wire [31:0] pc_target = any_exc_fires   ? exc_pc_target_addr :
