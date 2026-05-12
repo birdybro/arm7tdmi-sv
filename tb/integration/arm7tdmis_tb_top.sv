@@ -232,30 +232,30 @@ module arm7tdmis_tb_top
         $finish;
     end
 
-    // ---- §14 smoke verification ----
-    // Cumulative program now has a proper vector table at 0x00-0x1C, so
-    // all the §7-§13 main code shifts to 0x20+. PC-relative branches keep
-    // their encodings; only the self-loop's MOV PC, #imm changes.
+    // ---- §15 smoke verification ----
+    // §15 tacks an ARM→Thumb→ARM round-trip onto the §14 SWI return
+    // path. SWI handler at 0xA8 (relocated from 0x94 to make room for
+    // the Thumb sequence) and SWI's MOVS PC, LR returns to 0x84.
     //
-    // Vector layout:
-    //   0x00  B 0x20             (skip vectors → main entry)
-    //   0x04  0xE7FFFFFE         (undef vector — illegal pattern)
-    //   0x08  B 0x94             (SWI vector → handler)
-    //   0x0C..0x1C  0xE7FFFFFE   (other vectors not yet wired)
+    // Vector + early-main layout unchanged from §14. New tail at 0x80+:
     //
-    // §7-§13 main runs 0x20..0x7C as before. New §14 tail:
-    //   0x80  SWI #0             → mode=SVC (already), LR=0x84, PC=0x08
-    //   0x84  MOV r4, #50        (proves we returned past the SWI)
-    //   0x88  MOV r15, #0x88     (self-loop)
-    //   0x8C  MOV r12, #13       (BL subroutine — relocated)
-    //   0x90  BX r14
-    //   0x94  MOV r3, #42        (SWI handler — overwrites the
-    //                            0xFF000000 from §7's MOV r3)
-    //   0x98  MOVS PC, LR        (return: CPSR <- SPSR_svc, PC <- LR=0x84)
+    //   0x80  SWI #0
+    //   0x84  MOV r4, #50          (post-SWI marker)
+    //   0x88  ADD r6, r15, #5      (r6 = PC+8+5 = 0x95 — Thumb at 0x94, T=1)
+    //   0x8C  MOV r2, #0x9C        (ARM return target, bit 0 clear)
+    //   0x90  BX r6                (switch to Thumb at 0x94)
+    //   0x94  Thumb MOV r7, #0xAA  (encoded as halfword 0x27AA)
+    //   0x96  Thumb BX r2          (encoded as 0x4710 — back to ARM at 0x9C)
+    //   0x98  (unreachable padding 0x00000000)
+    //   0x9C  MOV r15, #0x9C       (ARM self-loop)
+    //   0xA0  MOV r12, #13         (BL subroutine — relocated)
+    //   0xA4  BX r14
+    //   0xA8  MOV r3, #42          (SWI handler)
+    //   0xAC  MOVS PC, LR
     //
-    // Coverage notes: r3 and r4 get final values from the SWI path, so
-    // their §7 checks are removed below. r14_svc ends at 0x84 (the SWI
-    // return address) rather than 0x38 (the earlier BL return).
+    // §15 overwrites earlier register values: r2 (was 0xFF), r6 (was 5
+    // from LDM), r7 (was 7 from LDM) — checks below adjusted accordingly.
+    // cpsr.t ends at 0 (back in ARM after the Thumb BX r2).
     int unsigned smoke_errors = 0;
 
     task automatic check_reg(input int idx, input logic [31:0] expected, input string name);
@@ -282,14 +282,12 @@ module arm7tdmis_tb_top
                  u_mem.mem[3], u_mem.mem[4]);
         repeat (150) @(posedge CLK);
 
-        // DP-immediate (§7-§8). r3 ends as 42 (SWI handler) and r4 as 50
-        // (post-SWI marker); their original values are exercised on the
-        // way to those final ones but not re-verified at the end.
+        // DP-immediate (§7-§8). r2 / r3 / r4 get overwritten by later
+        // paths; their original values are exercised but not re-verified.
         check_reg(0, 32'h00000005, "r0=5");
         check_reg(1, 32'h00000007, "r1=7");
-        check_reg(2, 32'h000000FF, "r2=0xFF");
 
-        // DP-register (§9). r4-r9: r4/r5/r6/r8 overwritten by §11-§13.
+        // DP-register (§9). r4-r9: r4/r5/r6/r7/r8 overwritten by §11-§15.
         check_reg(9, 32'h00000280, "r9=r0<<r1");
 
         // §11 single-L/S
@@ -299,11 +297,8 @@ module arm7tdmis_tb_top
         check_mem(64, 32'h00000005, "mem[0x100]=STR r0");
         check_mem(65, 32'h00000007, "mem[0x104]=STRB r1");
 
-        // §12 block transfer. STMIA stores r0,r1,r2 to mem[0x200..0x208];
-        // LDMIA loads them back into r6,r7,r8.
+        // §12 block transfer. STMIA stores r0,r1,r2 to mem[0x200..0x208].
         check_reg(5,  32'h00000200, "r5=LDM/STM base 0x200");
-        check_reg(6,  32'h00000005, "r6=LDM[r0] = 5");
-        check_reg(7,  32'h00000007, "r7=LDM[r1] = 7");
         check_reg(8,  32'h000000FF, "r8=LDM[r2] = 0xFF");
         check_mem(129, 32'h00000007, "mem[0x204]=STM r1");
         check_mem(130, 32'h000000FF, "mem[0x208]=STM r2");
@@ -312,14 +307,28 @@ module arm7tdmis_tb_top
         check_reg(12, 32'h00000005, "r12=SWPB old byte from mem[0x200]");
         check_mem(128, 32'h00000007, "mem[0x200]=SWPB wrote r1 byte");
 
-        // §14 SWI. The handler set r3 ← 42, then MOVS PC, LR returned to
-        // 0x84 where r4 ← 50 ran. r14_svc holds the SWI return address.
+        // §14 SWI handler ran (r3 = 42) and we returned past SWI (r4 = 50).
         check_reg(3,  32'h0000002A, "r3=42 (set by SWI handler)");
         check_reg(4,  32'h00000032, "r4=50 (post-SWI marker)");
         check_reg(26, 32'h00000084, "r14_svc=SWI return address 0x84");
 
-        if (u_dut.u_core.pc_q !== 32'h00000088) begin
-            $display("[smoke] FAIL pc_q: expected 0x00000088 (self-loop), got %08x",
+        // §15 Thumb round-trip:
+        //   - r2 overwritten by `MOV r2, #0x9C` (ARM return target)
+        //   - r6 = PC+8+5 = 0x95 (from ADD r6, r15, #5)
+        //   - r7 set in Thumb mode (MOV r7, #0xAA)
+        //   - cpsr.t back to 0 after Thumb BX r2
+        check_reg(2, 32'h0000009C, "r2=Thumb return target");
+        check_reg(6, 32'h00000095, "r6=ARM ADD r6,PC,#5");
+        check_reg(7, 32'h000000AA, "r7=Thumb MOV r7,#0xAA");
+
+        if (u_dut.u_core.cpsr.t !== 1'b0) begin
+            $display("[smoke] FAIL cpsr.t: expected 0 (back in ARM), got %0b",
+                     u_dut.u_core.cpsr.t);
+            smoke_errors = smoke_errors + 1;
+        end
+
+        if (u_dut.u_core.pc_q !== 32'h0000009C) begin
+            $display("[smoke] FAIL pc_q: expected 0x0000009C (self-loop), got %08x",
                      u_dut.u_core.pc_q);
             smoke_errors = smoke_errors + 1;
         end
