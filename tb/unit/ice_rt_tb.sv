@@ -30,6 +30,8 @@ module ice_rt_tb
     logic [1:0]  watch_size;
     logic        watch_tbit;
     logic [1:0]  watch_extern;
+    logic        watch_priv;
+    logic        dbg_rq_in;
 
     logic        dbg_break_internal;
     logic        dbg_ack;
@@ -53,6 +55,8 @@ module ice_rt_tb
         .watch_size         (watch_size),
         .watch_tbit         (watch_tbit),
         .watch_extern       (watch_extern),
+        .watch_priv         (watch_priv),
+        .dbg_rq_in          (dbg_rq_in),
         .dbg_break_internal (dbg_break_internal),
         .dbg_ack            (dbg_ack),
         .ifen               (ifen),
@@ -98,6 +102,8 @@ module ice_rt_tb
         watch_size   = 2'b00;
         watch_tbit   = 1'b0;
         watch_extern = 2'b00;
+        watch_priv   = 1'b1;
+        dbg_rq_in    = 1'b0;
         scan_we      = 1'b0;
         scan_addr    = 5'h0;
         scan_wdata   = 38'h0;

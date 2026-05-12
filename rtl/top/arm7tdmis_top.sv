@@ -133,6 +133,11 @@ module arm7tdmis_top
         .watch_size         (SIZE),
         .watch_tbit         (CPTBIT),
         .watch_extern       (DBGEXT),
+        .watch_priv         (PROT[1]),     // current privilege bit
+        .dbg_rq_in          (DBGRQ),       // §22 sync is a 2-flop synchronizer
+                                            //   inside the macrocell — for now
+                                            //   wired directly (TODO: add the
+                                            //   synchronizer per §30.22.6).
         .dbg_break_internal (ice_dbg_break),
         .dbg_ack            (ice_dbg_ack),
         .ifen               (ice_ifen),
@@ -192,10 +197,10 @@ module arm7tdmis_top
     };
     /* verilator lint_on UNUSEDSIGNAL */
 
-    // ---- Inputs not yet consumed (debug-status pins, until §22) ----
+    // ---- Inputs not yet consumed (DBGBREAK external pin, until §22 FSM) ----
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused_inputs = &{1'b0,
-        DBGEN, DBGRQ, DBGBREAK, DBGEXT
+        DBGBREAK
     };
     /* verilator lint_on UNUSEDSIGNAL */
 

@@ -37,7 +37,10 @@ module arm7tdmis_ice_rt (
     input  logic        watch_nrw,       // 0 = read, 1 = write
     input  logic [1:0]  watch_size,
     input  logic        watch_tbit,
-    input  logic [1:0]  watch_extern,    // DBGEXT[1:0] from outside
+    input  logic [1:0]  watch_extern,
+    input  logic        watch_priv,        // §22: PROT[1] for Debug Status[3]
+    input  logic        dbg_rq_in,         // §22: external DBGRQ pin synced
+                                            //      (used for Debug Status[1])    // DBGEXT[1:0] from outside
 
     // Outputs
     output logic        dbg_break_internal,
@@ -101,7 +104,19 @@ module arm7tdmis_ice_rt (
         end
     end
 
-    assign scan_rdata = regs[scan_addr];
+    // §30.22.5: Debug Status Register (addr 0x01) is read-only and
+    // exposes live signals — TBIT, TRANS[1], IFEN, synced DBGRQ, synced
+    // DBGACK. Override the regs[] read for this address so the debugger
+    // sees current state rather than whatever was written.
+    wire [4:0] dbg_status = {
+        watch_tbit,         // [4] TBIT
+        watch_priv,         // [3] TRANS[1] (privileged mode bit)
+        ifen,               // [2] IFEN
+        dbg_rq_in,          // [1] synced DBGRQ
+        dbg_ack             // [0] synced DBGACK
+    };
+    assign scan_rdata = (scan_addr == 5'h01) ? {27'h0, dbg_status}
+                                              : regs[scan_addr];
 
     // ---- Watchpoint comparator: XNOR-with-mask match (TRM §30.22.2).
     // match[i] = (value_i XNOR input_i) OR mask_i; full match = all bits set.
