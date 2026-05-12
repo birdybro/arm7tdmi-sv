@@ -16,6 +16,7 @@
 ../rtl/datapath/arm7tdmis_multiplier.sv
 ../rtl/decode/arm7tdmis_condition.sv
 ../rtl/decode/arm7tdmis_decoder.sv
+../rtl/decode/arm7tdmis_thumb_decoder.sv
 ../rtl/core/arm7tdmis_psr.sv
 ../rtl/core/arm7tdmis_reset_sync.sv
 ../rtl/core/arm7tdmis_core.sv

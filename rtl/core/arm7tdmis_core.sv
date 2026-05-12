@@ -167,16 +167,36 @@ module arm7tdmis_core
     // In S_FETCH, RDATA is whatever the memory drives (typically 0 or
     // stale) — harmless because the writeback gates suppress commits
     // outside S_EXECUTE.
-    decoded_t dec;
+    //
+    // §15: Two decoders (ARM and Thumb) run in parallel; the active one is
+    // selected by CPSR.T. For Thumb, the relevant halfword within the
+    // 32-bit RDATA depends on pc_q[1] (Thumb instructions are halfword-
+    // aligned, two per word in LE mode).
+    decoded_t dec_arm, dec_thumb, dec;
+    logic     arm_is_dataproc, arm_is_unimplemented;
+    logic     thumb_is_dataproc, thumb_is_unimplemented;
     logic     dec_is_dataproc;
     logic     dec_is_unimplemented;
 
-    arm7tdmis_decoder u_dec (
+    wire [15:0] thumb_instr_word = pc_q[1] ? RDATA[31:16] : RDATA[15:0];
+
+    arm7tdmis_decoder u_arm_dec (
         .instr            (RDATA),
-        .dec              (dec),
-        .is_dataproc      (dec_is_dataproc),
-        .is_unimplemented (dec_is_unimplemented)
+        .dec              (dec_arm),
+        .is_dataproc      (arm_is_dataproc),
+        .is_unimplemented (arm_is_unimplemented)
     );
+
+    arm7tdmis_thumb_decoder u_thumb_dec (
+        .thumb_instr      (thumb_instr_word),
+        .dec              (dec_thumb),
+        .is_dataproc      (thumb_is_dataproc),
+        .is_unimplemented (thumb_is_unimplemented)
+    );
+
+    assign dec                  = cpsr.t ? dec_thumb               : dec_arm;
+    assign dec_is_dataproc      = cpsr.t ? thumb_is_dataproc       : arm_is_dataproc;
+    assign dec_is_unimplemented = cpsr.t ? thumb_is_unimplemented  : arm_is_unimplemented;
 
     // ---- Condition evaluator ----
     logic condition_pass;
@@ -721,13 +741,14 @@ module arm7tdmis_core
                 state_q <= state_next;
 
                 // PC advances at end of EXECUTE — for both 2-state and
-                // 4-state instructions. After S_EXECUTE the next fetch
+                // 4-state instructions. ARM steps +4 (word), Thumb +2
+                // (halfword). After S_EXECUTE the next fetch
                 // (eventually) uses the updated pc_q.
                 if (state_q == S_EXECUTE) begin
                     if (writes_pc) begin
                         pc_q <= pc_target;
                     end else begin
-                        pc_q <= pc_q + 32'd4;
+                        pc_q <= pc_q + (cpsr.t ? 32'd2 : 32'd4);
                     end
                 end
 
@@ -832,9 +853,13 @@ module arm7tdmis_core
 
         unique case (state_q)
             S_FETCH: begin
-                // Drive the opcode fetch address
+                // Drive the opcode fetch address. In Thumb state we read
+                // a halfword (16-bit instruction); in ARM state a word
+                // (32-bit). The memory's lane mux returns the right
+                // halfword to RDATA — the core picks the half per pc_q[1].
                 ADDR  = pc_q;
                 TRANS = 2'(TRANS_N);
+                SIZE  = cpsr.t ? 2'(SIZE_HALFWORD) : 2'(SIZE_WORD);
                 PROT  = {is_priv, 1'b0};
             end
             S_EXECUTE: begin
