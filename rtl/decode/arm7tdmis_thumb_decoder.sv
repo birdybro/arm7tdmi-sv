@@ -30,6 +30,7 @@ module arm7tdmis_thumb_decoder
     wire is_fmt3     = (thumb_instr[15:13] == 3'b001);              // MOV/CMP/ADD/SUB imm
     wire is_fmt4     = (thumb_instr[15:10] == 6'b010000);           // ALU reg-reg
     wire is_fmt5_bx  = (thumb_instr[15:8] == 8'b0100_0111);          // BX (also BLX in v5)
+    wire is_fmt9     = (thumb_instr[15:13] == 3'b011);              // L/S imm offset
     wire is_fmt16_17 = (thumb_instr[15:12] == 4'b1101);             // B-cond / SWI
     wire is_fmt17_swi = is_fmt16_17 && (thumb_instr[11:8] == 4'b1111);
     wire is_fmt16_b  = is_fmt16_17 && !is_fmt17_swi;
@@ -92,6 +93,16 @@ module arm7tdmis_thumb_decoder
     endfunction
 
     wire [3:0]  fmt5_rm    = thumb_instr[6:3];
+
+    // Format 9 (L/S with immediate offset): the 5-bit immediate is
+    // scaled by 4 for word and by 1 for byte.
+    wire        fmt9_byte  = thumb_instr[12];
+    wire        fmt9_load  = thumb_instr[11];
+    wire [4:0]  fmt9_imm5  = thumb_instr[10:6];
+    wire [2:0]  fmt9_rb    = thumb_instr[5:3];
+    wire [2:0]  fmt9_rd    = thumb_instr[2:0];
+    wire [11:0] fmt9_off   = fmt9_byte ? {7'h0, fmt9_imm5}
+                                       : {5'h0, fmt9_imm5, 2'b00};
 
     // Format 18 unsigned offset is bits[10:0]; ARM ARM scales by 2 and
     // sign-extends to 32 bits. Final branch target = PC + 4 + offset.
@@ -207,6 +218,19 @@ module arm7tdmis_thumb_decoder
             dec.shifter_amount = 8'h00;
             dec.shifter_is_rrx = 1'b0;
             dec.shifter_use_rs = 1'b0;
+        end else if (is_fmt9) begin
+            // Format 9: LDR/STR/LDRB/STRB Rd, [Rb, #imm5*(4|1)]
+            //           — pre-indexed, no writeback, no shift on offset.
+            dec.instr_class    = INSTR_LDR_STR;
+            dec.rd             = {1'b0, fmt9_rd};
+            dec.rn             = {1'b0, fmt9_rb};
+            dec.ls_pre_index   = 1'b1;
+            dec.ls_up          = 1'b1;
+            dec.ls_byte        = fmt9_byte;
+            dec.ls_writeback   = 1'b0;
+            dec.ls_load        = fmt9_load;
+            dec.ls_use_imm     = 1'b1;
+            dec.ls_imm_offset  = fmt9_off;
         end else if (is_fmt5_bx) begin
             dec.instr_class = INSTR_BX;
             dec.rm          = fmt5_rm;
