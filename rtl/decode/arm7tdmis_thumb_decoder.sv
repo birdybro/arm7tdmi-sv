@@ -28,6 +28,7 @@ module arm7tdmis_thumb_decoder
     wire is_fmt2     = (thumb_instr[15:11] == 5'b00011);            // ADD/SUB reg/imm
     wire is_fmt1     = (thumb_instr[15:13] == 3'b000) && !is_fmt2;  // MOV shifted reg
     wire is_fmt3     = (thumb_instr[15:13] == 3'b001);              // MOV/CMP/ADD/SUB imm
+    wire is_fmt4     = (thumb_instr[15:10] == 6'b010000);           // ALU reg-reg
     wire is_fmt5_bx  = (thumb_instr[15:8] == 8'b0100_0111);          // BX (also BLX in v5)
     wire is_fmt18_b  = (thumb_instr[15:11] == 5'b11100);            // B unconditional
 
@@ -46,6 +47,46 @@ module arm7tdmis_thumb_decoder
     wire [1:0]  fmt3_op    = thumb_instr[12:11];
     wire [2:0]  fmt3_rd    = thumb_instr[10:8];
     wire [7:0]  fmt3_imm8  = thumb_instr[7:0];
+
+    wire [3:0]  fmt4_op    = thumb_instr[9:6];
+    wire [2:0]  fmt4_rs    = thumb_instr[5:3];
+    wire [2:0]  fmt4_rd    = thumb_instr[2:0];
+
+    // Format 4 op-class helpers.
+    wire fmt4_is_shift = (fmt4_op == 4'b0010) || (fmt4_op == 4'b0011)
+                       || (fmt4_op == 4'b0100) || (fmt4_op == 4'b0111);
+    wire fmt4_is_neg   = (fmt4_op == 4'b1001);
+    wire fmt4_is_test  = (fmt4_op == 4'b1000) || (fmt4_op == 4'b1010)
+                       || (fmt4_op == 4'b1011);
+    wire fmt4_is_mul   = (fmt4_op == 4'b1101);
+
+    function automatic alu_op_e fmt4_alu(input logic [3:0] op);
+        case (op)
+            4'b0000: return ALU_AND;
+            4'b0001: return ALU_EOR;
+            4'b0010, 4'b0011, 4'b0100, 4'b0111: return ALU_MOV;   // shift via register
+            4'b0101: return ALU_ADC;
+            4'b0110: return ALU_SBC;
+            4'b1000: return ALU_TST;
+            4'b1001: return ALU_RSB;     // NEG Rd, Rs = RSB Rd, Rs, #0
+            4'b1010: return ALU_CMP;
+            4'b1011: return ALU_CMN;
+            4'b1100: return ALU_ORR;
+            4'b1110: return ALU_BIC;
+            4'b1111: return ALU_MVN;
+            default: return ALU_MOV;
+        endcase
+    endfunction
+
+    function automatic shift_op_e fmt4_shift(input logic [3:0] op);
+        case (op)
+            4'b0010: return SHIFT_LSL;
+            4'b0011: return SHIFT_LSR;
+            4'b0100: return SHIFT_ASR;
+            4'b0111: return SHIFT_ROR;
+            default: return SHIFT_LSL;
+        endcase
+    endfunction
 
     wire [3:0]  fmt5_rm    = thumb_instr[6:3];
 
@@ -104,6 +145,51 @@ module arm7tdmis_thumb_decoder
             end
             dec.shifter_is_rrx = 1'b0;
             dec.shifter_use_rs = 1'b0;
+        end else if (is_fmt4) begin
+            // Format 4: ALU register-register, Rd op Rs → Rd  (S=1 implicit)
+            dec.s_bit          = 1'b1;
+            dec.is_test_op     = fmt4_is_test;
+            if (fmt4_is_mul) begin
+                // MUL: encoded into our INSTR_MUL path. Operand mapping
+                // matches what the core's MUL execute path expects when
+                // mul_accumulate=0: dec.rn = destination, dec.rm = Rm,
+                // dec.rs = Rs. There's no accumulator.
+                dec.instr_class    = INSTR_MUL;
+                dec.rn             = {1'b0, fmt4_rd};       // destination
+                dec.rd             = {1'b0, fmt4_rd};       // not read (accumulate=0)
+                dec.rm             = {1'b0, fmt4_rd};       // multiplicand
+                dec.rs             = {1'b0, fmt4_rs};       // multiplier
+                dec.mul_accumulate = 1'b0;
+                dec.mul_signed     = 1'b0;
+            end else begin
+                dec.instr_class    = INSTR_DP;
+                dec.alu_op         = fmt4_alu(fmt4_op);
+                dec.rd             = {1'b0, fmt4_rd};
+                if (fmt4_is_shift) begin
+                    // MOV Rd, Rd, <shift> Rs (register-shifted-register)
+                    dec.rm             = {1'b0, fmt4_rd};
+                    dec.rs             = {1'b0, fmt4_rs};
+                    dec.dp_use_imm     = 1'b0;
+                    dec.shifter_op     = fmt4_shift(fmt4_op);
+                    dec.shifter_use_rs = 1'b1;
+                    dec.shifter_amount = 8'h00;
+                end else if (fmt4_is_neg) begin
+                    // NEG Rd, Rs = RSB Rd, Rs, #0
+                    dec.rn             = {1'b0, fmt4_rs};
+                    dec.dp_use_imm     = 1'b1;
+                    dec.dp_imm_value   = 32'h0;
+                    dec.shifter_op     = SHIFT_ROR;
+                    dec.shifter_amount = 8'h00;
+                end else begin
+                    // Plain DP: Rd <- Rd <op> Rs
+                    dec.rn             = {1'b0, fmt4_rd};
+                    dec.rm             = {1'b0, fmt4_rs};
+                    dec.dp_use_imm     = 1'b0;
+                    dec.shifter_op     = SHIFT_LSL;
+                    dec.shifter_amount = 8'h00;
+                end
+                dec.shifter_is_rrx = 1'b0;
+            end
         end else if (is_fmt3) begin
             // Format 3: MOV/CMP/ADD/SUB Rd, #imm8        (S=1 implicit)
             dec.instr_class    = INSTR_DP;
