@@ -124,14 +124,11 @@ module arm7tdmis_top
         .watch_extern       (DBGEXT),
         .dbg_break_internal (ice_dbg_break),
         .DBGRNG             (ice_dbgrng),
-        .scan_we            (1'b0),             // §22 scan-chain-2 wiring deferred
-        .scan_addr          (5'h0),
-        .scan_wdata         (38'h0),
+        .scan_we            (ice_scan_we),
+        .scan_addr          (ice_scan_addr),
+        .scan_wdata         (ice_scan_wdata),
         .scan_rdata         (ice_scan_rdata)
     );
-    /* verilator lint_off UNUSEDSIGNAL */
-    logic [31:0] ice_scan_rdata;
-    /* verilator lint_on UNUSEDSIGNAL */
 
     assign DBGRNG = ice_dbgrng;
 
@@ -147,27 +144,35 @@ module arm7tdmis_top
     wire _unused_ice = &{1'b0, ice_dbg_break};
     /* verilator lint_on UNUSEDSIGNAL */
 
-    // ---- JTAG TAP (§23) ----
+    // ---- JTAG TAP (§23) + Scan chain 2 to EmbeddedICE-RT ----
     ir_e          tap_current_ir;
     logic         tap_in_shift_dr;
     logic         tap_in_update_dr;
     logic         tap_in_capture_dr;
+    logic [4:0]   ice_scan_addr;
+    logic [37:0]  ice_scan_wdata;
+    logic         ice_scan_we;
+    logic [31:0]  ice_scan_rdata;
 
     arm7tdmis_jtag_tap u_tap (
-        .CLK           (CLK),
-        .DBGTCKEN      (DBGTCKEN),
-        .DBGnTRST      (DBGnTRST),
-        .DBGTMS        (DBGTMS),
-        .DBGTDI        (DBGTDI),
-        .DBGTDO        (DBGTDO),
-        .DBGnTDOEN     (DBGnTDOEN),
-        .current_ir    (tap_current_ir),
-        .in_shift_dr   (tap_in_shift_dr),
-        .in_update_dr  (tap_in_update_dr),
-        .in_capture_dr (tap_in_capture_dr)
+        .CLK            (CLK),
+        .DBGTCKEN       (DBGTCKEN),
+        .DBGnTRST       (DBGnTRST),
+        .DBGTMS         (DBGTMS),
+        .DBGTDI         (DBGTDI),
+        .DBGTDO         (DBGTDO),
+        .DBGnTDOEN      (DBGnTDOEN),
+        .current_ir     (tap_current_ir),
+        .in_shift_dr    (tap_in_shift_dr),
+        .in_update_dr   (tap_in_update_dr),
+        .in_capture_dr  (tap_in_capture_dr),
+        .ice_scan_addr  (ice_scan_addr),
+        .ice_scan_wdata (ice_scan_wdata),
+        .ice_scan_we    (ice_scan_we),
+        .ice_scan_rdata (ice_scan_rdata)
     );
 
-    // TAP observers used by §22 EmbeddedICE-RT later — silence lint for now.
+    // TAP observers used by §22 debug FSM later — silence lint for now.
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused_tap = &{1'b0,
         tap_current_ir, tap_in_shift_dr, tap_in_update_dr, tap_in_capture_dr

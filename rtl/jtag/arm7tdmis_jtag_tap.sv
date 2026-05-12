@@ -35,7 +35,15 @@ module arm7tdmis_jtag_tap
     output ir_e         current_ir,
     output logic        in_shift_dr,
     output logic        in_update_dr,
-    output logic        in_capture_dr
+    output logic        in_capture_dr,
+
+    // ---- Scan chain 2 (38-bit) — EmbeddedICE-RT register access.
+    // Active when held IR == INTEST AND scan_n_q == 2. The 38-bit data
+    // is [37]=R/W, [36:32]=addr, [31:0]=data per TRM §30.23.5.
+    output logic [4:0]  ice_scan_addr,    // valid every cycle (= dr_shift_q[36:32])
+    output logic [37:0] ice_scan_wdata,
+    output logic        ice_scan_we,      // pulse high on Update-DR when chain 2 active and R/W=1
+    input  logic [31:0] ice_scan_rdata    // captured at Capture-DR
 );
 
     // ---- 16-state TAP state encoding (IEEE 1149.1 §6.1)
@@ -88,8 +96,15 @@ module arm7tdmis_jtag_tap
     logic [IR_WIDTH-1:0] ir_shift_q;
     logic [IR_WIDTH-1:0] ir_hold_q;       // committed at Update-IR
 
-    // ---- DR shift register (32-bit; sized for IDCODE, BYPASS uses bit 0)
-    logic [31:0] dr_shift_q;
+    // ---- DR shift register (38-bit; sized for scan chain 2. IDCODE and
+    // BYPASS use the low 32 / 1 bits respectively; the upper bits stay at
+    // 0 for those instructions.
+    logic [37:0] dr_shift_q;
+
+    // ---- Scan chain selector (4-bit, set via IR=SCAN_N). Chain numbers
+    // per TRM §30.23.5: 0 reserved, 1 = 33-bit (instruction/data + break),
+    // 2 = 38-bit (EmbeddedICE-RT register access). Default 0 at reset.
+    logic [3:0]  scan_n_q;
 
     // ---- TAP sequential. Async DBGnTRST per IEEE 1149.1.
     always_ff @(posedge CLK or negedge DBGnTRST) begin
@@ -97,7 +112,8 @@ module arm7tdmis_jtag_tap
             tap_q      <= TLR;
             ir_hold_q  <= 4'(IR_IDCODE);   // post-reset latches IDCODE
             ir_shift_q <= 4'b0;
-            dr_shift_q <= 32'h0;
+            dr_shift_q <= 38'h0;
+            scan_n_q   <= 4'h0;
         end else if (DBGTCKEN) begin
             tap_q <= next_state(tap_q, DBGTMS);
 
@@ -119,25 +135,53 @@ module arm7tdmis_jtag_tap
                 CDR: begin
                     // Seed the shift register with the selected DR.
                     unique case (ir_hold_q)
-                        4'(IR_IDCODE): dr_shift_q <= IDCODE_VALUE;
-                        4'(IR_BYPASS): dr_shift_q <= 32'h0;     // single bit 0
-                        4'(IR_SCAN_N): dr_shift_q <= 32'h0;
-                        default:       dr_shift_q <= 32'h0;
+                        4'(IR_IDCODE): dr_shift_q <= {6'h0, IDCODE_VALUE};
+                        4'(IR_BYPASS): dr_shift_q <= 38'h0;
+                        4'(IR_SCAN_N): dr_shift_q <= 38'h0;
+                        4'(IR_INTEST): begin
+                            // Capture current chain state. For chain 2, that's
+                            // the addressed ICE-RT register (with R/W bit and
+                            // addr bits below it indeterminate — capture as 0).
+                            if (scan_n_q == 4'd2)
+                                dr_shift_q <= {6'h0, ice_scan_rdata};
+                            else
+                                dr_shift_q <= 38'h0;
+                        end
+                        default:       dr_shift_q <= 38'h0;
                     endcase
                 end
                 SDR: begin
-                    // Shift LSB-first toward TDO; new TDI shifts in MSB-side.
-                    // BYPASS path is a single bit but the standard requires
-                    // shifting through bit 0 with the rest of the register
-                    // held at 0.
+                    // Shift LSB-first toward TDO; TDI enters at the high bit
+                    // of the active width.
+                    //   IDCODE  : 32-bit width — shift positions [31:1]
+                    //   BYPASS  : 1-bit — single bit through position 0
+                    //   SCAN_N  : 4-bit — shift through bits [3:0]
+                    //   INTEST chain 2: 38-bit — full width
                     unique case (ir_hold_q)
                         4'(IR_IDCODE):
-                            dr_shift_q <= {DBGTDI, dr_shift_q[31:1]};
-                        4'(IR_BYPASS), 4'(IR_SCAN_N):
-                            dr_shift_q <= {31'h0, DBGTDI};
+                            dr_shift_q <= {6'h0, DBGTDI, dr_shift_q[31:1]};
+                        4'(IR_BYPASS):
+                            dr_shift_q <= {37'h0, DBGTDI};
+                        4'(IR_SCAN_N):
+                            dr_shift_q <= {34'h0, DBGTDI, dr_shift_q[3:1]};
+                        4'(IR_INTEST): begin
+                            if (scan_n_q == 4'd2)
+                                dr_shift_q <= {DBGTDI, dr_shift_q[37:1]};
+                            else
+                                dr_shift_q <= {37'h0, DBGTDI};
+                        end
                         default:
-                            dr_shift_q <= {31'h0, DBGTDI};
+                            dr_shift_q <= {37'h0, DBGTDI};
                     endcase
+                end
+                UDR: begin
+                    // Update-DR commits the shift register to the target.
+                    // For IR=SCAN_N, the low 4 bits become the new chain
+                    // selector. For IR=INTEST with chain 2 and the R/W bit
+                    // set, an ICE-RT register write fires (handled
+                    // combinationally via ice_scan_we below).
+                    if (ir_hold_q == 4'(IR_SCAN_N))
+                        scan_n_q <= dr_shift_q[3:0];
                 end
                 default: ;
             endcase
@@ -159,5 +203,14 @@ module arm7tdmis_jtag_tap
     assign in_shift_dr   = (tap_q == SDR);
     assign in_update_dr  = (tap_q == UDR);
     assign in_capture_dr = (tap_q == CDR);
+
+    // ---- Chain 2 outputs to the ICE-RT module.
+    assign ice_scan_addr  = dr_shift_q[36:32];
+    assign ice_scan_wdata = dr_shift_q;
+    assign ice_scan_we    = DBGTCKEN
+                         && (tap_q == UDR)
+                         && (ir_hold_q == 4'(IR_INTEST))
+                         && (scan_n_q == 4'd2)
+                         && dr_shift_q[37];      // R/W=1 (write)
 
 endmodule

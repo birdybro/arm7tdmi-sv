@@ -24,18 +24,26 @@ module jtag_tap_tb
     ir_e  current_ir;
     logic in_shift_dr, in_update_dr, in_capture_dr;
 
+    logic [4:0]  ice_scan_addr;
+    logic [37:0] ice_scan_wdata;
+    logic        ice_scan_we;
+
     arm7tdmis_jtag_tap dut (
-        .CLK           (CLK),
-        .DBGTCKEN      (DBGTCKEN),
-        .DBGnTRST      (DBGnTRST),
-        .DBGTMS        (DBGTMS),
-        .DBGTDI        (DBGTDI),
-        .DBGTDO        (DBGTDO),
-        .DBGnTDOEN     (DBGnTDOEN),
-        .current_ir    (current_ir),
-        .in_shift_dr   (in_shift_dr),
-        .in_update_dr  (in_update_dr),
-        .in_capture_dr (in_capture_dr)
+        .CLK            (CLK),
+        .DBGTCKEN       (DBGTCKEN),
+        .DBGnTRST       (DBGnTRST),
+        .DBGTMS         (DBGTMS),
+        .DBGTDI         (DBGTDI),
+        .DBGTDO         (DBGTDO),
+        .DBGnTDOEN      (DBGnTDOEN),
+        .current_ir     (current_ir),
+        .in_shift_dr    (in_shift_dr),
+        .in_update_dr   (in_update_dr),
+        .in_capture_dr  (in_capture_dr),
+        .ice_scan_addr  (ice_scan_addr),
+        .ice_scan_wdata (ice_scan_wdata),
+        .ice_scan_we    (ice_scan_we),
+        .ice_scan_rdata (32'h0)
     );
 
     int          errors = 0;
@@ -124,7 +132,8 @@ module jtag_tap_tb
     end
 
     /* verilator lint_off UNUSEDSIGNAL */
-    wire _unused = &{1'b0, DBGnTDOEN, in_shift_dr, in_update_dr, in_capture_dr};
+    wire _unused = &{1'b0, DBGnTDOEN, in_shift_dr, in_update_dr, in_capture_dr,
+                     ice_scan_addr, ice_scan_wdata, ice_scan_we};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule
