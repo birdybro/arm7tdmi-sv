@@ -104,13 +104,48 @@ module arm7tdmis_top
         .DBGINSTRVALID (DBGINSTRVALID)
     );
 
-    // ---- Debug status (DBGACK / DBGRNG / DBGCOMM* land with §22 ICE-RT,
-    //      §20 DCC; DBGnEXEC and DBGINSTRVALID are now driven by the core
-    //      directly per §24).
+    // ---- EmbeddedICE-RT (§22 scaffold) ----
+    // Watchpoint comparators only at this milestone — full debug-state
+    // FSM, CHAIN/RANGE coupling, and scan-chain-2 wiring land later.
+    logic       ice_dbg_break;
+    logic [1:0] ice_dbgrng;
+
+    arm7tdmis_ice_rt u_ice (
+        .CLK                (CLK),
+        .CLKEN              (CLKEN),
+        .DBGnTRST           (DBGnTRST),
+        .DBGEN              (DBGEN),
+        .watch_addr         (ADDR),
+        .watch_data         (WRITE ? WDATA : RDATA),
+        .watch_nopc         (PROT[0]),         // PROT[0]=1 → data access
+        .watch_nrw          (WRITE),
+        .watch_size         (SIZE),
+        .watch_tbit         (CPTBIT),
+        .watch_extern       (DBGEXT),
+        .dbg_break_internal (ice_dbg_break),
+        .DBGRNG             (ice_dbgrng),
+        .scan_we            (1'b0),             // §22 scan-chain-2 wiring deferred
+        .scan_addr          (5'h0),
+        .scan_wdata         (38'h0),
+        .scan_rdata         (ice_scan_rdata)
+    );
+    /* verilator lint_off UNUSEDSIGNAL */
+    logic [31:0] ice_scan_rdata;
+    /* verilator lint_on UNUSEDSIGNAL */
+
+    assign DBGRNG = ice_dbgrng;
+
+    // DBGACK and DBGCOMM* still tied off — those land with the debug-state
+    // FSM (§22) and CP14 DCC (§20) respectively.
     assign DBGACK        = 1'b0;
-    assign DBGRNG        = 2'b00;
     assign DBGCOMMTX     = 1'b0;
     assign DBGCOMMRX     = 1'b0;
+
+    // ICE-generated break signal not yet routed back into the core's
+    // debug-entry path (no debug-state FSM yet).
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire _unused_ice = &{1'b0, ice_dbg_break};
+    /* verilator lint_on UNUSEDSIGNAL */
 
     // ---- JTAG TAP (§23) ----
     ir_e          tap_current_ir;
