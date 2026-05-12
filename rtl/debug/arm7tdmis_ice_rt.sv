@@ -246,16 +246,40 @@ module arm7tdmis_ice_rt
                                           watch_extern, watch_tbit);
     wire wp1_enable     = regs[WP1_CTRL_VAL][8];
 
+    // §30.22.3: CHAIN/RANGE coupling. WP1's CHAINOUT (latched) feeds
+    // WP0's CHAIN input. WP1's RANGEOUT (combinational addr+ctrl match)
+    // feeds WP0's RANGE input. Both are qualified by the corresponding
+    // CHAIN/RANGE bits in WP0's control-value register (bits [6] and [7]).
+    //
+    // CHAINOUT latch: write-enabled by WP1's addr+ctrl match, D-input
+    // is WP1's data match. Cleared on WP1 ctrl-val write or DBGnTRST.
+    wire wp1_addr_ctrl_match = wp1_addr_match && wp1_ctrl_match;
+    logic chainout_q;
+    always_ff @(posedge CLK or negedge DBGnTRST) begin
+        if (!DBGnTRST)
+            chainout_q <= 1'b0;
+        else if (CLKEN) begin
+            if (scan_we && (scan_addr == WP1_CTRL_VAL))
+                chainout_q <= 1'b0;            // clear on ctrl-value write
+            else if (wp1_addr_ctrl_match)
+                chainout_q <= wp1_data_match;  // latch full match
+        end
+    end
+    wire rangeout      = wp1_addr_ctrl_match;
+    wire wp0_chain_bit = regs[WP0_CTRL_VAL][6];
+    wire wp0_range_bit = regs[WP0_CTRL_VAL][7];
+    wire wp0_chain_q   = !wp0_chain_bit || chainout_q;
+    wire wp0_range_q   = !wp0_range_bit || rangeout;
+
     // DBGRNG reflects address+control matches *independent of ENABLE* per
     // §30.22.3 — useful for trace, doesn't gate debug entry.
     assign DBGRNG[0] = wp0_addr_match && wp0_ctrl_match;
     assign DBGRNG[1] = wp1_addr_match && wp1_ctrl_match;
 
-    // Full match per WP. CHAIN / RANGE coupling not yet wired — when
-    // enabled together both WP1's chainout latch and WP0's range input
-    // qualify the WP0 match. For now treat each WP independently.
+    // Full match per WP. WP0 incorporates CHAIN/RANGE qualification from
+    // WP1; WP1 has no upstream chain (it's the source of CHAINOUT/RANGEOUT).
     wire wp0_full_match = wp0_addr_match && wp0_data_match && wp0_ctrl_match
-                       && wp0_enable;
+                       && wp0_enable && wp0_chain_q && wp0_range_q;
     wire wp1_full_match = wp1_addr_match && wp1_data_match && wp1_ctrl_match
                        && wp1_enable;
 
