@@ -110,6 +110,8 @@ module arm7tdmis_top
     logic       ice_dbg_break;
     logic [1:0] ice_dbgrng;
 
+    logic ice_dbg_ack;
+
     arm7tdmis_ice_rt u_ice (
         .CLK                (CLK),
         .CLKEN              (CLKEN),
@@ -123,6 +125,7 @@ module arm7tdmis_top
         .watch_tbit         (CPTBIT),
         .watch_extern       (DBGEXT),
         .dbg_break_internal (ice_dbg_break),
+        .dbg_ack            (ice_dbg_ack),
         .DBGRNG             (ice_dbgrng),
         .scan_we            (ice_scan_we),
         .scan_addr          (ice_scan_addr),
@@ -131,10 +134,10 @@ module arm7tdmis_top
     );
 
     assign DBGRNG = ice_dbgrng;
+    assign DBGACK = ice_dbg_ack;
 
-    // DBGACK and DBGCOMM* still tied off — those land with the debug-state
-    // FSM (§22) and CP14 DCC (§20) respectively.
-    assign DBGACK        = 1'b0;
+    // DBGCOMM* still tied off — CP14 DCC (§20) wires those when DCC data
+    // transfer lands.
     assign DBGCOMMTX     = 1'b0;
     assign DBGCOMMRX     = 1'b0;
 

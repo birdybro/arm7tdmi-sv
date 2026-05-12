@@ -41,6 +41,9 @@ module arm7tdmis_ice_rt (
 
     // Outputs
     output logic        dbg_break_internal,
+    output logic        dbg_ack,             // §22: forced via Debug Control[0],
+                                              //      or set by debug state machine
+                                              //      when the FSM lands.
     output logic [1:0]  DBGRNG,
 
     // Scan-chain-2 placeholder — currently tied off in the wrapper that
@@ -170,6 +173,13 @@ module arm7tdmis_ice_rt (
 
     // §30.22.1: DBGEN=0 forces all debug outputs LOW.
     assign dbg_break_internal = DBGEN && (wp0_full_match || wp1_full_match);
+
+    // §30.22.6: DBGACK_pin = ICE_control[0] OR DBGACKI (from debug state
+    // machine). DBGACKI comes in when the FSM lands; for now the
+    // OR-with-zero collapses to just the forced-DBGACK control bit.
+    // Index 0x00 is the Debug Control register.
+    wire ice_dbg_ack_forced = regs[5'h00][0];
+    assign dbg_ack = DBGEN && ice_dbg_ack_forced;
 
     // Scan chain 2 upper bits (R/W flag + 5-bit addr field), DBGEN gating
     // outside the macrocell, and SIZE field (size_in not yet folded into
