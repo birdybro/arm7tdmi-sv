@@ -61,7 +61,17 @@ module arm7tdmis_core_pipelined
     output logic [1:0]  TRANS,
     output logic [31:0] WDATA,
     input  logic [31:0] RDATA,
-    output logic        DMORE
+    output logic        DMORE,
+
+    // §19: Coprocessor handshake (pipeline-following + CPnI)
+    output logic        CPnMREQ,
+    output logic        CPSEQ,
+    output logic        CPnTRANS,
+    output logic        CPnOPC,
+    output logic        CPTBIT,
+    output logic        CPnI,
+    input  logic        CPA,
+    input  logic        CPB
 );
 
     // =====================================================================
@@ -556,6 +566,15 @@ module arm7tdmis_core_pipelined
     wire instr_is_mrs    = (dec.instr_class == INSTR_MRS);
     wire instr_is_undef  = (dec.instr_class == INSTR_UNDEF);
 
+    // §19: coprocessor instructions. With no external coprocessor present,
+    // any of these should trap UNDEF. CPA=1 means "no coprocessor accepted
+    // the instruction" — for our greenfield core (no built-in CP14/CP15
+    // yet), CPA is always 1 from the outside world.
+    wire instr_is_cp = (dec.instr_class == INSTR_CDP)
+                    || (dec.instr_class == INSTR_MCR_MRC)
+                    || (dec.instr_class == INSTR_LDC_STC);
+    wire cp_undef_trap = executing && instr_is_cp && CPA;
+
     wire msr_fires   = passes_cond && instr_is_msr;
     wire mrs_fires   = passes_cond && instr_is_mrs;
     wire msr_to_cpsr = msr_fires && !dec.psr_use_spsr;
@@ -568,7 +587,8 @@ module arm7tdmis_core_pipelined
     wire bx_writes_pc       = passes_cond && instr_is_bx;
     wire swi_fires          = passes_cond && instr_is_swi;
     wire undef_fires        = executing &&
-                              ((condition_pass && instr_is_undef) || cond_is_nv);
+                              ((condition_pass && instr_is_undef) || cond_is_nv
+                               || cp_undef_trap);
 
     wire irq_pending = executing && !nIRQ && !cpsr.i;
     wire fiq_pending = executing && !nFIQ && !cpsr.f;
@@ -1028,6 +1048,34 @@ module arm7tdmis_core_pipelined
 
     assign DMORE = block_active && block_has_more;
 
+    // =====================================================================
+    // §19: Coprocessor pipeline-following signals
+    // =====================================================================
+    //
+    // Per TRM §4 & §30.23.2 these mirror the bus cycle types so an external
+    // coprocessor can shadow the ARM pipeline state machine. CPnI is driven
+    // separately to indicate that the current decode is a coprocessor op.
+    //
+    //   CPnMREQ : active LOW when this cycle is a memory access (TRANS=N|S)
+    //   CPSEQ   : active HIGH when this cycle is sequential (TRANS=S)
+    //   CPnTRANS: active LOW when the access is a data access (not opcode)
+    //   CPnOPC  : active LOW when the access is an opcode fetch
+    //   CPTBIT  : current CPSR.T (state of the executing instruction stream)
+    //   CPnI    : active LOW when the executing instruction is a CP op
+    //              (CDP/MCR/MRC/LDC/STC) — coprocessor inspects CPA/CPB to
+    //              accept or refuse.
+
+    wire trans_is_active = (TRANS == 2'(TRANS_N)) || (TRANS == 2'(TRANS_S));
+    wire trans_is_seq    = (TRANS == 2'(TRANS_S));
+
+    assign CPnMREQ = !trans_is_active;
+    assign CPSEQ   =  trans_is_seq;
+    assign CPnTRANS = !PROT[PROT_BIT_DATA];   // PROT[0]=0 opcode → CPnTRANS=1
+    assign CPnOPC   =  PROT[PROT_BIT_DATA];   // mirror — opcode fetch → CPnOPC=0
+    assign CPTBIT   = cpsr.t;
+    assign CPnI     = !(executing && instr_is_cp);
+
+
     // ---- TB / debug observability ----
     // PC of the most recently committed instruction. Equivalent in spirit
     // to the non-pipelined core's `pc_q`, but updated only on cycles where
@@ -1050,6 +1098,7 @@ module arm7tdmis_core_pipelined
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused = &{1'b0,
         CFGBIGEND,
+        CPB,                              // §19: busy-wait wiring is later
         spsr_valid,
         arm_is_dataproc_w, thumb_is_dataproc_w,
         rf_pc_written,

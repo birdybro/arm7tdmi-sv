@@ -90,16 +90,16 @@ module arm7tdmis_top
         .TRANS     (TRANS),
         .WDATA     (WDATA),
         .RDATA     (RDATA),
-        .DMORE     (DMORE)
+        .DMORE     (DMORE),
+        .CPnMREQ   (CPnMREQ),
+        .CPSEQ     (CPSEQ),
+        .CPnTRANS  (CPnTRANS),
+        .CPnOPC    (CPnOPC),
+        .CPTBIT    (CPTBIT),
+        .CPnI      (CPnI),
+        .CPA       (CPA),
+        .CPB       (CPB)
     );
-
-    // ---- Coprocessor: no external coprocessor (§19 / §30.19.5) ----
-    assign CPnMREQ  = 1'b1;
-    assign CPSEQ    = 1'b0;
-    assign CPnTRANS = 1'b1;
-    assign CPnOPC   = 1'b1;
-    assign CPTBIT   = 1'b0;          // ARM state — Thumb support is §15
-    assign CPnI     = 1'b1;          // not a coprocessor instruction
 
     // ---- Debug status (idle until §22) ----
     assign DBGACK        = 1'b0;
@@ -116,7 +116,6 @@ module arm7tdmis_top
     // ---- Inputs not yet consumed (debug + JTAG, until §22 / §23) ----
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused_inputs = &{1'b0,
-        CPA, CPB,
         DBGEN, DBGRQ, DBGBREAK, DBGEXT,
         DBGTCKEN, DBGTMS, DBGTDI, DBGnTRST
     };
