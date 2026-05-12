@@ -27,6 +27,7 @@ module jtag_tap_tb
     logic [4:0]  ice_scan_addr;
     logic [37:0] ice_scan_wdata;
     logic        ice_scan_we;
+    logic        tap_restart_req;
 
     arm7tdmis_jtag_tap dut (
         .CLK            (CLK),
@@ -40,10 +41,11 @@ module jtag_tap_tb
         .in_shift_dr    (in_shift_dr),
         .in_update_dr   (in_update_dr),
         .in_capture_dr  (in_capture_dr),
-        .ice_scan_addr  (ice_scan_addr),
-        .ice_scan_wdata (ice_scan_wdata),
-        .ice_scan_we    (ice_scan_we),
-        .ice_scan_rdata (32'h0)
+        .ice_scan_addr   (ice_scan_addr),
+        .ice_scan_wdata  (ice_scan_wdata),
+        .ice_scan_we     (ice_scan_we),
+        .ice_scan_rdata  (32'h0),
+        .tap_restart_req (tap_restart_req)
     );
 
     int          errors = 0;
@@ -133,7 +135,7 @@ module jtag_tap_tb
 
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused = &{1'b0, DBGnTDOEN, in_shift_dr, in_update_dr, in_capture_dr,
-                     ice_scan_addr, ice_scan_wdata, ice_scan_we};
+                     ice_scan_addr, ice_scan_wdata, ice_scan_we, tap_restart_req};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule

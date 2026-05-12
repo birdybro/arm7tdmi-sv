@@ -24,7 +24,9 @@
 // keeps ENABLE = 0 and watchpoints disabled. The module produces zero
 // DBGBREAK output and zero DBGRNG until scan plumbing wires in.
 
-module arm7tdmis_ice_rt (
+module arm7tdmis_ice_rt
+    import arm7tdmis_debug_pkg::*;
+(
     input  logic        CLK,
     input  logic        CLKEN,
     input  logic        DBGnTRST,        // active-low async reset of macrocell state
@@ -40,18 +42,24 @@ module arm7tdmis_ice_rt (
     input  logic [1:0]  watch_extern,
     input  logic        watch_priv,        // §22: PROT[1] for Debug Status[3]
     input  logic        dbg_rq_in,         // §22: external DBGRQ pin synced
-                                            //      (used for Debug Status[1])    // DBGEXT[1:0] from outside
+                                            //      (used for Debug Status[1])
+    input  logic        dbg_break_in,      // §22: external DBGBREAK pin
+    input  logic        tap_restart_req,   // §22: TAP RESTART instruction
+                                            //      pulse (Update-IR with
+                                            //      IR_RESTART loaded)    // DBGEXT[1:0] from outside
 
     // Outputs
     output logic        dbg_break_internal,
     output logic        dbg_ack,             // §22: forced via Debug Control[0],
-                                              //      or set by debug state machine
-                                              //      when the FSM lands.
+                                              //      OR set when the debug-state
+                                              //      FSM is in HALTED.
     output logic        ifen,                 // §22: interrupt-enable gate.
                                               //      LOW masks IRQ/FIQ to core.
                                               //      Per TRM §30.22.6 derived
                                               //      from INTDIS (ctrl[2]) and
                                               //      DBGACKI (debug FSM signal).
+    output logic        core_halt,            // §22: HIGH freezes the core
+                                              //      pipeline (debug state).
     output logic [1:0]  DBGRNG,
 
     // Scan-chain-2 placeholder — currently tied off in the wrapper that
@@ -109,11 +117,42 @@ module arm7tdmis_ice_rt (
     // with the standard two-flop chain. Reset shared with the rest of the
     // macrocell (DBGnTRST async clear).
     logic [1:0] dbg_rq_sync_q;
+    logic [1:0] dbg_break_sync_q;
     always_ff @(posedge CLK or negedge DBGnTRST) begin
-        if (!DBGnTRST)        dbg_rq_sync_q <= 2'b00;
-        else if (CLKEN)       dbg_rq_sync_q <= {dbg_rq_sync_q[0], dbg_rq_in};
+        if (!DBGnTRST) begin
+            dbg_rq_sync_q    <= 2'b00;
+            dbg_break_sync_q <= 2'b00;
+        end else if (CLKEN) begin
+            dbg_rq_sync_q    <= {dbg_rq_sync_q[0], dbg_rq_in};
+            dbg_break_sync_q <= {dbg_break_sync_q[0], dbg_break_in};
+        end
     end
-    wire dbg_rq_synced = dbg_rq_sync_q[1];
+    wire dbg_rq_synced    = dbg_rq_sync_q[1];
+    wire dbg_break_synced = dbg_break_sync_q[1];
+
+    // §22 / §30.22.4: Debug-state FSM. Three-state at the architectural
+    // level (RUNNING / HALTED / MONITOR), but our scaffold only implements
+    // the HALTED branch; MONITOR mode (where a debug-abort exception
+    // fires instead of stopping the pipeline) is left for the cycle-
+    // accuracy pass since it overlaps the DABT exception path.
+    //
+    // Entry conditions (any of):
+    //   - dbg_break_internal (WP/VC hit, see above)
+    //   - dbg_break_in (external DBGBREAK pin, synced)
+    //   - DBGRQI = Debug Control[1] OR dbg_rq_synced
+    // All gated by DBGEN.
+    //
+    // Exit: TAP RESTART instruction observed (tap_restart_req pulse).
+    debug_state_e dbg_state_q;
+
+    wire ice_dbgrq_force = regs[5'h00][1];
+    wire dbgrqi          = (ice_dbgrq_force || dbg_rq_synced) && DBGEN;
+    wire halt_entry_req  = DBGEN
+                         && (dbg_break_internal_pre || dbg_break_synced || dbgrqi);
+
+    // dbg_break_internal_pre exists so we can use it BEFORE the wires
+    // below see the FSM output — recursive feedback otherwise.
+    logic dbg_break_internal_pre;
 
     // §30.22.5: Debug Status Register (addr 0x01) is read-only and
     // exposes live signals — TBIT, TRANS[1], IFEN, synced DBGRQ, synced
@@ -219,23 +258,45 @@ module arm7tdmis_ice_rt (
     wire        vec_catch_hit = is_vec_fetch && vector_catch[vec_index];
 
     // §30.22.1: DBGEN=0 forces all debug outputs LOW.
-    assign dbg_break_internal = DBGEN &&
-                                (wp0_full_match || wp1_full_match || vec_catch_hit);
+    // dbg_break_internal_pre is the raw watchpoint/vec-catch hit gated by
+    // DBGEN, used by the FSM entry condition above. dbg_break_internal
+    // (the module output) is the same — kept separate to make the
+    // intent-of-feedback explicit.
+    assign dbg_break_internal_pre = DBGEN &&
+                                    (wp0_full_match || wp1_full_match || vec_catch_hit);
+    assign dbg_break_internal     = dbg_break_internal_pre;
 
-    // §30.22.6: DBGACK_pin = ICE_control[0] OR DBGACKI (from debug state
-    // machine). DBGACKI comes in when the FSM lands; for now the
-    // OR-with-zero collapses to just the forced-DBGACK control bit.
-    // Index 0x00 is the Debug Control register.
+    // ---- Debug-state FSM body
+    always_ff @(posedge CLK or negedge DBGnTRST) begin
+        if (!DBGnTRST) begin
+            dbg_state_q <= DBG_RUNNING;
+        end else if (CLKEN) begin
+            unique case (dbg_state_q)
+                DBG_RUNNING: if (halt_entry_req) dbg_state_q <= DBG_HALTED;
+                DBG_HALTED:  if (tap_restart_req) dbg_state_q <= DBG_RUNNING;
+                DBG_MONITOR: dbg_state_q <= DBG_MONITOR;     // (no FSM transitions yet)
+                default:     dbg_state_q <= DBG_RUNNING;
+            endcase
+        end
+    end
+
+    wire in_debug_halt = (dbg_state_q == DBG_HALTED);
+    assign core_halt   = in_debug_halt;
+
+    // §30.22.6: DBGACK_pin = ICE_control[0] OR DBGACKI. DBGACKI is HIGH
+    // while the debug-state FSM is in HALTED. Index 0x00 is the Debug
+    // Control register.
     wire ice_dbg_ack_forced = regs[5'h00][0];
-    assign dbg_ack = DBGEN && ice_dbg_ack_forced;
+    wire dbgacki            = in_debug_halt;
+    assign dbg_ack = DBGEN && (ice_dbg_ack_forced || dbgacki);
 
-    // §30.22.6: IFEN_to_core = !((INTDIS) | DBGACKI). INTDIS is
-    // Debug Control bit 2. Without the debug FSM the DBGACKI term is 0,
-    // so IFEN is simply !INTDIS. DBGEN=0 disables the entire macrocell
-    // so IFEN reverts to "interrupts enabled" — which matches the
-    // pass-through behavior we want when debug is off.
+    // §30.22.6: IFEN_to_core = !(INTDIS | DBGACKI). Per TRM §5.19.2 on
+    // debug-state entry IRQ/FIQ are forced disabled regardless of
+    // CPSR.I/F — that's the DBGACKI term doing it here. Pending
+    // interrupts at entry are remembered by virtue of the core being
+    // frozen and nIRQ/nFIQ being captured-but-suppressed.
     wire ice_intdis = regs[5'h00][2];
-    assign ifen = !(DBGEN && ice_intdis);
+    assign ifen = !(DBGEN && (ice_intdis || dbgacki));
 
     // Scan chain 2 upper bits (R/W flag + 5-bit addr field), DBGEN gating
     // outside the macrocell, and SIZE field (size_in not yet folded into

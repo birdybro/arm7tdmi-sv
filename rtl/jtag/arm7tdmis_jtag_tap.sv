@@ -43,7 +43,10 @@ module arm7tdmis_jtag_tap
     output logic [4:0]  ice_scan_addr,    // valid every cycle (= dr_shift_q[36:32])
     output logic [37:0] ice_scan_wdata,
     output logic        ice_scan_we,      // pulse high on Update-DR when chain 2 active and R/W=1
-    input  logic [31:0] ice_scan_rdata    // captured at Capture-DR
+    input  logic [31:0] ice_scan_rdata,   // captured at Capture-DR
+
+    // §22 debug-state exit: pulses HIGH on Update-IR when IR=RESTART
+    output logic        tap_restart_req
 );
 
     // ---- 16-state TAP state encoding (IEEE 1149.1 §6.1)
@@ -212,5 +215,12 @@ module arm7tdmis_jtag_tap
                          && (ir_hold_q == 4'(IR_INTEST))
                          && (scan_n_q == 4'd2)
                          && dr_shift_q[37];      // R/W=1 (write)
+
+    // RESTART pulse: when the TAP latches IR=RESTART at Update-IR, signal
+    // the ICE-RT FSM to exit halt. Re-asserts each time the user re-issues
+    // RESTART; ICE-RT FSM takes the rising edge.
+    assign tap_restart_req = DBGTCKEN
+                          && (tap_q == UIR)
+                          && (ir_shift_q == 4'(IR_RESTART));
 
 endmodule

@@ -80,12 +80,19 @@ module arm7tdmis_top
     // is how INTDIS in the Debug Control Register masks interrupts even
     // outside debug state. With DBGEN=0 the ICE drives IFEN=1, so this
     // is a pass-through.
-    wire nIRQ_eff = nIRQ | ~ice_ifen;
-    wire nFIQ_eff = nFIQ | ~ice_ifen;
+    //
+    // core_halt freezes the entire core pipeline by gating its CLKEN:
+    // every internal always_ff in the core is `if (CLKEN) ...`, so a
+    // single AND at the top suffices. The memory model still ticks with
+    // the unmodified CLKEN so a debugger can drive bus accesses via
+    // scan-chain-2 / chain-1 without losing the core's frozen state.
+    wire nIRQ_eff   = nIRQ | ~ice_ifen;
+    wire nFIQ_eff   = nFIQ | ~ice_ifen;
+    wire core_clken = CLKEN && !ice_core_halt;
 
     arm7tdmis_core_pipelined u_core (
         .CLK       (CLK),
-        .CLKEN     (CLKEN),
+        .CLKEN     (core_clken),
         .nRESET    (core_nreset),
         .CFGBIGEND (CFGBIGEND),
         .nIRQ      (nIRQ_eff),
@@ -120,6 +127,8 @@ module arm7tdmis_top
 
     logic ice_dbg_ack;
     logic ice_ifen;
+    logic ice_core_halt;
+    logic tap_restart_req;
 
     arm7tdmis_ice_rt u_ice (
         .CLK                (CLK),
@@ -135,9 +144,12 @@ module arm7tdmis_top
         .watch_extern       (DBGEXT),
         .watch_priv         (PROT[1]),     // current privilege bit
         .dbg_rq_in          (DBGRQ),       // §22: synchronized inside ICE-RT
+        .dbg_break_in       (DBGBREAK),    // §22: synchronized inside ICE-RT
+        .tap_restart_req    (tap_restart_req),
         .dbg_break_internal (ice_dbg_break),
         .dbg_ack            (ice_dbg_ack),
         .ifen               (ice_ifen),
+        .core_halt          (ice_core_halt),
         .DBGRNG             (ice_dbgrng),
         .scan_we            (ice_scan_we),
         .scan_addr          (ice_scan_addr),
@@ -170,21 +182,22 @@ module arm7tdmis_top
     logic [31:0]  ice_scan_rdata;
 
     arm7tdmis_jtag_tap u_tap (
-        .CLK            (CLK),
-        .DBGTCKEN       (DBGTCKEN),
-        .DBGnTRST       (DBGnTRST),
-        .DBGTMS         (DBGTMS),
-        .DBGTDI         (DBGTDI),
-        .DBGTDO         (DBGTDO),
-        .DBGnTDOEN      (DBGnTDOEN),
-        .current_ir     (tap_current_ir),
-        .in_shift_dr    (tap_in_shift_dr),
-        .in_update_dr   (tap_in_update_dr),
-        .in_capture_dr  (tap_in_capture_dr),
-        .ice_scan_addr  (ice_scan_addr),
-        .ice_scan_wdata (ice_scan_wdata),
-        .ice_scan_we    (ice_scan_we),
-        .ice_scan_rdata (ice_scan_rdata)
+        .CLK             (CLK),
+        .DBGTCKEN        (DBGTCKEN),
+        .DBGnTRST        (DBGnTRST),
+        .DBGTMS          (DBGTMS),
+        .DBGTDI          (DBGTDI),
+        .DBGTDO          (DBGTDO),
+        .DBGnTDOEN       (DBGnTDOEN),
+        .current_ir      (tap_current_ir),
+        .in_shift_dr     (tap_in_shift_dr),
+        .in_update_dr    (tap_in_update_dr),
+        .in_capture_dr   (tap_in_capture_dr),
+        .ice_scan_addr   (ice_scan_addr),
+        .ice_scan_wdata  (ice_scan_wdata),
+        .ice_scan_we     (ice_scan_we),
+        .ice_scan_rdata  (ice_scan_rdata),
+        .tap_restart_req (tap_restart_req)
     );
 
     // TAP observers used by §22 debug FSM later — silence lint for now.
@@ -194,11 +207,6 @@ module arm7tdmis_top
     };
     /* verilator lint_on UNUSEDSIGNAL */
 
-    // ---- Inputs not yet consumed (DBGBREAK external pin, until §22 FSM) ----
-    /* verilator lint_off UNUSEDSIGNAL */
-    wire _unused_inputs = &{1'b0,
-        DBGBREAK
-    };
-    /* verilator lint_on UNUSEDSIGNAL */
+    // All major DBG* inputs now consumed; nothing to drain.
 
 endmodule
