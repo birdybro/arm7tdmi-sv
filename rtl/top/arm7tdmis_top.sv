@@ -73,8 +73,8 @@ module arm7tdmis_top
         .core_nreset (core_nreset)
     );
 
-    // ---- Core (§7 — simple non-pipelined model) ----
-    arm7tdmis_core u_core (
+    // ---- Core (§16 — 3-stage Fetch/Decode/Execute pipeline) ----
+    arm7tdmis_core_pipelined u_core (
         .CLK       (CLK),
         .CLKEN     (CLKEN),
         .nRESET    (core_nreset),

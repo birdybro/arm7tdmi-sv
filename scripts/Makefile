@@ -43,9 +43,12 @@ lint:
 lint-tb:
 	$(VERILATOR) --lint-only $(VFLAGS_LINT) --top-module $(TOP_TB) -f $(SIM_F) -f $(TB_F)
 
+RTL_SRCS := $(shell find ../rtl -name '*.sv')
+TB_SRCS  := $(shell find ../tb/integration -name '*.sv')
+
 sim: $(TB_BIN)
 
-$(TB_BIN): $(SIM_F) $(TB_F)
+$(TB_BIN): $(SIM_F) $(TB_F) $(RTL_SRCS) $(TB_SRCS)
 	$(VERILATOR) $(VFLAGS_BUILD) --top-module $(TOP_TB) -f $(SIM_F) -f $(TB_F)
 
 run: sim

@@ -20,5 +20,6 @@
 ../rtl/core/arm7tdmis_psr.sv
 ../rtl/core/arm7tdmis_reset_sync.sv
 ../rtl/core/arm7tdmis_core.sv
+../rtl/core/arm7tdmis_core_pipelined.sv
 
 ../rtl/top/arm7tdmis_top.sv
