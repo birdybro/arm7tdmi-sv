@@ -30,6 +30,9 @@ module arm7tdmis_thumb_decoder
     wire is_fmt3     = (thumb_instr[15:13] == 3'b001);              // MOV/CMP/ADD/SUB imm
     wire is_fmt4     = (thumb_instr[15:10] == 6'b010000);           // ALU reg-reg
     wire is_fmt5_bx  = (thumb_instr[15:8] == 8'b0100_0111);          // BX (also BLX in v5)
+    wire is_fmt16_17 = (thumb_instr[15:12] == 4'b1101);             // B-cond / SWI
+    wire is_fmt17_swi = is_fmt16_17 && (thumb_instr[11:8] == 4'b1111);
+    wire is_fmt16_b  = is_fmt16_17 && !is_fmt17_swi;
     wire is_fmt18_b  = (thumb_instr[15:11] == 5'b11100);            // B unconditional
 
     // ---- Field extraction ----
@@ -214,6 +217,20 @@ module arm7tdmis_thumb_decoder
             dec.instr_class    = INSTR_BRANCH;
             dec.branch_link    = 1'b0;
             dec.branch_offset  = fmt18_offset;
+        end else if (is_fmt16_b) begin
+            // Format 16: conditional B with 8-bit signed offset.
+            // The core's condition unit evaluates dec.cond against CPSR
+            // flags; on fail the branch is skipped (pc_q sequential advance).
+            dec.instr_class    = INSTR_BRANCH;
+            dec.cond           = cond_e'(thumb_instr[11:8]);
+            dec.branch_link    = 1'b0;
+            dec.branch_offset  = {{23{thumb_instr[7]}}, thumb_instr[7:0], 1'b0};
+        end else if (is_fmt17_swi) begin
+            // Format 17: SWI in Thumb mode. SWI handler runs in ARM
+            // state (T=0) per architecture; the §14 exception-entry
+            // path already drives exc_new_cpsr.t = 0.
+            dec.instr_class    = INSTR_SWI;
+            dec.swi_comment    = {16'h0, thumb_instr[7:0]};
         end else begin
             dec.instr_class = INSTR_UNDEF;
         end
