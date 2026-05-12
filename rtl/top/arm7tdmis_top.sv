@@ -9,6 +9,7 @@
 
 module arm7tdmis_top
     import arm7tdmis_bus_pkg::*;
+    import arm7tdmis_debug_pkg::*;
 (
     // Clock, clock-enable, reset, endianness configuration
     input  logic        CLK,
@@ -109,15 +110,37 @@ module arm7tdmis_top
     assign DBGCOMMTX     = 1'b0;
     assign DBGCOMMRX     = 1'b0;
 
-    // ---- JTAG TAP outputs (idle until §23) ----
-    assign DBGTDO    = 1'b0;
-    assign DBGnTDOEN = 1'b1;          // HiZ until the TAP drives
+    // ---- JTAG TAP (§23) ----
+    ir_e          tap_current_ir;
+    logic         tap_in_shift_dr;
+    logic         tap_in_update_dr;
+    logic         tap_in_capture_dr;
 
-    // ---- Inputs not yet consumed (debug + JTAG, until §22 / §23) ----
+    arm7tdmis_jtag_tap u_tap (
+        .CLK           (CLK),
+        .DBGTCKEN      (DBGTCKEN),
+        .DBGnTRST      (DBGnTRST),
+        .DBGTMS        (DBGTMS),
+        .DBGTDI        (DBGTDI),
+        .DBGTDO        (DBGTDO),
+        .DBGnTDOEN     (DBGnTDOEN),
+        .current_ir    (tap_current_ir),
+        .in_shift_dr   (tap_in_shift_dr),
+        .in_update_dr  (tap_in_update_dr),
+        .in_capture_dr (tap_in_capture_dr)
+    );
+
+    // TAP observers used by §22 EmbeddedICE-RT later — silence lint for now.
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire _unused_tap = &{1'b0,
+        tap_current_ir, tap_in_shift_dr, tap_in_update_dr, tap_in_capture_dr
+    };
+    /* verilator lint_on UNUSEDSIGNAL */
+
+    // ---- Inputs not yet consumed (debug-status pins, until §22) ----
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused_inputs = &{1'b0,
-        DBGEN, DBGRQ, DBGBREAK, DBGEXT,
-        DBGTCKEN, DBGTMS, DBGTDI, DBGnTRST
+        DBGEN, DBGRQ, DBGBREAK, DBGEXT
     };
     /* verilator lint_on UNUSEDSIGNAL */
 

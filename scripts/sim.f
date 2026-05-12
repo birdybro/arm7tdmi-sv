@@ -22,4 +22,6 @@
 ../rtl/core/arm7tdmis_core.sv
 ../rtl/core/arm7tdmis_core_pipelined.sv
 
+../rtl/jtag/arm7tdmis_jtag_tap.sv
+
 ../rtl/top/arm7tdmis_top.sv
