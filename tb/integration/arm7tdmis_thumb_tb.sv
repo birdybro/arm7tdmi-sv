@@ -12,11 +12,17 @@
 //   0x40: MOV r1, #5              ; Thumb halfword 0 of word 0x40
 //   0x42: MOV r2, #6              ; Thumb halfword 1 of word 0x40
 //   0x44: ADD r3, r1, r2          ; Thumb halfword 0 of word 0x44 → r3=11
-//   0x46: B-self                  ; Thumb halfword 1 of word 0x44 (0xE7FE)
+//   0x46: BL 0x80 (prefix)        ; Thumb halfword 1 of word 0x44 (0xF000)
+//   0x48: BL 0x80 (suffix)        ; Thumb halfword 0 of word 0x48 (0xF81B)
+//   0x4A..0x7E: padding (unreached)
+//   0x80: MOV r5, #0x42           ; Thumb halfword 0 of word 0x80
+//   0x82: B-self                  ; Thumb halfword 1 of word 0x80 (0xE7FE)
 //
-// The hex file packs two Thumb halfwords per word, little-endian:
-//   word @0x40 = 0x22062105  (halfword0=0x2105 MOV r1,#5; halfword1=0x2206 MOV r2,#6)
-//   word @0x44 = 0xE7FE188B  (halfword0=0x188B ADD r3,r1,r2; halfword1=0xE7FE B-self)
+// Thumb BL combines two 16-bit halfwords. The prefix sets LR =
+// PC_visible + signExt(offsetHi)<<12. The suffix computes target =
+// LR + (offsetLo<<1), saves (suffix_PC + 2) | 1 to LR, branches.
+// For PC_prefix=0x46 → PC_visible=0x4A, target=0x80 → offsetLo=0x1B.
+// After BL: LR = 0x4A | 1 = 0x4B.
 
 `timescale 1ns/1ps
 
@@ -203,9 +209,21 @@ module arm7tdmis_thumb_tb
             errors = errors + 1;
         end
 
-        // pc_q = 0x46 (Thumb B-self halt).
-        if (u_dut.u_core.pc_q !== 32'h00000046) begin
-            $display("[thumb] FAIL pc_q: expected 0x46 (Thumb B-self), got %08x",
+        // Thumb BL handler at 0x80 should have set r5 = 0x42.
+        check_reg(5, 32'h00000042, "r5 = 0x42 from Thumb MOV r5,#0x42 after BL");
+
+        // LR (r14) after BL = address of suffix-next-instr | Thumb bit
+        // = 0x4A | 1 = 0x4B. We're still in SVC mode (reset default), so
+        // r14 banks to regs[26].
+        if (u_dut.u_core.u_regfile.regs[26] !== 32'h0000004B) begin
+            $display("[thumb] FAIL r14_svc (regs[26]): expected 0x4B from Thumb BL, got %08x",
+                     u_dut.u_core.u_regfile.regs[26]);
+            errors = errors + 1;
+        end
+
+        // pc_q = 0x82 (Thumb B-self halt at handler tail).
+        if (u_dut.u_core.pc_q !== 32'h00000082) begin
+            $display("[thumb] FAIL pc_q: expected 0x82 (Thumb B-self), got %08x",
                      u_dut.u_core.pc_q);
             errors = errors + 1;
         end
