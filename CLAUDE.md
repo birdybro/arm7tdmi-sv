@@ -4,11 +4,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Sections §1–§26 substantially complete. Current head implements a working 3-stage Fetch/Decode/Execute pipelined ARM7TDMI-S core (`rtl/core/arm7tdmis_core_pipelined.sv`) with full ARM + Thumb decode coverage; branch/BL/BX; all addressing modes for LDR/STR/LDM/STM/SWP including LDM ^ user-bank (with and without PC-in-list / CPSR-from-SPSR); MUL/MLA/UMULL/SMULL/UMLAL/SMLAL with m-parameter cycle accuracy; ARM↔Thumb interworking; exception entry for SWI/UNDEF/IRQ/FIQ/PABT/DABT with ABORT sampling, writeback suppression, and LDM DABT restart-safety (Rn deferred to S_BLOCK_WB); coprocessor handshake outputs with UNDEF trap for unaccepted instructions; CP14 DCC data transfer; CP15 Main ID Register read; JTAG TAP with IDCODE, scan chain 2 (ICE-RT register R/W) and scan chain 1 (instruction injection — fully wired to core F-stage); EmbeddedICE-RT with WP0/WP1 XNOR+mask comparators, CHAIN/RANGE coupling, Vector Catch, Debug Status, debug-state FSM (HALTED + RESTART), DBGACK + IFEN plumbing, 2-flop DBGRQ/DBGBREAK synchronizers; ETM-facing DBGnEXEC/DBGINSTRVALID; arm7tdmis_chip wrapper with DFT pins; first-pass Cyclone V SDC. §18 bus-cycle overlap eliminated S_DADDR/S_BLOCK_ADDR/S_SWP_RADDR/S_SWP_WADDR. **Cycle accuracy verified end-to-end** against TRM Tables 7-3 through 7-23 by `tb/integration/arm7tdmis_cycles_tb.sv` (26 instructions across all classes): DP imm/shift-imm=1, DP shift-by-reg=2 (S_DP_SHIFT I cycle), MRS/MSR=1, LDR/LDRB/LDRH=3 (S_DDATA+S_LOAD_WB), STR/STRB/STRH=2, SWP=4 (S_SWP_RDATA+S_SWP_WDATA+S_SWP_WB), LDM n=n+2 (S_BLOCK_WB I cycle), STM n=n+1 (Rn writeback folded into last S_BLOCK_DATA — no I cycle), MUL=1+m, MLA=2+m (extra cycle for accumulator add), UMULL/SMULL=2+m, UMLAL/SMLAL=3+m (S_MULL_ACC accumulator-read cycle), B/BL/BX=3 (2S+1N via early_flush_fetch fast-path hijacking the flush cycle's ADDR for non-sequential target fetch).
+**ISA + microarchitecture: complete and cycle-accurate against the TRM.**
 
-Integration test coverage: smoke (§7-§15) + 15 directed tests (UMULL, UMLAL, CP15 Main ID, CP14 DCC round-trip, Vector Catch, DABT for LDR, IRQ, FIQ, LDM-^-PC CPSR restore, PABT, LDM DABT restart, cycle-accuracy harness, SWI exception entry, UNDEF on unaccepted coprocessor, Thumb execution + ARM↔Thumb interworking + Thumb BL). 10 unit tests. All green.
+Sections §1–§26 substantially complete. Current head implements a working 3-stage Fetch/Decode/Execute pipelined ARM7TDMI-S core (`rtl/core/arm7tdmis_core_pipelined.sv`). What's in:
 
-What's left: Quartus FPGA bring-up (out-of-RTL work — toolchain install + part selection + place-and-route iteration); §27 expansion (scan-chain-1 end-to-end JTAG sequence, more edge cases); §28-§29 milestone checklists; possibly an ARM cross-assembler integration to replace hand-encoded .hex files.
+- **ARM ISA (ARMv4T)**: all 15 instruction classes, all 16 DP opcodes, all 4 shifter modes (+RRX), all 16 condition codes, all LDR/STR/LDM/STM/SWP addressing modes including `^` user-bank LDM (with and without PC-in-list / CPSR-from-SPSR), MUL/MLA/UMULL/UMLAL/SMULL/SMLAL with m-parameter cycle accuracy, MRS/MSR (register and immediate, field-masked), SWI, BX.
+- **Thumb (all 19 formats)**: fmt1 shifted-reg, fmt2 ADD/SUB, fmt3 MOV/CMP/ADD/SUB imm8, fmt4 ALU reg-reg, fmt5 hi-register ADD/CMP/MOV + BX, fmt6 PC-rel LDR, fmt7/8 LDR/STR reg-offset and sign-extended, fmt9 LDR/STR imm-offset, fmt10 LDRH/STRH, fmt11 SP-rel LDR/STR, fmt12 load-address (both SP-form and PC-form), fmt13 SP add/sub, fmt14 PUSH/POP, fmt15 LDMIA/STMIA, fmt16 B-cond, fmt17 SWI, fmt18 B uncond, fmt19 BL prefix+suffix.
+- **ARM↔Thumb interworking**: BX both directions; the BX-to-Thumb fast-flush fetch uses the post-BX T-bit so the first halfword after the switch is fetched correctly.
+- **Exceptions** (all 7 r4p3 types, TRM priority order): Reset / UNDEF / SWI / PABT / DABT / IRQ / FIQ. ABORT sampled at fetch landing (`fd_q.pabort`); writeback suppression on data abort; LDM DABT restart-safety (Rn deferred to S_BLOCK_WB).
+- **Coprocessor handshake**: full pin set (CPnMREQ/CPSEQ/CPnTRANS/CPnOPC/CPTBIT/CPnI + CPA/CPB sample); CP14 DCC and CP15 c0 Main ID handled internally; other CPs UNDEF when CPA=1.
+- **EmbeddedICE-RT** (`rtl/debug/arm7tdmis_ice_rt.sv`): WP0/WP1 with XNOR+mask comparators, CHAIN and RANGE coupling, Vector Catch, Debug Status, debug-state FSM (HALTED + RESTART), DBGACK + IFEN, 2-flop DBGRQ/DBGBREAK synchronizers.
+- **JTAG TAP**: 16-state IEEE 1149.1, IDCODE `0x7F1F0F0F`, scan chain 2 (ICE-RT register R/W), scan chain 1 (instruction injection — wired into core F-stage for runtime instruction forcing).
+- **ETM-facing**: DBGnEXEC, DBGINSTRVALID + pipeline-follow shadows.
+- **Chip wrapper**: `arm7tdmis_chip` with DFT pins; first-pass Cyclone V SDC in `scripts/`.
+
+**Cycle accuracy verified end-to-end** against TRM Tables 7-3 through 7-23 by `tb/integration/arm7tdmis_cycles_tb.sv` (26 instructions across all classes): DP imm/shift-imm=1, DP shift-by-reg=2 (S_DP_SHIFT I cycle), MRS/MSR=1, LDR/LDRB/LDRH=3 (S_DDATA+S_LOAD_WB), STR/STRB/STRH=2, SWP=4 (S_SWP_RDATA+S_SWP_WDATA+S_SWP_WB), LDM n=n+2 (S_BLOCK_WB I cycle), STM n=n+1 (Rn writeback folded into last S_BLOCK_DATA — no I cycle), MUL=1+m, MLA=2+m (extra cycle for accumulator add), UMULL/SMULL=2+m, UMLAL/SMLAL=3+m (S_MULL_ACC accumulator-read cycle), B/BL/BX=3 (2S+1N via early_flush_fetch fast-path hijacking the flush cycle's ADDR). §18 bus-cycle overlap eliminated S_DADDR/S_BLOCK_ADDR/S_SWP_RADDR/S_SWP_WADDR; current E-stage FSM has 12 states.
+
+**Verification: 15 integration tests + 10 unit tests, all green, lint clean.** Integration: smoke (§7-§15) + 14 directed tests — UMULL, UMLAL, CP15 Main ID, CP14 DCC round-trip, Vector Catch, DABT for LDR, IRQ, FIQ, LDM-^-PC CPSR restore, PABT, LDM DABT restart, cycle-accuracy harness (26 checks), SWI exception entry, UNDEF on unaccepted coprocessor, Thumb (ARM↔Thumb + BL + fmt5 hi-reg + fmt12 PC-form).
+
+**Not implemented (intentional for r4p3 standalone scope):**
+- External coprocessor data-transfer bodies for LDC/STC/CDP/MCR/MRC outside CP14 DCC + CP15 c0 — UNDEF when CPA=1 is the correct standalone behavior. The handshake pins (CPA/CPB) are exported so a downstream design can attach a real CP and shadow the pipeline.
+- Coprocessor busy-wait loop (stall on CPB=1) — same reason; no external CP to stall on.
+- Quartus place-and-route — toolchain not on the build box yet; planned for §26 FPGA bring-up. RTL is written to Cyclone V conventions (ALM logic, MLAB/M10K BRAM inference, DSP for `*`).
+- Formal verification (SymbiYosys properties) — deferred per TASKS.md §27 until RTL is feature-stable.
+- ARM cross-assembler integration — hand-encoded `.hex` files work fine today and keep dependencies minimal.
+
+**Forbidden additions** (TASKS.md §30.0): no `BKPT`, `BLX`, `CLZ`, Q flag, `MAS[1:0]` (it's `SIZE[1:0]`), `DBGRESTART`, separate `DBGINSTR`. Software breakpoints work via EmbeddedICE-RT pattern matching.
 
 ## Authoritative sources
 
