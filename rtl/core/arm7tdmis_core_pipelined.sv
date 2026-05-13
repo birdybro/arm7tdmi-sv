@@ -228,9 +228,15 @@ module arm7tdmis_core_pipelined
                     // Capture the target as the inflight prefetch this
                     // cycle (ADDR=flush_target_pc, TRANS=N driven below).
                     // Memory latches it at this posedge → RDATA next cycle.
+                    // The next prefetch increment must use the *new* T-bit
+                    // for BX-to-Thumb (otherwise we'd skip the second
+                    // halfword) — BX sets T from rf_rb_data[0]. Other
+                    // early-flush sources don't change T this cycle.
                     inflight_pc_q    <= flush_target_pc;
                     inflight_valid_q <= 1'b1;
-                    fetch_pc_q       <= flush_target_pc + fetch_step;
+                    fetch_pc_q       <= flush_target_pc
+                                     + ((bx_writes_pc ? rf_rb_data[0] : cpsr.t)
+                                        ? 32'd2 : 32'd4);
                 end else begin
                     fetch_pc_q       <= flush_target_pc;
                     inflight_valid_q <= 1'b0;
@@ -501,13 +507,19 @@ module arm7tdmis_core_pipelined
     logic [31:0] sh_result;
     logic        sh_carry_out;
 
-    // DP-imm shifter input uses raw imm8 from the executing instruction.
-    // In the non-pipelined core this came from RDATA[7:0] (RDATA still held
-    // the instruction during S_EXECUTE). Here, RDATA may carry a freshly-
-    // fetched instruction for a different PC entirely, so we use the
-    // latched de_q.instr instead.
+    // DP-imm shifter input. For ARM the raw imm8 lives at instr[7:0]; the
+    // decoder feeds shifter_amount=2*rot4 so the shifter performs the
+    // architectural rotate and produces the shifter-carry the S-bit
+    // path needs. For Thumb the imm is encoded at different bit
+    // positions per format (3 / 13 / etc.), and the Thumb decoder
+    // already extracts it into dp_imm_value with shifter_amount=0
+    // (Thumb has no rotate field). So for Thumb we feed the decoded
+    // value directly — the shifter is then a no-op and carry_out =
+    // carry_in, matching ARMv4T's Thumb DP semantics (Thumb doesn't
+    // affect C from immediates).
     wire [31:0] op2_shifter_in     = dec.dp_use_imm
-                                     ? {24'h0, de_q.instr[7:0]}
+                                     ? (de_q.thumb ? dec.dp_imm_value
+                                                   : {24'h0, de_q.instr[7:0]})
                                      : rf_rb_data;
     wire [7:0]  op2_shifter_amount = dec.shifter_use_rs
                                      ? rf_rc_data[7:0]
