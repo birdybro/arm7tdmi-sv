@@ -285,10 +285,12 @@ module arm7tdmis_cycles_tb
         // SMLAL r10,r11,r0,r1 with r1=2: m=1.
         // TRM Table 7-23: 1S+(m+2)I → 4 cycles E (same as UMLAL).
         check_cycles(32'h00000078, 4, "SMLAL r10,r11,r0,r1 (1S+(m+2)I, m=1 => 4 cyc E)");
+        // SWP r12,r0,[r13]: TRM Table 7-17 = 1S+2N+1I = 4 cycles.
+        check_cycles(32'h0000007C, 4, "SWP r12,r0,[r13] (TRM 1S+2N+1I = 4 cyc)");
         // BL: TRM Table 7-5 = 2S+1N = 3 cycles total (same as B). With
         // the §18 early-flush fast path driving the target onto ADDR
         // same cycle, refill is 2 cycles; LR is written in S_EXEC.
-        check_cycles(32'h0000007C, 3, "BL 0x88 (TRM 2S+1N = 3 cyc)");
+        check_cycles(32'h00000080, 3, "BL 0x8C (TRM 2S+1N = 3 cyc)");
 
         if (errors == 0)
             $display("[cycles] PASS (%0d instructions verified)", record_idx);

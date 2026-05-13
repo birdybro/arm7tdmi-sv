@@ -145,7 +145,8 @@ module arm7tdmis_core_pipelined
         S_BLOCK_WB   = 4'd8,    // LDM/STM Rn-writeback cycle (deferred from
                                  // S_EXEC so abort restart preserves Rn)
         S_DP_SHIFT   = 4'd9,    // §18: DP shift-by-reg I cycle (TRM 1S+1I)
-        S_LOAD_WB    = 4'd10    // §18: LDR/LDRB writeback I cycle (TRM 1S+1N+1I)
+        S_LOAD_WB    = 4'd10,   // §18: LDR/LDRB writeback I cycle (TRM 1S+1N+1I)
+        S_SWP_WB     = 4'd11    // §18: SWP Rd writeback I cycle (TRM 1S+2N+1I)
     } state_e;
 
     state_e state_q;
@@ -714,7 +715,8 @@ module arm7tdmis_core_pipelined
                                      : (block_load_q  ? S_BLOCK_WB : S_EXEC);
             S_BLOCK_WB:   state_next = S_EXEC;
             S_SWP_RDATA:  state_next = S_SWP_WDATA;
-            S_SWP_WDATA:  state_next = S_EXEC;
+            S_SWP_WDATA:  state_next = S_SWP_WB;
+            S_SWP_WB:     state_next = S_EXEC;
             S_MULL_HI:    state_next = S_EXEC;
             S_MUL_BUSY:   state_next = (mul_busy_remaining_q == 3'd1)
                                        ? (mull_active_q ? S_MULL_HI : S_EXEC)
@@ -1010,7 +1012,7 @@ module arm7tdmis_core_pipelined
     // S_DDATA. Suppressed on data abort.
     wire ddata_writes_rd  = (state_q == S_LOAD_WB) && !data_abort_q;
     wire block_writes_ldm = (state_q == S_BLOCK_DATA) && block_load_q && !data_abort_now;
-    wire swp_writes_rd    = (state_q == S_SWP_WDATA) && !data_abort_q;
+    wire swp_writes_rd    = (state_q == S_SWP_WB) && !data_abort_q;
 
     wire [4:0]  swp_byte_shift = {swp_addr_lo_q, 3'b000};
     wire [31:0] swp_byte_val   = (swp_loaded_q >> swp_byte_shift) & 32'h0000_00FF;
@@ -1494,6 +1496,14 @@ module arm7tdmis_core_pipelined
                 // §18: LDR/LDRB writeback I cycle. Bus drives next instr
                 // fetch — addr-class drive in S_DDATA already started
                 // this fetch, so S_LOAD_WB just continues it.
+                ADDR  = fetch_pc_q;
+                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                SIZE  = fetch_size_w;
+                PROT  = {is_priv, 1'b0};
+            end
+            S_SWP_WB: begin
+                // §18: SWP Rd writeback I cycle (TRM 1S+2N+1I). Bus
+                // continues the next-instr fetch started in S_SWP_WDATA.
                 ADDR  = fetch_pc_q;
                 TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
                 SIZE  = fetch_size_w;
