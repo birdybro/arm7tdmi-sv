@@ -32,7 +32,7 @@ RUN_ARTIFACTS  := cycle.csv waves.fst
 
 UNIT_TESTS := regfile psr reset_sync shifter alu multiplier condition decoder jtag_tap ice_rt
 
-INTEG_TESTS := umull umlal cp15_main_id cp14_dcc vector_catch abort irq fiq ldm_pc
+INTEG_TESTS := umull umlal cp15_main_id cp14_dcc vector_catch abort irq fiq ldm_pc pabt
 
 .PHONY: all lint lint-tb sim run wave clean help \
         $(addprefix unit-, $(UNIT_TESTS)) unit
@@ -82,7 +82,7 @@ unit: $(addprefix unit-, $(UNIT_TESTS))
 define INTEG_RULE
 integ-$(1):
 	mkdir -p $$(OBJ_DIR)
-	$$(VERILATOR) $$(VFLAGS_BUILD) -Wno-SYNCASYNCNET \
+	$$(VERILATOR) $$(VFLAGS_BUILD) -Wno-SYNCASYNCNET -Wno-UNOPTFLAT \
 	    --top-module arm7tdmis_$(1)_tb \
 	    --Mdir $$(OBJ_DIR)/integ_$(1) -f $$(SIM_F) \
 	    ../tb/integration/arm7tdmis_memory.sv \
