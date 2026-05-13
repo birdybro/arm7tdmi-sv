@@ -82,9 +82,10 @@ The non-pipelined model had separate `S_DADDR`, `S_BLOCK_ADDR`, `S_SWP_RADDR`, `
 |---|---|---|---|
 | DP, MOV (imm or shift-by-imm), MVN | 1 | S_EXEC | 7-3: 1S |
 | DP shift-by-register | 2 | S_EXEC + S_DP_SHIFT | 7-3: 1S+1I |
-| Branch (B / BL) | 1 in E + flush + 2S refill | S_EXEC | 7-5: 2S+1N |
-| LDR / LDRB | 3 | S_EXEC + S_DDATA + S_LOAD_WB | 7-7: 1S+1N+1I |
-| STR / STRB | 2 | S_EXEC + S_DDATA | 7-9: 1S+1N |
+| MRS / MSR | 1 | S_EXEC | 7-3: 1S |
+| Branch (B / BL / BX) | 3 (incl. 2-cycle refill) | S_EXEC + 2 refill | 7-5: 2S+1N |
+| LDR / LDRB / LDRH / LDRSH / LDRSB | 3 | S_EXEC + S_DDATA + S_LOAD_WB | 7-7: 1S+1N+1I |
+| STR / STRB / STRH | 2 | S_EXEC + S_DDATA | 7-9: 1S+1N |
 | LDR with Rd=PC | 5 | S_EXEC + S_DDATA + S_LOAD_WB + flush + 2S refill | 7-7: 2S+2N+1I |
 | LDM, n regs | n+2 | S_EXEC + S_BLOCK_DATA × n + S_BLOCK_WB | 7-12: 1S+(n-1)S+1N+1I |
 | STM, n regs | n+1 | S_EXEC + S_BLOCK_DATA × n (Rn writeback in last beat) | 7-15: 1S+(n-1)S+1N |
@@ -95,10 +96,11 @@ The non-pipelined model had separate `S_DADDR`, `S_BLOCK_ADDR`, `S_SWP_RADDR`, `
 
 `m` is the multiplier early-termination parameter from `Rs` (1..4 per TRM §7.7).
 
-Two non-obvious cycle-shape decisions:
+Three non-obvious cycle-shape decisions:
 
 - **STM has no I cycle.** TRM Table 7-15 gives STM `n+1` cycles vs LDM's `n+2`. To match, STM commits Rn writeback in the *last* `S_BLOCK_DATA` cycle and transitions directly to `S_EXEC` (skipping `S_BLOCK_WB`). The regfile write port is free that cycle because STM has no load to commit. See `block_stm_does_writeback`.
-- **LDR/LDRB needs S_LOAD_WB.** The "I cycle" in 1S+1N+1I is the regfile-commit cycle for the loaded value — not the data-read cycle (S_DDATA). Naively folding the writeback into S_DDATA gave 2 cycles instead of 3. Splitting it produces TRM-correct timing and naturally accommodates LDR-to-PC (the loaded value drives the flush in S_LOAD_WB).
+- **LDR/LDRB/LDRH needs S_LOAD_WB.** The "I cycle" in 1S+1N+1I is the regfile-commit cycle for the loaded value — not the data-read cycle (S_DDATA). Naively folding the writeback into S_DDATA gave 2 cycles instead of 3. Splitting it produces TRM-correct timing and naturally accommodates LDR-to-PC (the loaded value drives the flush in S_LOAD_WB).
+- **Branch fast-path flush.** On a branch/BX/DP-to-PC the flush fires in an `S_EXEC` cycle where the bus would otherwise drive a now-stale prefetch. The `early_flush_fetch` signal hijacks ADDR=flush_target_pc, TRANS=N for that cycle and captures it as an inflight prefetch — saves the 1-cycle bubble and brings branches to TRM's 2S+1N=3 total. Exception entry (any_exc_fires) is excluded so its multi-step entry sequence is unchanged; LDR-to-PC and LDM-with-PC are also excluded (TRM gives them a longer refill profile that doesn't compress).
 
 ## The `issue_fetch` gate (load-bearing)
 

@@ -263,6 +263,23 @@ module arm7tdmis_cycles_tb
         check_cycles(32'h0000004C, 3, "STM r13!,{r2,r3} (TRM n+1 = 3 cyc)");
         check_cycles(32'h00000050, 3, "LDRB r2,[r13,#4] (1S+1N+1I = 3 cyc E)");
         check_cycles(32'h00000054, 2, "STRB r3,[r13,#4] (1S+1N = 2 cyc E)");
+        // Halfword loads/stores share the same S_DDATA / S_LOAD_WB path
+        // as LDR/STR (TRM Table 7-8/7-10: same 1S+1N+1I / 1S+1N).
+        check_cycles(32'h00000058, 3, "LDRH r4,[r13,#4] (1S+1N+1I = 3 cyc E)");
+        check_cycles(32'h0000005C, 2, "STRH r2,[r13,#4] (1S+1N = 2 cyc E)");
+        // MUL r5,r0,r1 with r1=2: Rs[31:8]=0 so m=1.
+        // TRM Table 7-19: 1S+mI → 1+1 = 2 cycles E.
+        check_cycles(32'h00000060, 2, "MUL r5,r0,r1 (1S+mI, m=1 => 2 cyc E)");
+        // UMULL r6,r7,r0,r1 with r1=2: m=1.
+        // TRM Table 7-21: 1S+(m+1)I → 1+2 = 3 cycles E (1 S_EXEC + 1 S_MUL_BUSY + 1 S_MULL_HI).
+        check_cycles(32'h00000064, 3, "UMULL r6,r7,r0,r1 (1S+(m+1)I, m=1 => 3 cyc E)");
+        // MRS / MSR: single-cycle DP-class (TRM Table 7-3).
+        check_cycles(32'h00000068, 1, "MRS r8,CPSR (1S = 1 cyc E)");
+        check_cycles(32'h0000006C, 1, "MSR CPSR_f,r0 (1S = 1 cyc E)");
+        // Branch: TRM Table 7-5 = 2S+1N = 3 cycles total (the branch's
+        // own S_EXEC + the refill bubble). With the §18 early-flush fast
+        // path driving the target onto ADDR same cycle, refill is 2 cycles.
+        check_cycles(32'h00000070, 3, "B 0x78 (TRM 2S+1N = 3 cyc)");
 
         if (errors == 0)
             $display("[cycles] PASS (%0d instructions verified)", record_idx);

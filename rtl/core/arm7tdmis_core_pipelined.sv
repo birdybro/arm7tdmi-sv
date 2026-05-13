@@ -223,8 +223,17 @@ module arm7tdmis_core_pipelined
                 fd_q             <= '{instr:32'h0, pc:32'h0, thumb:1'b0,
                                   pabort:1'b0, valid:1'b0};
             end else if (flush) begin
-                fetch_pc_q       <= flush_target_pc;
-                inflight_valid_q <= 1'b0;
+                if (early_flush_fetch) begin
+                    // Capture the target as the inflight prefetch this
+                    // cycle (ADDR=flush_target_pc, TRANS=N driven below).
+                    // Memory latches it at this posedge → RDATA next cycle.
+                    inflight_pc_q    <= flush_target_pc;
+                    inflight_valid_q <= 1'b1;
+                    fetch_pc_q       <= flush_target_pc + fetch_step;
+                end else begin
+                    fetch_pc_q       <= flush_target_pc;
+                    inflight_valid_q <= 1'b0;
+                end
                 fd_q.valid       <= 1'b0;
             end else if (dbg_inject_we) begin
                 // §22 scan-chain-1 injection: bypass the F-stage's
@@ -1126,6 +1135,18 @@ module arm7tdmis_core_pipelined
                         && (block_curr_reg_q == 4'd15);
 
     assign flush           = writes_pc_exec || ddata_writes_pc || block_writes_pc;
+
+    // §18 branch fast-path: branches/BX/DP-to-PC trigger their flush during
+    // an S_EXEC cycle, where the bus is otherwise wasted on a prefetch that
+    // will be discarded. Instead, drive ADDR = flush_target_pc with TRANS=N
+    // on that same cycle and capture it as the inflight prefetch — closes a
+    // 1-cycle bubble and brings these to TRM 2S+1N=3 cycles total. Excluded:
+    // exception entry (any_exc_fires) keeps the existing timing because the
+    // TRM entry sequence saves PC/SPSR + drives the vector, with cycle
+    // counts that don't trivially align with a single-cycle fast-flush.
+    // Also excluded: ddata_writes_pc (LDR Rd=PC, TRM 2S+2N+1I, the loaded
+    // value isn't bus-stable in time) and block_writes_pc (LDM with PC).
+    wire early_flush_fetch = writes_pc_exec && !any_exc_fires;
     assign flush_target_pc = ddata_writes_pc ? load_value_q
                            : block_writes_pc ? RDATA
                                              : pc_target_exec;
@@ -1474,6 +1495,21 @@ module arm7tdmis_core_pipelined
             end
             default: ;
         endcase
+
+        // §18 branch fast-path: when a branch/BX/DP-to-PC fires its flush
+        // in a prefetch-driving substate (S_EXEC or S_DP_SHIFT), override
+        // the wasted prefetch with a non-sequential fetch of the target.
+        // Memory captures at this posedge → RDATA next cycle, saving the
+        // 1-cycle bubble that would otherwise re-issue from fetch_pc_q.
+        // Excluded for any_exc_fires and for ddata/block PC writes — their
+        // bus sequences are different (see comment at flush definition).
+        if (early_flush_fetch) begin
+            ADDR  = flush_target_pc;
+            TRANS = 2'(TRANS_N);
+            SIZE  = fetch_size_w;
+            PROT  = {is_priv, 1'b0};
+            WRITE = WRITE_READ;
+        end
     end
 
     assign DMORE = block_active && block_has_more;
