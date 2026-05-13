@@ -48,16 +48,24 @@ The §18 bus-overlap refactor folds this into the E-stage substate FSM (see belo
 
 ## E-stage substate FSM
 
-Nine states:
+Eleven states:
 
 ```
 S_EXEC      — single-cycle execute. Drives the addr-class of any
               memory substate entered this cycle.
-S_DDATA     — LDR/STR data cycle. Drives next instr fetch addr.
+S_DDATA     — LDR/STR data cycle. For LDR, latches the loaded
+              value (load_value_q) and drives the fetch addr-class.
+              For STR, completes the store and drives next fetch.
+S_LOAD_WB   — LDR/LDRB regfile writeback I cycle (TRM 1S+1N+1I).
+              Commits load_value_q to Rd; flushes if Rd=PC.
+S_DP_SHIFT  — Data-processing-with-shift-by-register I cycle
+              (TRM Table 7-3: 1S+1I). Commits the latched
+              shifter+ALU result.
 S_BLOCK_DATA— LDM/STM beat iteration. Drives next beat addr (or
-              next instr fetch on the last beat).
-S_BLOCK_WB  — LDM/STM Rn writeback cycle. Deferred from S_EXEC
-              for DABT restart safety.
+              next instr fetch on the last beat). For STM, also
+              commits Rn writeback on the *last* beat (no I cycle).
+S_BLOCK_WB  — LDM Rd-writeback I cycle (also commits Rn when W=1).
+              STM does *not* enter this state.
 S_SWP_RDATA — SWP read data + drive write addr.
 S_SWP_WDATA — SWP write data + drive next instr fetch.
 S_MULL_HI   — UMULL/SMULL/UMLAL/SMLAL RdHi writeback cycle.
@@ -68,18 +76,29 @@ S_MUL_BUSY  — Multiplier internal cycles (1..4 per the m param).
 
 The non-pipelined model had separate `S_DADDR`, `S_BLOCK_ADDR`, `S_SWP_RADDR`, `S_SWP_WADDR` states for "drive the addr-class" — these are gone now. Their work folded into the *previous* state's bus drive (S_EXEC for the first addr; the iteration state itself for subsequent beats).
 
-### Cycle counts (TRM-aligned)
+### Cycle counts (TRM-aligned, verified by `tb/integration/arm7tdmis_cycles_tb.sv`)
 
-| Instruction | E cycles | Bus cycles total | TRM target |
+| Instruction | E cycles | Substates | TRM Table 7-N |
 |---|---|---|---|
-| DP, MOV, branch | 1 (S_EXEC) | 1 (overlap with next F) | 1S |
-| LDR/STR | 2 (S_EXEC + S_DDATA) | 3 | 1S+1N+1I |
-| SWP | 3 | 4 | 1S+2N+1I |
-| LDM/STM n regs, W=0 | n+1 | n+1 (last beat overlaps fetch) | 1S+(n-1)S+1N+1I |
-| LDM/STM n regs, W=1 | n+1 | n+1 (S_BLOCK_WB overlaps fetch) | same |
-| MUL | 1+m | (depends on m=1..4) | 1S+mI |
-| UMULL/SMULL | 2+m | | 1S+(m+1)I |
-| UMLAL/SMLAL | 3+m | | 1S+(m+1)I + extra acc-read cycle |
+| DP, MOV (imm or shift-by-imm), MVN | 1 | S_EXEC | 7-3: 1S |
+| DP shift-by-register | 2 | S_EXEC + S_DP_SHIFT | 7-3: 1S+1I |
+| Branch (B / BL) | 1 in E + flush + 2S refill | S_EXEC | 7-5: 2S+1N |
+| LDR / LDRB | 3 | S_EXEC + S_DDATA + S_LOAD_WB | 7-7: 1S+1N+1I |
+| STR / STRB | 2 | S_EXEC + S_DDATA | 7-9: 1S+1N |
+| LDR with Rd=PC | 5 | S_EXEC + S_DDATA + S_LOAD_WB + flush + 2S refill | 7-7: 2S+2N+1I |
+| LDM, n regs | n+2 | S_EXEC + S_BLOCK_DATA × n + S_BLOCK_WB | 7-12: 1S+(n-1)S+1N+1I |
+| STM, n regs | n+1 | S_EXEC + S_BLOCK_DATA × n (Rn writeback in last beat) | 7-15: 1S+(n-1)S+1N |
+| SWP | 4 | S_EXEC + S_SWP_RDATA + S_SWP_WDATA + S_LOAD_WB | 7-17: 1S+2N+1I |
+| MUL, MLA | 1+m | S_EXEC + S_MUL_BUSY × m | 7-19: 1S+mI |
+| UMULL / SMULL | 2+m | + S_MULL_HI | 7-21: 1S+(m+1)I |
+| UMLAL / SMLAL | 3+m | + S_MULL_ACC + S_MULL_HI (acc-read cycle) | 7-23: 1S+(m+2)I |
+
+`m` is the multiplier early-termination parameter from `Rs` (1..4 per TRM §7.7).
+
+Two non-obvious cycle-shape decisions:
+
+- **STM has no I cycle.** TRM Table 7-15 gives STM `n+1` cycles vs LDM's `n+2`. To match, STM commits Rn writeback in the *last* `S_BLOCK_DATA` cycle and transitions directly to `S_EXEC` (skipping `S_BLOCK_WB`). The regfile write port is free that cycle because STM has no load to commit. See `block_stm_does_writeback`.
+- **LDR/LDRB needs S_LOAD_WB.** The "I cycle" in 1S+1N+1I is the regfile-commit cycle for the loaded value — not the data-read cycle (S_DDATA). Naively folding the writeback into S_DDATA gave 2 cycles instead of 3. Splitting it produces TRM-correct timing and naturally accommodates LDR-to-PC (the loaded value drives the flush in S_LOAD_WB).
 
 ## The `issue_fetch` gate (load-bearing)
 

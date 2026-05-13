@@ -142,8 +142,10 @@ module arm7tdmis_core_pipelined
         S_MUL_BUSY   = 4'd6,    // §18: multiplier I cycles (early termination m)
         S_MULL_ACC   = 4'd7,    // UMLAL/SMLAL: read RdHi for accumulator,
                                  //              commit RdLo result
-        S_BLOCK_WB   = 4'd8     // LDM/STM Rn-writeback cycle (deferred from
+        S_BLOCK_WB   = 4'd8,    // LDM/STM Rn-writeback cycle (deferred from
                                  // S_EXEC so abort restart preserves Rn)
+        S_DP_SHIFT   = 4'd9,    // §18: DP shift-by-reg I cycle (TRM 1S+1I)
+        S_LOAD_WB    = 4'd10    // §18: LDR/LDRB writeback I cycle (TRM 1S+1N+1I)
     } state_e;
 
     state_e state_q;
@@ -319,6 +321,21 @@ module arm7tdmis_core_pipelined
     logic         block_writeback_q;
     logic [31:0]  block_writeback_addr_q;
     logic [3:0]   block_rn_q;
+
+    // §18 DP shift-by-reg: TRM Table 7-3 says these take 1S+1I = 2 cycles
+    // because reading Rs for the shift amount adds an internal cycle.
+    // Defer commit to S_DP_SHIFT.
+    logic [3:0]   dp_shift_rd_q;
+    logic [31:0]  dp_shift_result_q;
+    logic [3:0]   dp_shift_flags_q;   // {N, Z, C, V} of the ALU result
+    logic         dp_shift_writes_q;
+    logic         dp_shift_flags_we_q;
+    logic         dp_shift_writes_pc_q;
+
+    // §18 LDR/LDRB writeback I cycle. Holds the load value across S_DDATA
+    // → S_LOAD_WB so the regfile commit happens at the architecturally
+    // correct posedge. ls_rd_q already holds the destination.
+    logic [31:0]  load_value_q;
 
     logic [31:0]  swp_addr_q;
     logic [31:0]  swp_store_q;
@@ -624,6 +641,19 @@ module arm7tdmis_core_pipelined
     wire [15:0] block_after_curr = block_remaining_q & ~(16'h1 << block_curr_reg_q);
     wire        block_has_more   = (block_after_curr != 16'h0);
 
+    // §18: STM Rn-writeback path. TRM Table 7-15 gives STM n+1 cycles
+    // (1S+(n-1)S+1N, no I cycle), vs LDM's n+2. To match, STM commits
+    // Rn in the *last* S_BLOCK_DATA cycle and skips S_BLOCK_WB. The
+    // regfile write port is free in that cycle because STM has no load
+    // to commit (block_writes_ldm is gated by block_load_q). Aborts
+    // suppress (preserves Rn for the abort handler — §17 restart).
+    wire block_stm_does_writeback = (state_q == S_BLOCK_DATA)
+                                  && !block_has_more
+                                  && !block_load_q
+                                  && block_writeback_q
+                                  && !data_abort_q
+                                  && !data_abort_now;
+
     wire swp_take_cycle = passes_cond && (dec.instr_class == INSTR_SWP);
 
     // §9d: UMULL/SMULL take an extra cycle in S_MULL_HI to write RdHi.
@@ -647,6 +677,10 @@ module arm7tdmis_core_pipelined
     wire mul_take_busy = passes_cond
                       && (instr_is_mul || (instr_class_is_mull && !dec.mul_accumulate));
 
+    // §18: DP shift-by-register (TRM Table 7-3 row 2) takes 1S+1I = 2
+    // cycles. Detected combinationally; defers the commit to S_DP_SHIFT.
+    wire dp_shift_take_cycle = passes_cond && instr_is_dp && dec.shifter_use_rs;
+
     // E-stage substate transitions. Single-cycle "execute" loops back to
     // S_EXEC; multi-cycle ops take the appropriate substate detour.
     // While in S_EXEC, an invalid de_q (bubble) still loops to S_EXEC —
@@ -659,9 +693,16 @@ module arm7tdmis_core_pipelined
                                      : swp_take_cycle        ? S_SWP_RDATA
                                      : mull_accum_take_cycle ? S_MULL_ACC
                                      : mul_take_busy         ? S_MUL_BUSY
+                                     : dp_shift_take_cycle   ? S_DP_SHIFT
                                                              : S_EXEC;
-            S_DDATA:      state_next = S_EXEC;
-            S_BLOCK_DATA: state_next = block_has_more ? S_BLOCK_DATA : S_BLOCK_WB;
+            S_DDATA:      state_next = ls_load_q ? S_LOAD_WB : S_EXEC;
+            S_LOAD_WB:    state_next = S_EXEC;
+            // STM (block_load_q=0) skips the S_BLOCK_WB cycle: TRM has no
+            // I cycle for STM (Table 7-15: 1S+(n-1)S+1N = n+1 cycles).
+            // LDM still goes through S_BLOCK_WB for the Rd writeback I
+            // cycle (and Rn writeback when W=1).
+            S_BLOCK_DATA: state_next = block_has_more ? S_BLOCK_DATA
+                                     : (block_load_q  ? S_BLOCK_WB : S_EXEC);
             S_BLOCK_WB:   state_next = S_EXEC;
             S_SWP_RDATA:  state_next = S_SWP_WDATA;
             S_SWP_WDATA:  state_next = S_EXEC;
@@ -670,6 +711,7 @@ module arm7tdmis_core_pipelined
                                        ? (mull_active_q ? S_MULL_HI : S_EXEC)
                                        : S_MUL_BUSY;
             S_MULL_ACC:   state_next = S_MUL_BUSY;
+            S_DP_SHIFT:   state_next = S_EXEC;
             default:      state_next = S_EXEC;
         endcase
     end
@@ -821,10 +863,18 @@ module arm7tdmis_core_pipelined
     wire mull_writes_lo   = mull_take_cycle;
     wire mul_writes_flags = (mul_writes_dest || mull_take_cycle) && dec.s_bit;
 
-    wire writes_pc_exec   = dp_writes_pc || branch_writes_pc || bx_writes_pc
+    wire writes_pc_exec   = (dp_writes_pc && !dp_shift_take_cycle)
+                          || ((state_q == S_DP_SHIFT) && dp_shift_writes_pc_q)
+                          || branch_writes_pc || bx_writes_pc
                           || any_exc_fires;
-    wire exec_writes_rf   = dp_writes_dest || branch_link_writes || any_exc_fires;
-    wire writes_flags     = (passes_cond && instr_is_dp && dec.s_bit) || mul_writes_flags;
+    // For DP shift-by-reg, defer the destination + flag commit to
+    // S_DP_SHIFT (TRM 1S+1I cycle accuracy). The flush trigger
+    // writes_pc_exec also gates on this so the PC isn't redirected
+    // a cycle too early.
+    wire exec_writes_rf   = (dp_writes_dest && !dp_shift_take_cycle)
+                         || branch_link_writes || any_exc_fires;
+    wire writes_flags     = (passes_cond && instr_is_dp && dec.s_bit && !dp_shift_take_cycle)
+                         || mul_writes_flags;
 
     // CPSR := SPSR-of-current-mode fires on:
     //   - DP to PC with S=1 (MOVS PC, LR family)
@@ -947,7 +997,9 @@ module arm7tdmis_core_pipelined
     // when the current data cycle aborted; block load writeback suppressed
     // similarly. SWP Rd commit also suppressed if any abort fired during
     // the locked read/write window.
-    wire ddata_writes_rd  = (state_q == S_DDATA) && ls_load_q && !data_abort_now;
+    // §18: LDR/LDRB writeback fires in S_LOAD_WB (TRM 1S+1N+1I), not
+    // S_DDATA. Suppressed on data abort.
+    wire ddata_writes_rd  = (state_q == S_LOAD_WB) && !data_abort_q;
     wire block_writes_ldm = (state_q == S_BLOCK_DATA) && block_load_q && !data_abort_now;
     wire swp_writes_rd    = (state_q == S_SWP_WDATA) && !data_abort_q;
 
@@ -959,7 +1011,7 @@ module arm7tdmis_core_pipelined
     always_comb begin
         if (ddata_writes_rd) begin
             rf_write_addr = ls_rd_q;
-            rf_write_data = load_value;
+            rf_write_data = load_value_q;     // §18 latched at S_DDATA end
             rf_write_en   = 1'b1;
         end else if (block_writes_ldm) begin
             rf_write_addr = block_curr_reg_q;
@@ -986,6 +1038,12 @@ module arm7tdmis_core_pipelined
         end else if (block_does_writeback) begin
             // dec.* is stale by S_BLOCK_WB (de_q advanced); use latched
             // block_rn_q and block_writeback_addr_q snapshotted at S_EXEC.
+            rf_write_addr = block_rn_q;
+            rf_write_data = block_writeback_addr_q;
+            rf_write_en   = 1'b1;
+        end else if (block_stm_does_writeback) begin
+            // STM Rn writeback in the last S_BLOCK_DATA beat — gives
+            // STM the TRM-correct n+1 cycle count (no I cycle).
             rf_write_addr = block_rn_q;
             rf_write_data = block_writeback_addr_q;
             rf_write_en   = 1'b1;
@@ -1026,6 +1084,13 @@ module arm7tdmis_core_pipelined
             rf_write_addr = dec.rd;
             rf_write_data = core_dcc_rdata;
             rf_write_en   = 1'b1;
+        end else if (state_q == S_DP_SHIFT) begin
+            // §18 DP shift-by-reg: commit deferred from S_EXEC. Uses
+            // latched values since dec.* and alu_result have moved on
+            // by this cycle.
+            rf_write_addr = dp_shift_rd_q;
+            rf_write_data = dp_shift_result_q;
+            rf_write_en   = dp_shift_writes_q;
         end else begin
             rf_write_addr = dec.rd;
             rf_write_data = alu_result;
@@ -1033,12 +1098,15 @@ module arm7tdmis_core_pipelined
         end
     end
 
-    wire        flags_from_mul = mul_writes_flags;
-    wire [3:0]  flags_value = flags_from_mul
-                            ? {mul_n_out, mul_z_out, cpsr.c, cpsr.v}
-                            : {alu_n, alu_z, alu_c, alu_v};
-    assign cpsr_write_en   = writes_flags || msr_to_cpsr;
-    assign cpsr_write_data = msr_to_cpsr ? sh_result : {flags_value, 28'h0};
+    wire        flags_from_mul       = mul_writes_flags;
+    wire        flags_from_dp_shift  = (state_q == S_DP_SHIFT) && dp_shift_flags_we_q;
+    wire [3:0]  flags_value          = flags_from_mul
+                                       ? {mul_n_out, mul_z_out, cpsr.c, cpsr.v}
+                                       : {alu_n, alu_z, alu_c, alu_v};
+    assign cpsr_write_en   = writes_flags || msr_to_cpsr || flags_from_dp_shift;
+    assign cpsr_write_data = msr_to_cpsr      ? sh_result
+                           : flags_from_dp_shift ? {dp_shift_flags_q, 28'h0}
+                                                 : {flags_value, 28'h0};
     assign cpsr_write_mask = msr_to_cpsr ? dec.msr_field_mask : 4'b1000;
 
     // =====================================================================
@@ -1053,12 +1121,12 @@ module arm7tdmis_core_pipelined
     // (S_EXEC), load_value (S_DDATA with Rd=PC), or RDATA (S_BLOCK_DATA
     // with current reg = r15).
 
-    wire ddata_writes_pc = (state_q == S_DDATA) && ls_load_q && (ls_rd_q == 4'd15);
+    wire ddata_writes_pc = (state_q == S_LOAD_WB) && (ls_rd_q == 4'd15) && !data_abort_q;
     wire block_writes_pc = (state_q == S_BLOCK_DATA) && block_load_q
                         && (block_curr_reg_q == 4'd15);
 
     assign flush           = writes_pc_exec || ddata_writes_pc || block_writes_pc;
-    assign flush_target_pc = ddata_writes_pc ? load_value
+    assign flush_target_pc = ddata_writes_pc ? load_value_q
                            : block_writes_pc ? RDATA
                                              : pc_target_exec;
 
@@ -1103,6 +1171,13 @@ module arm7tdmis_core_pipelined
                 mull_op_a_q              <= 32'h0;
                 mull_op_b_q              <= 32'h0;
                 mull_signed_q            <= 1'b0;
+                dp_shift_rd_q            <= 4'h0;
+                dp_shift_result_q        <= 32'h0;
+                dp_shift_flags_q         <= 4'h0;
+                dp_shift_writes_q        <= 1'b0;
+                dp_shift_flags_we_q      <= 1'b0;
+                dp_shift_writes_pc_q     <= 1'b0;
+                load_value_q             <= 32'h0;
             end else begin
                 state_q <= state_next;
 
@@ -1209,6 +1284,25 @@ module arm7tdmis_core_pipelined
                 if (state_q == S_MULL_HI ||
                     (state_q == S_MUL_BUSY && state_next == S_EXEC)) begin
                     mull_accumulate_active_q <= 1'b0;
+                end
+
+                // §18 DP shift-by-reg: snapshot the result + control at
+                // S_EXEC end. dec.* will go stale once de_q advances at
+                // the same posedge that exits S_EXEC.
+                if (state_q == S_EXEC && dp_shift_take_cycle) begin
+                    dp_shift_rd_q        <= dec.rd;
+                    dp_shift_result_q    <= alu_result;
+                    dp_shift_flags_q     <= {alu_n, alu_z, alu_c, alu_v};
+                    dp_shift_writes_q    <= dp_writes_dest;
+                    dp_shift_flags_we_q  <= passes_cond && instr_is_dp && dec.s_bit;
+                    dp_shift_writes_pc_q <= dp_writes_pc;
+                end
+
+                // §18 LDR/LDRB: latch the formatted load value at S_DDATA
+                // end so S_LOAD_WB can commit it (RDATA goes stale by
+                // then since the bus is driving the next fetch).
+                if (state_q == S_DDATA && ls_load_q) begin
+                    load_value_q <= load_value;
                 end
             end
         end
@@ -1356,6 +1450,23 @@ module arm7tdmis_core_pipelined
                 // happens via the regfile mux below; bus drives the next
                 // instr fetch addr-class (overlap, same pattern as
                 // S_DDATA-last etc.).
+                ADDR  = fetch_pc_q;
+                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                SIZE  = fetch_size_w;
+                PROT  = {is_priv, 1'b0};
+            end
+            S_DP_SHIFT: begin
+                // §18: DP shift-by-reg I cycle. No data access; bus
+                // drives the next instr fetch (overlap).
+                ADDR  = fetch_pc_q;
+                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                SIZE  = fetch_size_w;
+                PROT  = {is_priv, 1'b0};
+            end
+            S_LOAD_WB: begin
+                // §18: LDR/LDRB writeback I cycle. Bus drives next instr
+                // fetch — addr-class drive in S_DDATA already started
+                // this fetch, so S_LOAD_WB just continues it.
                 ADDR  = fetch_pc_q;
                 TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
                 SIZE  = fetch_size_w;
