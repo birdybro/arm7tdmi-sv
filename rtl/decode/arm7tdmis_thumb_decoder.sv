@@ -29,7 +29,11 @@ module arm7tdmis_thumb_decoder
     wire is_fmt1     = (thumb_instr[15:13] == 3'b000) && !is_fmt2;  // MOV shifted reg
     wire is_fmt3     = (thumb_instr[15:13] == 3'b001);              // MOV/CMP/ADD/SUB imm
     wire is_fmt4     = (thumb_instr[15:10] == 6'b010000);           // ALU reg-reg
-    wire is_fmt5_bx  = (thumb_instr[15:8] == 8'b0100_0111);          // BX (also BLX in v5)
+    wire is_fmt5     = (thumb_instr[15:10] == 6'b010001);            // Hi-reg ADD/CMP/MOV/BX
+    wire is_fmt5_bx  = is_fmt5 && (thumb_instr[9:8] == 2'b11);       // BX
+    wire is_fmt5_hi  = is_fmt5 && (thumb_instr[9:8] != 2'b11);       // ADD / CMP / MOV
+    wire [1:0] fmt5_hi_op = thumb_instr[9:8];                         // 00=ADD 01=CMP 10=MOV
+    wire [3:0] fmt5_hi_rd = {thumb_instr[7], thumb_instr[2:0]};       // {H1, Rd_lo}
     wire is_fmt6     = (thumb_instr[15:11] == 5'b01001);            // PC-rel LDR
     wire is_fmt7_8   = (thumb_instr[15:12] == 4'b0101);             // L/S reg-offset family
     wire is_fmt8     = is_fmt7_8 && thumb_instr[9];                  // halfword/signed
@@ -395,6 +399,20 @@ module arm7tdmis_thumb_decoder
             dec.dp_imm_value   = fmt12_imm;
             dec.shifter_op     = SHIFT_ROR;
             dec.shifter_amount = 8'h00;
+        end else if (is_fmt12 && !fmt12_sp) begin
+            // PC-form load-address: Rd = (PC AND ~3) + imm8<<2 (no flag
+            // update). The dp_pc_align flag tells the core to mask the
+            // r15 read down to word alignment before feeding the ALU.
+            dec.instr_class    = INSTR_DP;
+            dec.alu_op         = ALU_ADD;
+            dec.s_bit          = 1'b0;
+            dec.rd             = {1'b0, fmt12_rd};
+            dec.rn             = 4'd15;                  // PC
+            dec.dp_use_imm     = 1'b1;
+            dec.dp_imm_value   = fmt12_imm;
+            dec.shifter_op     = SHIFT_ROR;
+            dec.shifter_amount = 8'h00;
+            dec.dp_pc_align    = 1'b1;
         end else if (is_fmt13) begin
             // SP += or -= imm7<<2  (no flag update).
             dec.instr_class    = INSTR_DP;
@@ -434,6 +452,40 @@ module arm7tdmis_thumb_decoder
         end else if (is_fmt5_bx) begin
             dec.instr_class = INSTR_BX;
             dec.rm          = fmt5_rm;
+        end else if (is_fmt5_hi) begin
+            // Format 5 hi-register operations:
+            //   ADD Rd, Rm (no flags)     [fmt5_hi_op = 00]
+            //   CMP Rd, Rm (flags only)   [fmt5_hi_op = 01]
+            //   MOV Rd, Rm (no flags)     [fmt5_hi_op = 10]
+            // Rd combines H1 (bit[7]) with low 3 bits; Rm combines H2
+            // (bit[6]) with bits[5:3] — fmt5_rm is already the full
+            // 4-bit value. ARMv4T requires at least one of H1/H2 set;
+            // (H1==0 && H2==0) is UNPREDICTABLE — the encoding aliases
+            // a low-register op that should have been format 4 instead.
+            dec.instr_class    = INSTR_DP;
+            dec.rd             = fmt5_hi_rd;
+            dec.rn             = fmt5_hi_rd;
+            dec.rm             = fmt5_rm;
+            dec.dp_use_imm     = 1'b0;
+            dec.shifter_op     = SHIFT_LSL;
+            dec.shifter_amount = 8'h00;
+            dec.shifter_use_rs = 1'b0;
+            unique case (fmt5_hi_op)
+                2'b00: begin                              // ADD
+                    dec.alu_op     = ALU_ADD;
+                    dec.s_bit      = 1'b0;
+                end
+                2'b01: begin                              // CMP
+                    dec.alu_op     = ALU_CMP;
+                    dec.s_bit      = 1'b1;
+                    dec.is_test_op = 1'b1;
+                end
+                2'b10: begin                              // MOV
+                    dec.alu_op     = ALU_MOV;
+                    dec.s_bit      = 1'b0;
+                end
+                default: ;                                // 11 = BX (handled above)
+            endcase
         end else if (is_fmt18_b) begin
             // Unconditional Thumb branch — target = PC + 4 + offset
             // The core's branch_pc_target adds pc_q + 4 (when T=1) +

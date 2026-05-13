@@ -15,8 +15,10 @@
 //   0x46: BL 0x80 (prefix)        ; Thumb halfword 1 of word 0x44 (0xF000)
 //   0x48: BL 0x80 (suffix)        ; Thumb halfword 0 of word 0x48 (0xF81B)
 //   0x4A..0x7E: padding (unreached)
-//   0x80: MOV r5, #0x42           ; Thumb halfword 0 of word 0x80
-//   0x82: B-self                  ; Thumb halfword 1 of word 0x80 (0xE7FE)
+//   0x80: MOV r5, #0x42           ; format-3 MOV imm
+//   0x82: MOV r10, r5             ; format-5 hi-reg MOV (H1=1)
+//   0x84: ADD r6, PC, #0x10       ; format-12 PC-form load-addr
+//   0x86: B-self                  ; halt
 //
 // Thumb BL combines two 16-bit halfwords. The prefix sets LR =
 // PC_visible + signExt(offsetHi)<<12. The suffix computes target =
@@ -212,6 +214,14 @@ module arm7tdmis_thumb_tb
         // Thumb BL handler at 0x80 should have set r5 = 0x42.
         check_reg(5, 32'h00000042, "r5 = 0x42 from Thumb MOV r5,#0x42 after BL");
 
+        // Thumb format-5 hi-reg MOV at 0x82: r10 ← r5 = 0x42.
+        check_reg(10, 32'h00000042, "r10 = 0x42 from Thumb hi-reg MOV r10,r5");
+
+        // Thumb format-12 PC-form ADD at 0x84: r6 = (PC AND ~3) + 0x10.
+        // PC at 0x84 in Thumb reads as 0x84 + 4 = 0x88, already word-aligned.
+        // r6 = 0x88 + 0x10 = 0x98.
+        check_reg(6, 32'h00000098, "r6 = 0x98 from Thumb fmt12 ADD r6,PC,#0x10");
+
         // LR (r14) after BL = address of suffix-next-instr | Thumb bit
         // = 0x4A | 1 = 0x4B. We're still in SVC mode (reset default), so
         // r14 banks to regs[26].
@@ -221,9 +231,9 @@ module arm7tdmis_thumb_tb
             errors = errors + 1;
         end
 
-        // pc_q = 0x82 (Thumb B-self halt at handler tail).
-        if (u_dut.u_core.pc_q !== 32'h00000082) begin
-            $display("[thumb] FAIL pc_q: expected 0x82 (Thumb B-self), got %08x",
+        // pc_q = 0x86 (Thumb B-self halt at handler tail).
+        if (u_dut.u_core.pc_q !== 32'h00000086) begin
+            $display("[thumb] FAIL pc_q: expected 0x86 (Thumb B-self), got %08x",
                      u_dut.u_core.pc_q);
             errors = errors + 1;
         end

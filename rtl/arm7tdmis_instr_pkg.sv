@@ -77,6 +77,10 @@ package arm7tdmis_instr_pkg;
                                       //       directly as op_b. Used for Thumb BL
                                       //       prefix where the addend (hi << 12)
                                       //       can't be expressed as imm8 ROR.
+        logic         dp_pc_align;   // §15.12 Thumb fmt12 PC-form: read Rn=15
+                                      //       and mask bits[1:0] to force a
+                                      //       word-aligned base (TRM/ARM ARM
+                                      //       "PC AND ~3" for ADD Rd, PC, #imm).
         logic [31:0]  dp_imm_value;  // imm8 ROR (2*rot4) — DP-imm path
         shift_op_e    shifter_op;
         logic [7:0]   shifter_amount;

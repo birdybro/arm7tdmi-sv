@@ -542,9 +542,17 @@ module arm7tdmis_core_pipelined
 
     wire [31:0] alu_op_b = dec.dp_use_raw_imm ? dec.dp_imm_value : sh_result;
 
+    // §15.12 Thumb fmt12 PC-form (ADD Rd, PC, #imm8<<2): the architectural
+    // semantics force the PC base to word alignment ("PC AND ~3"). The
+    // regfile already adds the +4 Thumb pipeline offset for r15 reads, so
+    // we just mask bits[1:0] here. For all other DP ops (and ARM in
+    // general) dp_pc_align is 0 and op_a passes through unchanged.
+    wire [31:0] alu_op_a = dec.dp_pc_align ? (rf_ra_data & 32'hFFFFFFFC)
+                                            : rf_ra_data;
+
     arm7tdmis_alu u_alu (
         .op            (dec.alu_op),
-        .op_a          (rf_ra_data),
+        .op_a          (alu_op_a),
         .op_b          (alu_op_b),
         .cpsr_c        (cpsr.c),
         .shifter_carry (sh_carry_out),
