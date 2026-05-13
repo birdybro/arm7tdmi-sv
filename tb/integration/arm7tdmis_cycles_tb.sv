@@ -276,10 +276,19 @@ module arm7tdmis_cycles_tb
         // MRS / MSR: single-cycle DP-class (TRM Table 7-3).
         check_cycles(32'h00000068, 1, "MRS r8,CPSR (1S = 1 cyc E)");
         check_cycles(32'h0000006C, 1, "MSR CPSR_f,r0 (1S = 1 cyc E)");
-        // Branch: TRM Table 7-5 = 2S+1N = 3 cycles total (the branch's
-        // own S_EXEC + the refill bubble). With the §18 early-flush fast
-        // path driving the target onto ADDR same cycle, refill is 2 cycles.
-        check_cycles(32'h00000070, 3, "B 0x78 (TRM 2S+1N = 3 cyc)");
+        // MLA r9,r0,r1,r5 with r1=2: m=1.
+        // TRM Table 7-19: 1S+(m+1)I → 1+2 = 3 cycles E.
+        check_cycles(32'h00000070, 3, "MLA r9,r0,r1,r5 (1S+(m+1)I, m=1 => 3 cyc E)");
+        // SMULL r10,r11,r0,r1 with r1=2: m=1.
+        // TRM Table 7-21: 1S+(m+1)I → 3 cycles E (same as UMULL).
+        check_cycles(32'h00000074, 3, "SMULL r10,r11,r0,r1 (1S+(m+1)I, m=1 => 3 cyc E)");
+        // SMLAL r10,r11,r0,r1 with r1=2: m=1.
+        // TRM Table 7-23: 1S+(m+2)I → 4 cycles E (same as UMLAL).
+        check_cycles(32'h00000078, 4, "SMLAL r10,r11,r0,r1 (1S+(m+2)I, m=1 => 4 cyc E)");
+        // BL: TRM Table 7-5 = 2S+1N = 3 cycles total (same as B). With
+        // the §18 early-flush fast path driving the target onto ADDR
+        // same cycle, refill is 2 cycles; LR is written in S_EXEC.
+        check_cycles(32'h0000007C, 3, "BL 0x88 (TRM 2S+1N = 3 cyc)");
 
         if (errors == 0)
             $display("[cycles] PASS (%0d instructions verified)", record_idx);

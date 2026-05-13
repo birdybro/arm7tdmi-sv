@@ -1288,11 +1288,17 @@ module arm7tdmis_core_pipelined
                     mul_busy_remaining_q <= mul_cycle_count;
                 end
 
-                // §18: at S_EXEC end for MUL/MULL non-accumulate, latch
-                // the m parameter and whether this is a long form so the
-                // FSM knows where to land after S_MUL_BUSY ends.
+                // §18: at S_EXEC end for MUL/MLA/UMULL/SMULL, latch the m
+                // parameter and whether this is a long form so the FSM
+                // knows where to land after S_MUL_BUSY ends. MLA gets +1
+                // cycle vs MUL (TRM Table 7-19: 1S+(m+1)I) because the
+                // accumulator addition takes an extra internal cycle.
+                // UMULL/SMULL already get +1 from S_MULL_HI; UMLAL/SMLAL
+                // don't reach this branch (they go through S_MULL_ACC).
                 if (state_q == S_EXEC && mul_take_busy) begin
-                    mul_busy_remaining_q <= mul_cycle_count;
+                    mul_busy_remaining_q <= dec.mul_accumulate
+                                          ? (mul_cycle_count + 3'd1)
+                                          : mul_cycle_count;
                     mull_active_q        <= instr_class_is_mull;
                 end
                 // Countdown each S_MUL_BUSY cycle.

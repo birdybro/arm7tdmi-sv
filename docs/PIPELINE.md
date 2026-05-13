@@ -90,7 +90,8 @@ The non-pipelined model had separate `S_DADDR`, `S_BLOCK_ADDR`, `S_SWP_RADDR`, `
 | LDM, n regs | n+2 | S_EXEC + S_BLOCK_DATA × n + S_BLOCK_WB | 7-12: 1S+(n-1)S+1N+1I |
 | STM, n regs | n+1 | S_EXEC + S_BLOCK_DATA × n (Rn writeback in last beat) | 7-15: 1S+(n-1)S+1N |
 | SWP | 4 | S_EXEC + S_SWP_RDATA + S_SWP_WDATA + S_LOAD_WB | 7-17: 1S+2N+1I |
-| MUL, MLA | 1+m | S_EXEC + S_MUL_BUSY × m | 7-19: 1S+mI |
+| MUL | 1+m | S_EXEC + S_MUL_BUSY × m | 7-19: 1S+mI |
+| MLA | 2+m | S_EXEC + S_MUL_BUSY × (m+1) | 7-19: 1S+(m+1)I |
 | UMULL / SMULL | 2+m | + S_MULL_HI | 7-21: 1S+(m+1)I |
 | UMLAL / SMLAL | 3+m | + S_MULL_ACC + S_MULL_HI (acc-read cycle) | 7-23: 1S+(m+2)I |
 
