@@ -798,7 +798,15 @@ module arm7tdmis_core_pipelined
     // Fire DABT at the end of the memory-substate sequence — i.e., on the
     // transition back to S_EXEC. This is the cycle where commits would
     // otherwise complete and the next instruction would normally enter.
-    wire dabt_fires = data_abort_q && (state_next == S_EXEC) && (state_q != S_EXEC);
+    //
+    // For single-beat LDR/STR the S_DDATA cycle IS the transition out
+    // (state_next == S_EXEC), so data_abort_q hasn't been latched yet
+    // (the latch fires at the posedge ending this cycle). Include
+    // data_abort_now (the live signal) to catch that case; for multi-
+    // beat LDM/STM the latch carries data_abort through to S_BLOCK_WB.
+    wire dabt_fires = (data_abort_q || data_abort_now)
+                   && (state_next == S_EXEC)
+                   && (state_q != S_EXEC);
 
     wire any_exc_fires    = swi_fires || undef_fires || irq_fires || fiq_fires
                          || pabt_fires || dabt_fires;
