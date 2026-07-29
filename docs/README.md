@@ -20,6 +20,9 @@ because they agree with each other.
 - **[VERIFICATION.md](VERIFICATION.md)** — fail-hard regression ordering,
   intentional-failure sentinel, reproducibility metadata, and the
   `arm7tdmis-regression-v1` machine-readable result schema.
+- **[PSR.md](PSR.md)** — CPSR/SPSR bit map, MSR field and privilege rules,
+  deterministic invalid-mode and absent-SPSR policy, and the frozen CPSR.T
+  behavior.
 
 - **[MULTIPLY.md](MULTIPLY.md)** — Multiply forms (MUL/MLA/UMULL/SMULL/UMLAL/SMLAL), m-parameter cycle shaping, the UMLAL/SMLAL 2-cycle accumulator read across S_EXEC + S_MULL_ACC and the latches that make it work.
 
@@ -27,7 +30,7 @@ because they agree with each other.
 
 ## Reading order
 
-If you've never seen this codebase: PIPELINE → EXCEPTIONS → MULTIPLY →
+If you've never seen this codebase: PIPELINE → PSR → EXCEPTIONS → MULTIPLY →
 COPROCESSOR → DEBUG. Each builds on the previous one's vocabulary.
 
 If you're debugging a specific area: jump to the relevant doc; they're independent.

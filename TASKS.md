@@ -2233,8 +2233,8 @@ Anchor each cycle test to an explicit TRM table:
 [ ] Worst-case 27-cycle FIQ latency verified
 [ ] CFGBIGEND tied static; not changed mid-debug
 [ ] nRESET ≥ 2 cycle hold modeled in TB
-[ ] CPSR/SPSR explicit bit map (no Q flag) implemented
-[ ] MSR T-bit-write policy chosen, documented, and tested
+[x] CPSR/SPSR explicit bit map (no Q flag) implemented
+[x] MSR T-bit-write policy chosen, documented, and tested
 [ ] Multiplier early-termination m parameter verified per Tables 7-7..7-10
 [ ] ABORT sampled only on S/N cycles
 [ ] Burst rules (constant control, +4/+2 ADDR, no byte burst) verified
@@ -2436,10 +2436,15 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   covering every form and S setting, zero/nonzero N/Z, C/V preservation, defined
   overlaps, both signed endpoints, and all four m timings. The combinational
   cross-check remains in `tb/unit/multiplier_tb.sv`.
-- [ ] **ISA-004:** Enforce PSR privilege rules: User mode may change CPSR flags only;
+- [x] **ISA-004:** Enforce PSR privilege rules: User mode may change CPSR flags only;
   SPSR access in User/System and writes to invalid modes follow the selected
   UNPREDICTABLE policy; reserved x/s fields are preserved/SBZP; the MSR T-bit policy is
-  frozen and tested.
+  frozen and tested. `docs/PSR.md` freezes the deterministic policy.
+  `tb/unit/psr_policy_tb.sv` seeds nonzero reserved storage and directly proves every
+  mask, validity, privilege, RAZ/WI, and restore rule.
+  `tb/integration/arm7tdmis_psr_policy_tb.sv` executes the same contract through
+  ARM instructions in Supervisor, FIQ, User, and System modes, proves an MSR T-bit
+  attempt never changes fetch state, and checks its one-cycle TRM Table 7-6 timing.
 - [ ] **ISA-005:** Correct every r15 operand value: normal ARM/Thumb reads, ARM
   register-specified shift (+12 case), store-data r15, branch link, PC-relative Thumb
   operations, and debug-state instructions.
