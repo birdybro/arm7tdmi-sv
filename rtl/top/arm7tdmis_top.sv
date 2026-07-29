@@ -155,6 +155,19 @@ module arm7tdmis_top
     logic        dcc_rx_full;
     logic        dbg_inject_we;
     logic [31:0] dbg_inject_instr;
+    logic        ice_data_write_q;
+    logic [31:0] ice_watch_data;
+
+    // The address-class WRITE output leads its WDATA/RDATA phase by one
+    // enabled cycle. Delay only the direction bit so the ICE comparator's
+    // data input is selected for the transaction metadata it captures.
+    always_ff @(posedge CLK) begin
+        if (!core_nreset)
+            ice_data_write_q <= 1'b0;
+        else if (CLKEN)
+            ice_data_write_q <= WRITE;
+    end
+    assign ice_watch_data = ice_data_write_q ? WDATA : RDATA;
 
     arm7tdmis_ice_rt u_ice (
         .CLK                (CLK),
@@ -162,7 +175,7 @@ module arm7tdmis_top
         .DBGnTRST           (DBGnTRST),
         .DBGEN              (DBGEN),
         .watch_addr         (ADDR),
-        .watch_data         (WRITE ? WDATA : RDATA),
+        .watch_data         (ice_watch_data),
         .watch_nopc         (PROT[0]),         // PROT[0]=1 → data access
         .watch_nrw          (WRITE),
         .watch_size         (SIZE),

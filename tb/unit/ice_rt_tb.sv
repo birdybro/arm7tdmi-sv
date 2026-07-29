@@ -31,6 +31,7 @@ module ice_rt_tb
     logic        watch_tbit;
     logic [1:0]  watch_extern;
     logic        watch_priv;
+    logic        core_trans1;
     logic        dbg_rq_in;
     logic        dbg_break_in;
     logic        tap_restart_req;
@@ -62,7 +63,7 @@ module ice_rt_tb
         .watch_tbit         (watch_tbit),
         .watch_extern       (watch_extern),
         .watch_priv         (watch_priv),
-        .core_trans1        (1'b0),
+        .core_trans1        (core_trans1),
         .dbg_rq_in          (dbg_rq_in),
         .dbg_break_in       (dbg_break_in),
         .tap_restart_req    (tap_restart_req),
@@ -138,6 +139,7 @@ module ice_rt_tb
         watch_tbit   = 1'b0;
         watch_extern = 2'b00;
         watch_priv      = 1'b1;
+        core_trans1     = 1'b0;
         dbg_rq_in       = 1'b0;
         dbg_break_in    = 1'b0;
         tap_restart_req = 1'b0;
@@ -177,9 +179,16 @@ module ice_rt_tb
             errors = errors + 1;
         end
 
-        // Now drive the matching address. Expect DBGRNG[0] AND
-        // dbg_break_internal asserted.
+        // Present a matching address phase, followed by its data phase.
+        // Expect DBGRNG[0] AND dbg_break_internal asserted only for the
+        // aligned transfer.
+        @(negedge CLK);
         watch_addr = 32'h12345678;
+        core_trans1 = 1'b1;
+        @(posedge CLK);
+        #1;
+        core_trans1 = 1'b0;
+        watch_addr = 32'h0;
         #1;
         if (DBGRNG[0] !== 1'b1) begin
             $display("[ice_rt] FAIL: DBGRNG[0] expected 1 on match");

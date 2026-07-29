@@ -273,9 +273,44 @@ module arm7tdmis_ice_rt
                       ? {scan_addr[4:1], dcc_tx_full_q}
                       : scan_addr;
 
-    // ---- Watchpoint comparator: XNOR-with-mask match (TRM §30.22.2).
-    // match[i] = (value_i XNOR input_i) OR mask_i; full match = all bits set.
-    // Mask bit = 1 ⇒ that position always matches; mask bit = 0 ⇒ exact.
+    // ---- Watchpoint transaction alignment
+    //
+    // ADDR/WRITE/SIZE/PROT describe the address phase, while RDATA/WDATA
+    // belong to that transfer one enabled cycle later. Preserve the
+    // address-class metadata here so all comparator fields refer to the
+    // same transaction. core_trans1 is HIGH only for N/S memory cycles and
+    // therefore becomes the data-phase-valid bit. DBGEXT is sampled on the
+    // rising edge with the transaction as required by §5.27.
+    logic        watch_valid_q;
+    logic [31:0] watch_addr_q;
+    logic        watch_nopc_q;
+    logic        watch_nrw_q;
+    logic [1:0]  watch_size_q;
+    logic        watch_priv_q;
+    logic [1:0]  watch_extern_q;
+
+    always_ff @(posedge CLK or negedge DBGnTRST) begin
+        if (!DBGnTRST) begin
+            watch_valid_q  <= 1'b0;
+            watch_addr_q   <= 32'h0;
+            watch_nopc_q   <= 1'b0;
+            watch_nrw_q    <= 1'b0;
+            watch_size_q   <= 2'b00;
+            watch_priv_q   <= 1'b0;
+            watch_extern_q <= 2'b00;
+        end else if (CLKEN) begin
+            watch_valid_q  <= core_trans1;
+            watch_addr_q   <= watch_addr;
+            watch_nopc_q   <= watch_nopc;
+            watch_nrw_q    <= watch_nrw;
+            watch_size_q   <= watch_size;
+            watch_priv_q   <= watch_priv;
+            watch_extern_q <= watch_extern;
+        end
+    end
+
+    // ---- Watchpoint comparators: XNOR-with-mask matching (TRM §5.20.2).
+    // match[i] = (value_i XNOR input_i) OR mask_i; mask 1 means don't-care.
     function automatic logic masked_match32(
         input logic [31:0] value,
         input logic [31:0] mask,
@@ -284,91 +319,88 @@ module arm7tdmis_ice_rt
         return &((value ~^ in) | mask);
     endfunction
 
-    // 9-bit control compare. Layout per TRM §5.18.2:
-    //   [8] ENABLE      (unmaskable)
-    //   [7] RANGE       (WP0 only — RANGEOUT from WP1)
-    //   [6] CHAIN       (WP0 only — CHAINOUT from WP1)
-    //   [5:4] EXTERN[1:0]
-    //   [3] nTRANS      (effectively PROT[1])
-    //   [2] nOPC
-    //   [1] nRW
-    //   [0] SIZE[1] / SIZE[0] split or combined depending on impl —
-    //       here we treat [1:0] as the full 2-bit SIZE.
-    // For this scaffold we compare nOPC, nRW, SIZE, EXTERN, TBIT. CHAIN
-    // and RANGE lands with the coupling logic.
-    // SIZE doesn't enter the 9-bit control compare directly (the
-    // architectural size compare in EmbeddedICE-RT goes through ADDR[1:0]
-    // mask bits instead) — we accept watch_size at the module port for
-    // future use and silence its unused warning at the boundary.
-    function automatic logic ctrl_match(
-        input logic [8:0]  val,
-        input logic [8:0]  mask,
-        input logic        nopc_in,
-        input logic        nrw_in,
-        input logic [1:0]  extern_in,
-        input logic        tbit_in
+    function automatic logic masked_match8(
+        input logic [7:0] value,
+        input logic [7:0] mask,
+        input logic [7:0] in
     );
-        logic [8:0] in9;
-        in9 = {1'b0,            // ENABLE bit position — input N/A
-               2'b00,           // RANGE/CHAIN — wp coupling, not bus
-               extern_in,
-               1'b0,            // nTRANS placeholder
-               nopc_in,
-               nrw_in,
-               tbit_in};
-        return &((val ~^ in9) | mask);
+        return &((value ~^ in) | mask);
     endfunction
 
-    wire wp0_addr_match = masked_match32(regs[WP0_ADDR_VAL],  regs[WP0_ADDR_MASK],  watch_addr);
-    wire wp0_data_match = masked_match32(regs[WP0_DATA_VAL],  regs[WP0_DATA_MASK],  watch_data);
-    wire wp0_ctrl_match = ctrl_match(    regs[WP0_CTRL_VAL][8:0], regs[WP0_CTRL_MASK][8:0],
-                                          watch_nopc, watch_nrw,
-                                          watch_extern, watch_tbit);
-    wire wp0_enable     = regs[WP0_CTRL_VAL][8];
+    // Figure 5-13 control layout:
+    //   [7] RANGE, [6] CHAIN, [5] DBGEXT, [4] PROT[1],
+    //   [3] PROT[0], [2:1] SIZE, [0] WRITE.
+    // Watchpoint 0 consumes DBGEXT[0] and WP1's range/chain outputs.
+    // Watchpoint 1 consumes DBGEXT[1] and has no upstream RANGE/CHAIN.
+    wire [4:0] watch_control_low = {
+        watch_priv_q, watch_nopc_q, watch_size_q, watch_nrw_q
+    };
 
-    wire wp1_addr_match = masked_match32(regs[WP1_ADDR_VAL],  regs[WP1_ADDR_MASK],  watch_addr);
-    wire wp1_data_match = masked_match32(regs[WP1_DATA_VAL],  regs[WP1_DATA_MASK],  watch_data);
-    wire wp1_ctrl_match = ctrl_match(    regs[WP1_CTRL_VAL][8:0], regs[WP1_CTRL_MASK][8:0],
-                                          watch_nopc, watch_nrw,
-                                          watch_extern, watch_tbit);
-    wire wp1_enable     = regs[WP1_CTRL_VAL][8];
+    wire wp0_addr_match = masked_match32(
+        regs[WP0_ADDR_VAL], regs[WP0_ADDR_MASK], watch_addr_q);
+    wire wp0_data_match = masked_match32(
+        regs[WP0_DATA_VAL], regs[WP0_DATA_MASK], watch_data);
+    wire wp1_addr_match = masked_match32(
+        regs[WP1_ADDR_VAL], regs[WP1_ADDR_MASK], watch_addr_q);
+    wire wp1_data_match = masked_match32(
+        regs[WP1_DATA_VAL], regs[WP1_DATA_MASK], watch_data);
 
-    // §30.22.3: CHAIN/RANGE coupling. WP1's CHAINOUT (latched) feeds
-    // WP0's CHAIN input. WP1's RANGEOUT (combinational addr+ctrl match)
-    // feeds WP0's RANGE input. Both are qualified by the corresponding
-    // CHAIN/RANGE bits in WP0's control-value register (bits [6] and [7]).
-    //
-    // CHAINOUT latch: write-enabled by WP1's addr+ctrl match, D-input
-    // is WP1's data match. Cleared on WP1 ctrl-val write or DBGnTRST.
-    wire wp1_addr_ctrl_match = wp1_addr_match && wp1_ctrl_match;
+    // TRM §5.26.1 publishes the comparator split used by CHAINOUT:
+    // address plus control[4:0] enables the latch; data plus control[7:5]
+    // supplies its D input. This also reconstructs the complete WP1
+    // RANGEOUT/DBGRNG match without relying on ENABLE.
+    wire wp1_addr_low_match = wp1_addr_match
+                            && &((regs[WP1_CTRL_VAL][4:0]
+                                ~^ watch_control_low)
+                                | regs[WP1_CTRL_MASK][4:0]);
+    wire [2:0] wp1_control_high = {
+        1'b0, 1'b0, watch_extern_q[1]
+    };
+    wire wp1_data_high_match = wp1_data_match
+                             && &((regs[WP1_CTRL_VAL][7:5]
+                                 ~^ wp1_control_high)
+                                 | regs[WP1_CTRL_MASK][7:5]);
+    wire wp1_rangeout = watch_valid_q
+                      && wp1_addr_low_match
+                      && wp1_data_high_match;
+
+    // CHAINOUT is cleared by writing WP1 Control Value. Otherwise a lower
+    // address/control match clocks the corresponding data/high-control
+    // result into the latch at the end of that transfer.
     logic chainout_q;
     always_ff @(posedge CLK or negedge DBGnTRST) begin
         if (!DBGnTRST)
             chainout_q <= 1'b0;
-        else if (CLKEN) begin
-            if (scan_we && (scan_addr == WP1_CTRL_VAL))
-                chainout_q <= 1'b0;            // clear on ctrl-value write
-            else if (wp1_addr_ctrl_match)
-                chainout_q <= wp1_data_match;  // latch full match
-        end
+        else if (scan_we && (scan_addr == WP1_CTRL_VAL))
+            chainout_q <= 1'b0;
+        else if (CLKEN && watch_valid_q && wp1_addr_low_match)
+            chainout_q <= wp1_data_high_match;
     end
-    wire rangeout      = wp1_addr_ctrl_match;
-    wire wp0_chain_bit = regs[WP0_CTRL_VAL][6];
-    wire wp0_range_bit = regs[WP0_CTRL_VAL][7];
-    wire wp0_chain_q   = !wp0_chain_bit || chainout_q;
-    wire wp0_range_q   = !wp0_range_bit || rangeout;
 
-    // DBGRNG reflects address+control matches *independent of ENABLE* per
-    // §30.22.3 — useful for trace, doesn't gate debug entry.
-    assign DBGRNG[0] = wp0_addr_match && wp0_ctrl_match;
-    assign DBGRNG[1] = wp1_addr_match && wp1_ctrl_match;
+    wire [7:0] wp0_control_in = {
+        wp1_rangeout, chainout_q, watch_extern_q[0], watch_control_low
+    };
+    wire [7:0] wp1_control_in = {
+        1'b0, 1'b0, watch_extern_q[1], watch_control_low
+    };
+    wire wp0_ctrl_match = masked_match8(
+        regs[WP0_CTRL_VAL][7:0], regs[WP0_CTRL_MASK][7:0],
+        wp0_control_in);
+    wire wp1_ctrl_match = masked_match8(
+        regs[WP1_CTRL_VAL][7:0], regs[WP1_CTRL_MASK][7:0],
+        wp1_control_in);
+    wire wp0_rangeout = watch_valid_q && wp0_addr_match
+                      && wp0_data_match && wp0_ctrl_match;
+    // Keep the direct full-vector computation visible as an equivalence
+    // check on the split form used for WP1 CHAINOUT.
+    wire wp1_full_vector_match = watch_valid_q && wp1_addr_match
+                               && wp1_data_match && wp1_ctrl_match;
+    wire wp0_enable = regs[WP0_CTRL_VAL][8];
+    wire wp1_enable = regs[WP1_CTRL_VAL][8];
 
-    // Full match per WP. WP0 incorporates CHAIN/RANGE qualification from
-    // WP1; WP1 has no upstream chain (it's the source of CHAINOUT/RANGEOUT).
-    wire wp0_full_match = wp0_addr_match && wp0_data_match && wp0_ctrl_match
-                       && wp0_enable && wp0_chain_q && wp0_range_q;
-    wire wp1_full_match = wp1_addr_match && wp1_data_match && wp1_ctrl_match
-                       && wp1_enable;
+    // DBGRNG includes address, data, and all control fields, ignores ENABLE,
+    // and is forced LOW with all other debug outputs when DBGEN is LOW.
+    assign DBGRNG = DBGEN ? {wp1_rangeout, wp0_rangeout} : 2'b00;
 
     // §22: Vector Catch (ICE-RT register 0x02, 8 bits) — trap on opcode
     // fetch of an exception vector address. Each bit corresponds to one
@@ -382,8 +414,9 @@ module arm7tdmis_ice_rt
     //   [6] IRQ         — 0x18
     //   [7] FIQ         — 0x1C
     wire [7:0]  vector_catch = regs[5'h02][7:0];
-    wire        is_vec_fetch = !watch_nopc && (watch_addr[31:5] == 27'h0);
-    wire [2:0]  vec_index    = watch_addr[4:2];
+    wire        is_vec_fetch = watch_valid_q && !watch_nopc_q
+                             && (watch_addr_q[31:5] == 27'h0);
+    wire [2:0]  vec_index    = watch_addr_q[4:2];
     wire        vec_catch_hit = is_vec_fetch && vector_catch[vec_index];
 
     // §30.22.1: DBGEN=0 forces all debug outputs LOW.
@@ -392,7 +425,9 @@ module arm7tdmis_ice_rt
     // (the module output) is the same — kept separate to make the
     // intent-of-feedback explicit.
     assign dbg_break_internal_pre = DBGEN &&
-                                    (wp0_full_match || wp1_full_match || vec_catch_hit);
+                                    ((wp0_rangeout && wp0_enable)
+                                     || (wp1_rangeout && wp1_enable)
+                                     || vec_catch_hit);
     assign dbg_break_internal     = dbg_break_internal_pre;
 
     // ---- Debug-state FSM body
@@ -475,11 +510,9 @@ module arm7tdmis_ice_rt
     wire ice_intdis = regs[5'h00][2];
     assign ifen = !(DBGEN && (ice_intdis || dbgacki));
 
-    // Scan chain 2 upper bits (R/W flag + 5-bit addr field), DBGEN gating
-    // outside the macrocell, and SIZE field (size_in not yet folded into
-    // the 9-bit ctrl compare) all silenced here until they have consumers.
+    // Scan chain 2 upper bits are decoded by the TAP-facing wrapper.
     /* verilator lint_off UNUSEDSIGNAL */
-    wire _unused = &{1'b0, scan_wdata[37:32], watch_size, watch_priv};
+    wire _unused = &{1'b0, scan_wdata[37:32], wp1_full_vector_match};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule
