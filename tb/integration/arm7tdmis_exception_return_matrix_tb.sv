@@ -470,7 +470,7 @@ module arm7tdmis_exception_return_matrix_tb
         nRESET = 1'b1;
 
         wait_cycles = 0;
-        while (!(u_dut.u_core.state_q == 4'd0
+        while (!(u_dut.u_core.state_q == 5'd0
                  && u_dut.u_core.de_q.valid
                  && u_dut.u_core.de_q.pc == TEST_PC)) begin
             prev_addr  = ADDR;
@@ -627,7 +627,7 @@ module arm7tdmis_exception_return_matrix_tb
                 await_target_follow  = 1'b1;
             end
 
-            if (u_dut.u_core.state_q == 4'd0
+            if (u_dut.u_core.state_q == 5'd0
                 && u_dut.u_core.de_q.valid
                 && u_dut.u_core.de_q.pc == target_pc(state_idx)) begin
                 if (!target_fetch_seen)

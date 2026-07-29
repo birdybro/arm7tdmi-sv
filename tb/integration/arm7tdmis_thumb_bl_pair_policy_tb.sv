@@ -109,7 +109,7 @@ module arm7tdmis_thumb_bl_pair_policy_tb
         for (int step = 0; step < 160; step++) begin
             @(negedge CLK);
 
-            if (u_dut.u_core.state_q == 4'd0
+            if (u_dut.u_core.state_q == 5'd0
                 && u_dut.u_core.de_q.valid
                 && u_dut.u_core.de_q.thumb
                 && u_dut.u_core.de_q.pc == PREFIX_PC) begin
@@ -124,7 +124,7 @@ module arm7tdmis_thumb_bl_pair_policy_tb
                 prefix_writes++;
             end
 
-            if (u_dut.u_core.state_q == 4'd0
+            if (u_dut.u_core.state_q == 5'd0
                 && u_dut.u_core.de_q.valid
                 && u_dut.u_core.de_q.thumb
                 && u_dut.u_core.de_q.pc == (PREFIX_PC + 32'd2)) begin

@@ -37,7 +37,7 @@ module arm7tdmis_abort_clken_tb
         inject_abort = 1'b0;
 
         wait (nRESET);
-        wait (u_fixture.u_dut.u_core.state_q == 4'd1); // S_DDATA
+        wait (u_fixture.u_dut.u_core.state_q == 5'd1); // S_DDATA
 
         // Stop before the STR response completes. Allow one rising edge
         // with CLKEN low before taking the reference snapshot because the

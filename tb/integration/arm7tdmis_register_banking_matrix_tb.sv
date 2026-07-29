@@ -245,7 +245,7 @@ module arm7tdmis_register_banking_matrix_tb
         response_cycles = 0;
         repeat (180) begin
             @(negedge CLK);
-            if (u_dut.u_core.state_q == 4'd0
+            if (u_dut.u_core.state_q == 5'd0
                 && u_dut.u_core.de_q.valid
                 && u_dut.u_core.de_q.pc == TEST_PC)
                 test_seen = 1'b1;

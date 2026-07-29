@@ -160,7 +160,7 @@ module arm7tdmis_cp_busy_interrupt_scenario #(
                 end
             end
 
-            if (u_dut.u_core.state_q inside {4'd13, 4'd14, 4'd15})
+            if (u_dut.u_core.state_q inside {5'd13, 5'd14, 5'd15})
                 completion_states_q <= completion_states_q + 1;
         end
     end
@@ -170,7 +170,7 @@ module arm7tdmis_cp_busy_interrupt_scenario #(
     // sampled, then release it to avoid repeated entry.
     initial begin
         wait (nRESET);
-        wait (u_dut.u_core.state_q == 4'd12 && !CPnI);
+        wait (u_dut.u_core.state_q == 5'd12 && !CPnI);
         wait (busy_cycles_q >= 3);
         if (IS_FIQ)
             nFIQ = 1'b0;

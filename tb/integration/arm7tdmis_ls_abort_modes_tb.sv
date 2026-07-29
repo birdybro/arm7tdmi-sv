@@ -72,7 +72,7 @@ module arm7tdmis_ls_abort_modes_tb
     );
 
     // S_DDATA is the response cycle for the one transfer under test.
-    assign inject_abort = (u_dut.u_core.state_q == 4'd1);
+    assign inject_abort = (u_dut.u_core.state_q == 5'd1);
 
     function automatic logic [31:0] ls_opcode(
         input logic load,

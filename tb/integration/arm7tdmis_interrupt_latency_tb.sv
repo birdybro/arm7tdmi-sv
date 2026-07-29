@@ -157,7 +157,7 @@ module arm7tdmis_interrupt_latency_scenario #(
     task automatic wait_execute(input logic [31:0] pc);
         int cycles;
         cycles = 0;
-        while (!(u_dut.u_core.state_q == 4'd0
+        while (!(u_dut.u_core.state_q == 5'd0
                  && u_dut.u_core.de_q.valid
                  && u_dut.u_core.de_q.pc == pc)) begin
             @(negedge CLK);

@@ -189,7 +189,7 @@ module arm7tdmis_debug_inject_handshake_tb
         for (int i = 0; i < 100; i++) begin
             @(posedge CLK);
             #1;
-            if (u_dut.u_core.state_q == 4'd2) begin
+            if (u_dut.u_core.state_q == 5'd2) begin
                 block_started = 1'b1;
                 break;
             end
@@ -259,7 +259,7 @@ module arm7tdmis_debug_inject_handshake_tb
                            u_dut.u_core.u_regfile.regs[0]));
         if (u_dut.u_core.u_regfile.regs[13] !== normal_r13)
             fail("normal instruction retired during MOV injection");
-        if (u_dut.u_core.state_q !== 4'd0)
+        if (u_dut.u_core.state_q !== 5'd0)
             fail("MOV refroze outside S_EXEC");
 
         // LDMIA r0!,{r1-r12}; 12 beats exceed the old fixed window.
@@ -267,7 +267,7 @@ module arm7tdmis_debug_inject_handshake_tb
         stall_block_transfer("12-register LDM");
 
         wait_for_refreeze("LDM injection");
-        if (u_dut.u_core.state_q !== 4'd0)
+        if (u_dut.u_core.state_q !== 5'd0)
             fail($sformatf("LDM refroze in state %0d", u_dut.u_core.state_q));
         if (u_dut.u_core.u_regfile.regs[0] !== 32'h0000_0130)
             fail($sformatf("LDM writeback r0=%08x",
@@ -337,7 +337,7 @@ module arm7tdmis_debug_inject_handshake_tb
         if (u_dut.u_core.u_regfile.regs[26] !== 32'h7000_000E)
             fail($sformatf("LDM r14_svc expected 7000000e got %08x",
                            u_dut.u_core.u_regfile.regs[26]));
-        if (u_dut.u_core.state_q !== 4'd0)
+        if (u_dut.u_core.state_q !== 5'd0)
             fail("16-register LDM refroze outside S_EXEC");
 
         load_ir(4'(IR_RESTART));

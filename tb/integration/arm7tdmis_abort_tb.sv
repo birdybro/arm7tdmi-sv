@@ -177,10 +177,10 @@ module arm7tdmis_abort_tb
     // S_SWP_RDATA=3, S_SWP_WDATA=4) keeps the abort firing only on
     // LDR/STR/LDM/STM/SWP data cycles.
     always_comb begin
-        mem_inject_abort = (u_dut.u_core.state_q == 4'd1)   // S_DDATA
-                        || (u_dut.u_core.state_q == 4'd2)   // S_BLOCK_DATA
-                        || (u_dut.u_core.state_q == 4'd3)   // S_SWP_RDATA
-                        || (u_dut.u_core.state_q == 4'd4);  // S_SWP_WDATA
+        mem_inject_abort = (u_dut.u_core.state_q == 5'd1)   // S_DDATA
+                        || (u_dut.u_core.state_q == 5'd2)   // S_BLOCK_DATA
+                        || (u_dut.u_core.state_q == 5'd3)   // S_SWP_RDATA
+                        || (u_dut.u_core.state_q == 5'd4);  // S_SWP_WDATA
     end
 
     initial begin

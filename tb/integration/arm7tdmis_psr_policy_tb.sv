@@ -91,13 +91,13 @@ module arm7tdmis_psr_policy_tb;
                 saw_thumb_state <= 1'b1;
 
             if (!timed_msr_seen
-                && u_fixture.u_dut.u_core.state_q == 4'd0
+                && u_fixture.u_dut.u_core.state_q == 5'd0
                 && u_fixture.u_dut.u_core.de_q.valid
                 && u_fixture.u_dut.u_core.de_q.pc == TIMED_MSR_PC) begin
                 timed_msr_seen   <= 1'b1;
                 timed_msr_cycles <= 1;
             end else if (timed_msr_seen && !timed_msr_done) begin
-                if (u_fixture.u_dut.u_core.state_q == 4'd0
+                if (u_fixture.u_dut.u_core.state_q == 5'd0
                     && u_fixture.u_dut.u_core.de_q.valid
                     && u_fixture.u_dut.u_core.de_q.pc != TIMED_MSR_PC)
                     timed_msr_done <= 1'b1;

@@ -61,7 +61,7 @@ module arm7tdmis_arm_exception_lr_scenario #(
     end
 
     wire collision_window =
-        (u_fixture.u_dut.u_core.state_q == 4'd0)
+        (u_fixture.u_dut.u_core.state_q == 5'd0)
         && u_fixture.u_dut.u_core.de_q.valid
         && (u_fixture.u_dut.u_core.de_q.pc == 32'h00000040);
 
@@ -74,7 +74,7 @@ module arm7tdmis_arm_exception_lr_scenario #(
             inject_abort = u_fixture.u_mem.is_active_q
                          && (u_fixture.u_mem.addr_q == 32'h00000040);
         else if (KIND == K_DABT)
-            inject_abort = (u_fixture.u_dut.u_core.state_q == 4'd1);
+            inject_abort = (u_fixture.u_dut.u_core.state_q == 5'd1);
     end
 
     int unsigned entry_count;

@@ -1,6 +1,6 @@
 // EXC-009 reset matrix.
 //
-// Reach every non-Execute state in the core's complete 4-bit multicycle
+// Reach every non-Execute state in the core's complete multicycle
 // FSM through an architectural instruction and public handshakes. Freeze
 // CLKEN in that state, assert nRESET asynchronously, hold it for at least
 // two full clocks, and prove reset dominates the stopped core. Every row
@@ -135,6 +135,7 @@ module arm7tdmis_reset_multicycle_matrix_tb
             13: return "S_CP_MCR_DATA";
             14: return "S_CP_MRC_DATA";
             15: return "S_CP_MRC_WB";
+            16: return "S_UNDEF_WAIT";
             default: return "UNKNOWN";
         endcase
     endfunction
@@ -152,6 +153,7 @@ module arm7tdmis_reset_multicycle_matrix_tb
             12:        return 32'hEE00_0400; // CDP p4,0,c0,c0,c0,0
             13:        return 32'hEE01_0412; // MCR p4,0,r0,c1,c2,0
             14, 15:    return 32'hEE11_1412; // MRC p4,0,r1,c1,c2,0
+            16:        return 32'hE7F0_00F0; // reserved Undefined
             default:   return 32'hE1A0_0000;
         endcase
     endfunction
@@ -217,7 +219,7 @@ module arm7tdmis_reset_multicycle_matrix_tb
     endtask
 
     task automatic check_reset_state(input int target);
-        if (u_dut.u_core.state_q !== 4'd0
+        if (u_dut.u_core.state_q !== 5'd0
             || u_dut.u_core.fetch_pc_q !== 32'h0000_0000
             || u_dut.u_core.inflight_pc_q !== 32'h0000_0000
             || u_dut.u_core.inflight_valid_q !== 1'b0
@@ -309,7 +311,9 @@ module arm7tdmis_reset_multicycle_matrix_tb
             u_dut.u_core.cp_ls_rn_q,
             u_dut.u_core.cp_ls_writeback_q,
             u_dut.u_core.cp_ls_first_q,
-            u_dut.u_core.cp_ls_response_q
+            u_dut.u_core.cp_ls_response_q,
+            u_dut.u_core.undef_instr_pc_q,
+            u_dut.u_core.undef_instr_thumb_q
         } !== '0)
             fail(target, "one or more multicycle payload latches survived");
 
@@ -393,7 +397,7 @@ module arm7tdmis_reset_multicycle_matrix_tb
         for (int cycle = 0; cycle < 180; cycle++) begin
             @(posedge CLK);
             #1;
-            if (u_dut.u_core.state_q == 4'(target)) begin
+            if (u_dut.u_core.state_q == 5'(target)) begin
                 reached = 1'b1;
                 break;
             end
@@ -409,7 +413,7 @@ module arm7tdmis_reset_multicycle_matrix_tb
         if (target != 1)
             CLKEN = 1'b0;
         #1;
-        if (u_dut.u_core.state_q !== 4'(target))
+        if (u_dut.u_core.state_q !== 5'(target))
             fail(target, $sformatf(
                 "CLKEN freeze lost target state (got %0d)",
                 u_dut.u_core.state_q));
@@ -464,14 +468,14 @@ module arm7tdmis_reset_multicycle_matrix_tb
         $dumpvars(0, arm7tdmis_reset_multicycle_matrix_tb);
 
         repeat (4) @(posedge CLK);
-        for (int target = 1; target < 16; target++)
+        for (int target = 1; target <= 16; target++)
             run_case(target);
 
-        if (cases_run != 15 || errors != 0)
+        if (cases_run != 16 || errors != 0)
             $fatal(1,
                 "[reset_multicycle_matrix] FAIL (%0d rows, %0d errors)",
                 cases_run, errors);
-        $display("[reset_multicycle_matrix] PASS (all 15 non-Execute states)");
+        $display("[reset_multicycle_matrix] PASS (all 16 non-Execute states)");
         $finish;
     end
 

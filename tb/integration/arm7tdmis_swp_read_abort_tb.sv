@@ -42,7 +42,7 @@ module arm7tdmis_swp_read_abort_scenario #(
     end
 
     assign inject_abort =
-        (u_fixture.u_dut.u_core.state_q == 4'd3); // S_SWP_RDATA
+        (u_fixture.u_dut.u_core.state_q == 5'd3); // S_SWP_RDATA
 
     logic seen_abort;
     logic seen_write_address;

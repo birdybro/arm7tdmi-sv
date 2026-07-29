@@ -230,7 +230,7 @@ module arm7tdmis_thumb_bl_boundary_tb
                     fail(case_id, "abort occurred outside the suffix fetch");
             end
 
-            if (u_dut.u_core.state_q == 4'd0
+            if (u_dut.u_core.state_q == 5'd0
                 && u_dut.u_core.de_q.valid
                 && u_dut.u_core.de_q.pc == PREFIX_PC) begin
                 prefix_count++;
@@ -241,7 +241,7 @@ module arm7tdmis_thumb_bl_boundary_tb
                     fail(case_id, "BL prefix did not commit 0x84 to User LR");
             end
 
-            if (u_dut.u_core.state_q == 4'd0
+            if (u_dut.u_core.state_q == 5'd0
                 && u_dut.u_core.de_q.valid
                 && u_dut.u_core.de_q.pc == SUFFIX_PC) begin
                 suffix_count++;

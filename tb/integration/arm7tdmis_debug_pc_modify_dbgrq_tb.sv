@@ -103,9 +103,9 @@ module arm7tdmis_debug_pc_modify_dbgrq_scenario #(
                            && !trigger_execute;
     wire target_refill = u_dut.u_core.inflight_valid_q
                        && (u_dut.u_core.inflight_pc_q == TARGET_PC);
-    wire ldr_data = (u_dut.u_core.state_q == 4'd1)
+    wire ldr_data = (u_dut.u_core.state_q == 5'd1)
                   && (u_dut.u_core.memory_instr_pc_q == TRIGGER_PC);
-    wire ldr_writeback = (u_dut.u_core.state_q == 4'd10)
+    wire ldr_writeback = (u_dut.u_core.state_q == 5'd10)
                        && (u_dut.u_core.ls_rd_q == 4'd15);
 
     always_comb begin

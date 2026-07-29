@@ -119,7 +119,7 @@ module arm7tdmis_interrupt_sampling_scenario #(
     task automatic wait_execute(input logic [31:0] pc);
         int cycles;
         cycles = 0;
-        while (!(u_fixture.u_dut.u_core.state_q == 4'd0
+        while (!(u_fixture.u_dut.u_core.state_q == 5'd0
                  && u_fixture.u_dut.u_core.de_q.valid
                  && u_fixture.u_dut.u_core.de_q.pc == pc)) begin
             @(negedge CLK);

@@ -56,7 +56,7 @@ module arm7tdmis_exception_priority_scenario #(
     end
 
     wire collision_window =
-        (u_fixture.u_dut.u_core.state_q == 4'd0)
+        (u_fixture.u_dut.u_core.state_q == 5'd0)
         && u_fixture.u_dut.u_core.de_q.valid
         && (u_fixture.u_dut.u_core.de_q.pc == 32'h00000100);
 

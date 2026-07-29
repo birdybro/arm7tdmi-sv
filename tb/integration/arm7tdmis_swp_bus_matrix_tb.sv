@@ -94,9 +94,9 @@ module arm7tdmis_swp_bus_matrix_tb
 
     assign inject_abort =
            ((current_mode == MODE_ABORT_READ)
-            && (u_dut.u_core.state_q == 4'd3))
+            && (u_dut.u_core.state_q == 5'd3))
         || ((current_mode == MODE_ABORT_WRITE)
-            && (u_dut.u_core.state_q == 4'd4));
+            && (u_dut.u_core.state_q == 5'd4));
 
     function automatic string mode_name(input int mode);
         case (mode)
@@ -214,7 +214,7 @@ module arm7tdmis_swp_bus_matrix_tb
         // the locked read without counting the setup LDR.
         for (int timeout = 0; timeout < 100; timeout++) begin
             @(negedge CLK);
-            if ((u_dut.u_core.state_q == 4'd0)
+            if ((u_dut.u_core.state_q == 5'd0)
                 && (u_dut.u_core.de_q.pc == TEST_PC)) begin
                 monitor_active = 1'b1;
                 return;

@@ -451,7 +451,7 @@ module arm7tdmis_cond_fail_matrix_tb
         nRESET = 1'b1;
 
         wait_cycles = 0;
-        while (!((u_dut.u_core.state_q == 4'd0)
+        while (!((u_dut.u_core.state_q == 5'd0)
                  && u_dut.u_core.de_q.valid
                  && (u_dut.u_core.de_q.pc == TEST_PC))) begin
             @(negedge CLK);
@@ -466,7 +466,7 @@ module arm7tdmis_cond_fail_matrix_tb
         // A failed multicycle instruction must not enter any substate.  One
         // enabled edge later, its sequential successor must occupy Execute.
         @(negedge CLK);
-        if (u_dut.u_core.state_q !== 4'd0
+        if (u_dut.u_core.state_q !== 5'd0
             || !u_dut.u_core.de_q.valid
             || u_dut.u_core.de_q.pc !== (TEST_PC + 32'd4))
             fail(cond_idx, op_idx, $sformatf(

@@ -417,7 +417,7 @@ module arm7tdmis_sequence_dependencies_tb
         for (int step = 0; step < 240; step++) begin
             @(negedge CLK);
 
-            if (u_dut.u_core.state_q == 4'd0
+            if (u_dut.u_core.state_q == 5'd0
                 && u_dut.u_core.de_q.valid
                 && u_dut.u_core.de_q.pc == 32'h0000_0020)
                 main_seen = 1'b1;
@@ -432,7 +432,7 @@ module arm7tdmis_sequence_dependencies_tb
                 break;
             end
 
-            if (case_id == 12 && u_dut.u_core.state_q == 4'd0
+            if (case_id == 12 && u_dut.u_core.state_q == 5'd0
                 && u_dut.u_core.de_q.valid
                 && u_dut.u_core.de_q.pc == 32'h0000_0034) begin
                 if (u_dut.u_core.de_q.instr

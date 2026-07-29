@@ -96,7 +96,7 @@ module arm7tdmis_cp_cdp_protocol_tb
 
     // de_q advances as the core enters S_CP_WAIT, so use the latched
     // coprocessor PC during that state to keep the same response driven.
-    wire [31:0] request_pc = (u_dut.u_core.state_q == 4'd12)
+    wire [31:0] request_pc = (u_dut.u_core.state_q == 5'd12)
                            ? u_dut.u_core.cp_instr_pc_q
                            : u_dut.u_core.de_q.pc;
 
@@ -168,7 +168,7 @@ module arm7tdmis_cp_cdp_protocol_tb
                         || ADDR !== BUSY_PC + 32'd8
                         || WRITE
                         || (PROT[0] !==
-                            (u_dut.u_core.state_q == 4'd12))) begin
+                            (u_dut.u_core.state_q == 5'd12))) begin
                         $display("[cp_cdp_protocol] FAIL busy A/T/W/P=%08x/%02b/%b/%b",
                                  ADDR, TRANS, WRITE, PROT[0]);
                         protocol_errors_q <= protocol_errors_q + 1;
@@ -196,7 +196,7 @@ module arm7tdmis_cp_cdp_protocol_tb
                 end
             end
 
-            if (u_dut.u_core.state_q == 4'd0
+            if (u_dut.u_core.state_q == 5'd0
                 && u_dut.u_core.de_q.valid
                 && u_dut.u_core.de_q.pc == COND_FAIL_PC) begin
                 cond_fail_samples_q <= cond_fail_samples_q + 1;

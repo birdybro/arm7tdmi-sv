@@ -81,7 +81,7 @@ module arm7tdmis_pabt_pipeline_scenario #(
                 seen_aborted_fetch <= 1'b1;
 
             if ((CASE_ID == CASE_ERRATUM || CASE_ID == CASE_UDF_SWI)
-                && (u_fixture.u_dut.u_core.state_q == 4'd0)
+                && (u_fixture.u_dut.u_core.state_q == 5'd0)
                 && u_fixture.u_dut.u_core.de_q.valid
                 && (u_fixture.u_dut.u_core.de_q.pc == 32'h00000020)
                 && (u_fixture.u_dut.u_core.de_q.dec.instr_class
@@ -93,7 +93,7 @@ module arm7tdmis_pabt_pipeline_scenario #(
             end
 
             if ((CASE_ID == CASE_ERRATUM)
-                && (u_fixture.u_dut.u_core.state_q == 4'd0)
+                && (u_fixture.u_dut.u_core.state_q == 5'd0)
                 && u_fixture.u_dut.u_core.de_q.valid
                 && (u_fixture.u_dut.u_core.de_q.pc == 32'h00000024)) begin
                 if (u_fixture.u_dut.u_core.pabt_fires)
@@ -104,7 +104,7 @@ module arm7tdmis_pabt_pipeline_scenario #(
             end
 
             if ((CASE_ID == CASE_UDF_SWI)
-                && (u_fixture.u_dut.u_core.state_q == 4'd0)
+                && (u_fixture.u_dut.u_core.state_q == 5'd0)
                 && u_fixture.u_dut.u_core.de_q.valid
                 && (u_fixture.u_dut.u_core.de_q.pc == 32'h00000024)) begin
                 if (u_fixture.u_dut.u_core.swi_fires)

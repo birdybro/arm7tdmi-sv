@@ -184,7 +184,7 @@ module arm7tdmis_cycles_tb
         if (nRESET && CLKEN) begin
             // Detect a new instruction entering E: state_q == S_EXEC AND
             // de_q.valid AND de_q.pc != last_pc.
-            if (u_dut.u_core.state_q == 4'd0    // S_EXEC
+            if (u_dut.u_core.state_q == 5'd0    // S_EXEC
               && u_dut.u_core.de_q.valid
               && u_dut.u_core.de_q.pc != last_pc) begin
                 // Log the previous instruction if we have one.

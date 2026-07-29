@@ -140,7 +140,7 @@ module arm7tdmis_ldr_pc_bus_tb
         nRESET = 1'b1;
 
         wait_cycles = 0;
-        while (!(u_dut.u_core.state_q == 4'd0
+        while (!(u_dut.u_core.state_q == 5'd0
                  && u_dut.u_core.de_q.valid
                  && u_dut.u_core.de_q.pc == TEST_PC)) begin
             @(negedge CLK);
@@ -160,7 +160,7 @@ module arm7tdmis_ldr_pc_bus_tb
             fail(row, "discarded pc+8 opcode response is wrong");
 
         @(negedge CLK);
-        if (u_dut.u_core.state_q !== 4'd1)
+        if (u_dut.u_core.state_q !== 5'd1)
             fail(row, "data response did not use S_DDATA");
         check_bus(row, "load-response I phase",
                   ADDR, WRITE, SIZE, PROT, LOCK, TRANS,
@@ -170,7 +170,7 @@ module arm7tdmis_ldr_pc_bus_tb
                 "data response expected %08x got %08x", TARGET, RDATA));
 
         @(negedge CLK);
-        if (u_dut.u_core.state_q !== 4'd10
+        if (u_dut.u_core.state_q !== 5'd10
             || !u_dut.u_core.flush)
             fail(row, "LDR pc did not redirect from S_LOAD_WB");
         check_bus(row, "first target request",

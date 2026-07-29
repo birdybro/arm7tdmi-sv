@@ -29,7 +29,7 @@ module arm7tdmis_dabt_fiq_tb
     );
 
     assign inject_abort =
-        (u_fixture.u_dut.u_core.state_q == 4'd1); // S_DDATA
+        (u_fixture.u_dut.u_core.state_q == 5'd1); // S_DDATA
 
     // A one-enabled-cycle FIQ pulse exactly coincident with the abort
     // response. The core must retain this event internally after nFIQ

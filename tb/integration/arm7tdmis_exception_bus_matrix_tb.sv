@@ -99,7 +99,7 @@ module arm7tdmis_exception_bus_matrix_scenario #(
     end
 
     wire collision_window =
-        (u_fixture.u_dut.u_core.state_q == 4'd0)
+        (u_fixture.u_dut.u_core.state_q == 5'd0)
         && u_fixture.u_dut.u_core.de_q.valid
         && (u_fixture.u_dut.u_core.de_q.pc == FAULT_PC);
 
@@ -112,7 +112,7 @@ module arm7tdmis_exception_bus_matrix_scenario #(
             inject_abort = u_fixture.u_mem.is_active_q
                          && (u_fixture.u_mem.addr_q == FAULT_PC);
         else if (KIND == K_DABT)
-            inject_abort = (u_fixture.u_dut.u_core.state_q == 4'd1);
+            inject_abort = (u_fixture.u_dut.u_core.state_q == 5'd1);
     end
 
     int unsigned errors = 0;

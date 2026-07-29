@@ -167,13 +167,13 @@ module arm7tdmis_multiply_matrix_tb
         for (int step = 0; step < 160; step++) begin
             @(negedge CLK);
             if (!seen_multiply
-                && u_dut.u_core.state_q == 4'd0
+                && u_dut.u_core.state_q == 5'd0
                 && u_dut.u_core.de_q.valid
                 && u_dut.u_core.de_q.pc == MULTIPLY_PC) begin
                 seen_multiply   = 1'b1;
                 measured_cycles = 1;
             end else if (seen_multiply && !reached_next) begin
-                if (u_dut.u_core.state_q == 4'd0
+                if (u_dut.u_core.state_q == 5'd0
                     && u_dut.u_core.de_q.valid
                     && u_dut.u_core.de_q.pc == MRS_PC) begin
                     reached_next = 1'b1;
@@ -183,7 +183,7 @@ module arm7tdmis_multiply_matrix_tb
             end
 
             if (reached_next
-                && u_dut.u_core.state_q == 4'd0
+                && u_dut.u_core.state_q == 5'd0
                 && u_dut.u_core.de_q.valid
                 && u_dut.u_core.de_q.pc == LOOP_PC) begin
                 reached_loop = 1'b1;

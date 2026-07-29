@@ -176,7 +176,7 @@ module arm7tdmis_debug_inject_matrix_tb
             fail($sformatf("%s never released the core", description));
         if (!refrozen)
             fail($sformatf("%s never refroze", description));
-        if (u_dut.u_core.state_q !== 4'd0)
+        if (u_dut.u_core.state_q !== 5'd0)
             fail($sformatf("%s refroze outside S_EXEC", description));
     endtask
 
