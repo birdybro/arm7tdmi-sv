@@ -84,29 +84,29 @@ module arm7tdmi_mister
     // Board/framework event synchronization
     // ------------------------------------------------------------------
 
-    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
+    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     logic irq_meta_q;
-    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
+    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     logic irq_sync_q;
-    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
+    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     logic fiq_meta_q;
-    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
+    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     logic fiq_sync_q;
-    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
+    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     logic debug_enable_meta_q;
-    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
+    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     logic debug_enable_sync_q;
-    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
+    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     logic dbgrq_meta_q;
-    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
+    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     logic dbgrq_sync_q;
-    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
+    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     logic dbgbreak_meta_q;
-    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
+    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     logic dbgbreak_sync_q;
-    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
+    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     logic [1:0] dbgext_meta_q;
-    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
+    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     logic [1:0] dbgext_sync_q;
 
     always_ff @(posedge CLK or negedge RESET_N) begin
