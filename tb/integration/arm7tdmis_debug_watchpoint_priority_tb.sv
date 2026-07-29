@@ -6,9 +6,9 @@
 //     after fetching the Data Abort vector;
 //   * an IRQ or FIQ sampled with a watchpoint to be remembered, enter its
 //     exception mode, and fetch its vector before debug entry; and
-//   * a simultaneous DBGRQ not to erase the watchpoint entry cause.
+//   * a simultaneous DBGRQ not to erase a load or store watchpoint cause.
 //
-// Five independent cores make each collision a fresh reset-state event.
+// Six independent cores make each collision a fresh reset-state event.
 
 `timescale 1ns/1ps
 
@@ -30,8 +30,10 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
     localparam int unsigned IRQ_SCENARIO   = 2;
     localparam int unsigned DBGRQ_SCENARIO = 3;
     localparam int unsigned FIQ_SCENARIO   = 4;
+    localparam int unsigned STORE_DBGRQ_SCENARIO = 5;
 
     localparam logic [31:0] STM_INSTR = 32'hE8A0_000E;
+    localparam logic [31:0] STR_INSTR = 32'hE580_1000;
     localparam logic [31:0] DEBUG_STM_PC = 32'hE880_8000;
     localparam logic [31:0] DEBUG_NOP    = 32'hE1A0_8008;
     localparam logic [31:0] WATCH_ADDR =
@@ -115,7 +117,9 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
                 ? 1'b0 : 1'b1;
     assign nFIQ = ((SCENARIO == FIQ_SCENARIO) && watched_response)
                 ? 1'b0 : 1'b1;
-    assign DBGRQ = ((SCENARIO == DBGRQ_SCENARIO) && watched_response)
+    assign DBGRQ = (((SCENARIO == DBGRQ_SCENARIO)
+                     || (SCENARIO == STORE_DBGRQ_SCENARIO))
+                    && watched_response)
                  ? 1'b1 : 1'b0;
 
     logic [37:0] scan_ignored;
@@ -224,11 +228,14 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
         done   = 1'b0;
         failed = 1'b0;
 
-        // Replace the default LDR with a three-beat writeback STM in the
-        // completion scenario. The patch occurs while reset and CLKEN hold.
+        // Replace the default LDR with the store form needed by the
+        // completion and coincident-DBGRQ scenarios. The patch occurs while
+        // reset and CLKEN hold.
         @(posedge CLK);
         if (SCENARIO == STM_SCENARIO)
             u_mem.mem[13] = STM_INSTR;
+        else if (SCENARIO == STORE_DBGRQ_SCENARIO)
+            u_mem.mem[13] = STR_INSTR;
 
         repeat (3) @(posedge CLK);
         nRESET = 1'b1;
@@ -243,7 +250,8 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
         write_ice(5'h09, 32'h0000_0000);
         write_ice(5'h0A, 32'h0000_0000);
         write_ice(5'h0B, 32'hFFFF_FFFF);
-        write_ice(5'h0C, (SCENARIO == STM_SCENARIO)
+        write_ice(5'h0C, ((SCENARIO == STM_SCENARIO)
+                          || (SCENARIO == STORE_DBGRQ_SCENARIO))
                          ? 32'h0000_011D : 32'h0000_011C);
         write_ice(5'h0D, 32'h0000_00E0);
 
@@ -334,8 +342,17 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
                                    u_dut.u_core.u_psr.spsr_q[0]));
             end
             default: begin
-                check_reg(4, 32'hFEED_BEEF,
-                          "simultaneous-DBGRQ LDR did not complete");
+                if (SCENARIO == STORE_DBGRQ_SCENARIO) begin
+                    if (u_mem.mem[64] !== 32'h0000_0011)
+                        fail($sformatf(
+                            "simultaneous-DBGRQ STR data expected 00000011 got %08x",
+                            u_mem.mem[64]));
+                    check_reg(4, 32'h0000_0000,
+                              "store scenario unexpectedly changed LDR destination");
+                end else begin
+                    check_reg(4, 32'hFEED_BEEF,
+                              "simultaneous-DBGRQ LDR did not complete");
+                end
                 if (u_dut.u_core.cpsr.m !== 5'(MODE_SUPERVISOR))
                     fail($sformatf("simultaneous DBGRQ changed mode to %05b",
                                    u_dut.u_core.cpsr.m));
@@ -343,7 +360,9 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
                 // Erratum [7], scenario 2: the watchpoint cause must survive
                 // coincident DBGRQ and RESTART must continue at the first
                 // unexecuted successor, rather than a miscorrected PC.
-                write_ice(5'h0C, 32'h0000_001C);
+                write_ice(5'h0C,
+                          (SCENARIO == STORE_DBGRQ_SCENARIO)
+                          ? 32'h0000_001D : 32'h0000_001C);
                 load_ir(4'(IR_RESTART));
                 resumed = 1'b0;
                 for (int i = 0; i < 140; i++) begin
@@ -397,8 +416,8 @@ module arm7tdmis_debug_watchpoint_priority_tb;
     logic CLK = 1'b0;
     initial forever #5 CLK = ~CLK;
 
-    logic [4:0] done;
-    logic [4:0] failed;
+    logic [5:0] done;
+    logic [5:0] failed;
 
     arm7tdmis_debug_watchpoint_priority_scenario #(.SCENARIO(0)) u_stm (
         .CLK, .done(done[0]), .failed(failed[0])
@@ -415,13 +434,16 @@ module arm7tdmis_debug_watchpoint_priority_tb;
     arm7tdmis_debug_watchpoint_priority_scenario #(.SCENARIO(4)) u_fiq (
         .CLK, .done(done[4]), .failed(failed[4])
     );
+    arm7tdmis_debug_watchpoint_priority_scenario #(.SCENARIO(5)) u_store_dbgrq (
+        .CLK, .done(done[5]), .failed(failed[5])
+    );
 
     initial begin
         $dumpfile("debug_watchpoint_priority.fst");
         $dumpvars(0, arm7tdmis_debug_watchpoint_priority_tb);
         wait (&done);
         if (|failed)
-            $fatal(1, "[debug_watchpoint_priority] FAIL scenarios=%05b",
+            $fatal(1, "[debug_watchpoint_priority] FAIL scenarios=%06b",
                    failed);
         $display("[debug_watchpoint_priority] PASS");
         $finish;
