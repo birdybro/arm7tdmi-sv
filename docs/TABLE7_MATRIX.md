@@ -15,7 +15,9 @@ phase at the same address. [RAW_BUS.md](RAW_BUS.md) gives the exact edge and
 history rules.
 
 `arm7tdmis_table7_core_phase_matrix_tb.sv` is the central full-phase oracle.
-For every instruction clock in 17 reset-isolated base-family rows it compares:
+Its 17 base-family rows run in both endian configurations, once continuously
+and once with deterministic 1-to-4-cycle CLKEN holds at every Execute phase,
+for 68 reset-isolated cases. Every enabled instruction clock compares:
 
 - Address-class: `ADDR`, `WRITE`, `SIZE`, `PROT`, `LOCK`, `TRANS`, and
   `DMORE`.
@@ -25,6 +27,12 @@ For every instruction clock in 17 reset-isolated base-family rows it compares:
 - Architecture/events: `CLKEN`, instruction word and PC, last executed PC,
   CPSR, multicycle state, exception selection, `DBGACK`, `DBGnEXEC`, and
   `DBGINSTRVALID`.
+
+During each inserted wait the oracle freezes architectural state, permits the
+single initial output-settling cycle specified by Appendix B, then requires
+the complete bus, coprocessor, trace/debug, and internal-state tuple to remain
+stable on every further stopped edge and to return to the exact numbered
+Chapter 7 phase when CLKEN is restored.
 
 The independent `arm7tdmis_raw_bus_checker` is also bound to every directed
 pin-level test. It evaluates legal N/S history, I/S merge, LDC/STC stream

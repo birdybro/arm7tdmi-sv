@@ -3368,6 +3368,13 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
 - [ ] **VAL-004:** Replace the current E-state-duration cycle harness with exact
   Chapter 7 waveform tests and cross coverage over class × register/PC × m/n/b ×
   condition × endian × stalls × abort/interrupt.
+  The exact pin/state oracle now crosses 17 base instruction-family rows with
+  both endian configurations and a deterministic 1-to-4-cycle CLKEN hold at
+  every Execute phase (68 reset-isolated cases). It checks the complete
+  enabled Chapter 7 tuple, Appendix B first-stopped-cycle allowance, stable
+  later waits, and exact resumed phase. Register/PC, m/n/b, condition, and
+  abort/interrupt evidence remains distributed across specialized matrices;
+  a fail-hard aggregate cross-coverage gate is still required before closure.
 - [ ] **VAL-005:** Add randomized CLKEN stalls to every instruction class and random
   legal ABORT, IRQ, FIQ, reset, DBGRQ, and coprocessor handshakes at each cycle.
 - [ ] **VAL-006:** Add functional coverage for every valid encoding family and every

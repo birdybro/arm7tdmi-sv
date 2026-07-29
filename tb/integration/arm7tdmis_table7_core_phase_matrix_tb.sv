@@ -11,7 +11,9 @@
 //   * branch:      target/N opcode
 // This reset-isolated matrix checks every raw phase of the base ARM
 // instruction families without conflating them with the response that is
-// simultaneously on RDATA.
+// simultaneously on RDATA. Every row runs in both endian configurations,
+// first continuously and then with deterministic pseudorandom CLKEN holds
+// inserted at every Execute phase.
 
 `timescale 1ns/1ps
 
@@ -22,6 +24,8 @@ module arm7tdmis_table7_core_phase_matrix_tb
 ;
 
     localparam int ROW_COUNT = 17;
+    localparam int ENDIAN_COUNT = 2;
+    localparam int STALL_PROFILE_COUNT = 2;
     localparam logic [31:0] TEST_PC = 32'h0000_0040;
 
     logic CLK;
@@ -32,6 +36,7 @@ module arm7tdmis_table7_core_phase_matrix_tb
 
     logic nRESET = 1'b0;
     logic CLKEN  = 1'b1;
+    logic CFGBIGEND = 1'b0;
     logic [31:0] ADDR;
     logic        WRITE;
     logic [1:0]  SIZE;
@@ -49,7 +54,7 @@ module arm7tdmis_table7_core_phase_matrix_tb
     int unsigned errors = 0;
 
     arm7tdmis_top u_dut (
-        .CLK, .CLKEN, .nRESET, .CFGBIGEND(1'b0),
+        .CLK, .CLKEN, .nRESET, .CFGBIGEND(CFGBIGEND),
         .nIRQ(1'b1), .nFIQ(1'b1), .ABORT,
         .ADDR, .WRITE, .SIZE, .PROT, .LOCK, .TRANS, .WDATA, .RDATA,
         .CPnMREQ, .CPSEQ, .CPnTRANS, .CPnOPC, .CPTBIT, .CPnI,
@@ -63,7 +68,7 @@ module arm7tdmis_table7_core_phase_matrix_tb
     arm7tdmis_memory #(
         .WORDS(256)
     ) u_mem (
-        .CLK, .CLKEN, .nRESET, .CFGBIGEND(1'b0),
+        .CLK, .CLKEN, .nRESET, .CFGBIGEND(CFGBIGEND),
         .ADDR, .WRITE, .SIZE, .PROT, .LOCK, .TRANS, .WDATA, .RDATA,
         .ABORT, .inject_abort(1'b0)
     );
@@ -266,12 +271,14 @@ module arm7tdmis_table7_core_phase_matrix_tb
         unique case (u_mem.size_q)
             2'(SIZE_WORD): return word;
             2'(SIZE_HALFWORD): begin
-                halfword_high = u_mem.addr_q[1];
+                halfword_high = CFGBIGEND ? ~u_mem.addr_q[1]
+                                          : u_mem.addr_q[1];
                 return halfword_high ? {word[31:16], 16'h0000}
                                      : {16'h0000, word[15:0]};
             end
             2'(SIZE_BYTE): begin
-                byte_lane = u_mem.addr_q[1:0];
+                byte_lane = CFGBIGEND ? ~u_mem.addr_q[1:0]
+                                      : u_mem.addr_q[1:0];
                 unique case (byte_lane)
                     2'd0: return {24'h0, word[7:0]};
                     2'd1: return {16'h0, word[15:8], 8'h0};
@@ -323,6 +330,15 @@ module arm7tdmis_table7_core_phase_matrix_tb
         endcase
     endfunction
 
+    function automatic int stall_cycles(
+        input int row,
+        input int phase,
+        input int endian
+    );
+        // Deterministic 1..4-cycle distribution, stable across simulators.
+        return 1 + ((row ^ (phase << 1) ^ (endian << 2)) & 3);
+    endfunction
+
     task automatic fail(input int row, input string reason);
         $display("[table7_core_phase_matrix] FAIL row %0d %s: %s",
                  row, row_name(row), reason);
@@ -350,11 +366,100 @@ module arm7tdmis_table7_core_phase_matrix_tb
 
     localparam int DATA_ADDRESS_WORD = 32'h0000_0100 >> 2;
 
-    task automatic run_row(input int row);
+    task automatic check_stalled_phase(
+        input int row,
+        input int phase,
+        input int endian
+    );
+        logic [114:0] original_outputs;
+        logic [114:0] held_outputs;
+        logic [4:0]  frozen_state;
+        logic [31:0] frozen_cpsr;
+        logic        frozen_de_valid;
+        logic [31:0] frozen_de_pc;
+        logic [31:0] frozen_de_instr;
+        logic [31:0] frozen_pc;
+        int          cycles;
+
+        original_outputs = {
+            ADDR, WDATA, RDATA, WRITE, SIZE, PROT, LOCK, TRANS,
+            ABORT, DMORE, CPnMREQ, CPSEQ, CPnTRANS, CPnOPC,
+            CPTBIT, CPnI, DBGACK, DBGnEXEC, DBGINSTRVALID
+        };
+        frozen_state = u_dut.u_core.state_q;
+        frozen_cpsr = u_dut.u_core.cpsr;
+        frozen_de_valid = u_dut.u_core.de_q.valid;
+        frozen_de_pc = u_dut.u_core.de_q.pc;
+        frozen_de_instr = u_dut.u_core.de_q.instr;
+        frozen_pc = u_dut.u_core.pc_q;
+
+        CLKEN = 1'b0;
+        cycles = stall_cycles(row, phase, endian);
+        // Appendix B allows outputs to settle once when CLKEN is first
+        // sampled LOW. Architectural state must already be frozen, and the
+        // settled outputs must then hold for every further stopped edge.
+        @(posedge CLK);
+        #1;
+        held_outputs = {
+            ADDR, WDATA, RDATA, WRITE, SIZE, PROT, LOCK, TRANS,
+            ABORT, DMORE, CPnMREQ, CPSEQ, CPnTRANS, CPnOPC,
+            CPTBIT, CPnI, DBGACK, DBGnEXEC, DBGINSTRVALID
+        };
+        if (u_dut.u_core.state_q !== frozen_state
+            || u_dut.u_core.cpsr !== frozen_cpsr
+            || u_dut.u_core.de_q.valid !== frozen_de_valid
+            || u_dut.u_core.de_q.pc !== frozen_de_pc
+            || u_dut.u_core.de_q.instr !== frozen_de_instr
+            || u_dut.u_core.pc_q !== frozen_pc)
+            fail(row, $sformatf(
+                "endian %0d phase %0d advanced on first stopped edge",
+                endian, phase + 1));
+
+        repeat (cycles - 1) begin
+            @(posedge CLK);
+            #1;
+            if ({
+                    ADDR, WDATA, RDATA, WRITE, SIZE, PROT, LOCK, TRANS,
+                    ABORT, DMORE, CPnMREQ, CPSEQ, CPnTRANS, CPnOPC,
+                    CPTBIT, CPnI, DBGACK, DBGnEXEC, DBGINSTRVALID
+                } !== held_outputs)
+                fail(row, $sformatf(
+                    "endian %0d phase %0d outputs changed during %0d-cycle stall",
+                    endian, phase + 1, cycles));
+            if (u_dut.u_core.state_q !== frozen_state
+                || u_dut.u_core.cpsr !== frozen_cpsr
+                || u_dut.u_core.de_q.valid !== frozen_de_valid
+                || u_dut.u_core.de_q.pc !== frozen_de_pc
+                || u_dut.u_core.de_q.instr !== frozen_de_instr
+                || u_dut.u_core.pc_q !== frozen_pc)
+                fail(row, $sformatf(
+                    "endian %0d phase %0d internal state changed during %0d-cycle stall",
+                    endian, phase + 1, cycles));
+        end
+        @(negedge CLK);
+        CLKEN = 1'b1;
+        #1;
+        if ({
+                ADDR, WDATA, RDATA, WRITE, SIZE, PROT, LOCK, TRANS,
+                ABORT, DMORE, CPnMREQ, CPSEQ, CPnTRANS, CPnOPC,
+                CPTBIT, CPnI, DBGACK, DBGnEXEC, DBGINSTRVALID
+            } !== original_outputs)
+            fail(row, $sformatf(
+                "endian %0d phase %0d did not restore after stall",
+                endian, phase + 1));
+    endtask
+
+    task automatic run_row(
+        input int row,
+        input int endian,
+        input int stall_profile
+    );
         int unsigned wait_cycles;
 
         @(negedge CLK);
         nRESET = 1'b0;
+        CLKEN = 1'b1;
+        CFGBIGEND = 1'(endian);
         repeat (4) @(posedge CLK);
         setup_row(row);
         @(negedge CLK);
@@ -440,19 +545,29 @@ module arm7tdmis_table7_core_phase_matrix_tb
                     phase + 1, DBGINSTRVALID, DBGnEXEC, DBGACK,
                     u_dut.u_core.any_exc_fires));
 
+            if (stall_profile != 0)
+                check_stalled_phase(row, phase, endian);
             if (phase + 1 < expected_phase_count(row))
                 @(negedge CLK);
         end
     endtask
 
     initial begin
-        for (int row = 0; row < ROW_COUNT; row++)
-            run_row(row);
+        for (int endian = 0; endian < ENDIAN_COUNT; endian++) begin
+            for (int stall_profile = 0;
+                 stall_profile < STALL_PROFILE_COUNT;
+                 stall_profile++) begin
+                for (int row = 0; row < ROW_COUNT; row++)
+                    run_row(row, endian, stall_profile);
+            end
+        end
         if (errors != 0)
             $fatal(1, "[table7_core_phase_matrix] FAIL (%0d errors)",
                    errors);
-        $display("[table7_core_phase_matrix] PASS (%0d reset-isolated rows)",
-                 ROW_COUNT);
+        $display(
+            "[table7_core_phase_matrix] PASS (%0d endian x %0d stall profiles x %0d rows = %0d reset-isolated cases)",
+            ENDIAN_COUNT, STALL_PROFILE_COUNT, ROW_COUNT,
+            ENDIAN_COUNT * STALL_PROFILE_COUNT * ROW_COUNT);
         $finish;
     end
 
