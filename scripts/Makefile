@@ -11,6 +11,7 @@
 # or from the repo root: make -C scripts <target>
 
 VERILATOR ?= verilator
+VERILATOR_COVERAGE ?= verilator_coverage
 GTKWAVE   ?= gtkwave
 PYTHON    ?= python3
 QUARTUS_MAP ?= quartus_map
@@ -31,10 +32,13 @@ TOP_TB    := arm7tdmis_tb_top
 VFLAGS_COMMON := -Wall -Wno-UNUSEDPARAM --assert --timescale 1ns/1ps
 VFLAGS_LINT   := $(VFLAGS_COMMON)
 VFLAGS_BUILD  := $(VFLAGS_COMMON) --binary --trace-fst -j 0
+VFLAGS_COVERAGE := $(VFLAGS_COMMON) --binary --coverage -j 0
 
 OBJ_DIR        := obj_dir
 TB_BIN         := $(OBJ_DIR)/V$(TOP_TB)
 RUN_ARTIFACTS  := cycle.csv waves.fst
+COVERAGE_OBJ_DIR := $(OBJ_DIR)/coverage
+COVERAGE_REPORT_DIR := ../reports/generated/coverage
 
 UNIT_TESTS := regfile regfile_banking psr psr_banking psr_policy reset_state_policy reset_sync shifter alu multiplier condition decoder thumb_decoder reserved_decode unpredictable_decode jtag_tap jtag_idcode_config sync_debug_port ice_rt ice_watchpoint dcc etm7_adapter
 
@@ -46,6 +50,12 @@ ERRATA_TESTS := debug_consecutive_breakpoints erratum2_exception_priority \
 	debug_watchpoint_priority debug_breakpoint_execute debug_system_speed \
 	cp14_dcc etm_trace_matrix cond_fail_matrix pabt_pipeline \
 	erratum12_thumb_dabt_lr debug_pc_modify_dbgrq cp_erratum14 cp_erratum15
+
+# This is a deliberately named measured subset, not functional-coverage
+# closure. It crosses retirement, dependency/condition/flags, exception entry,
+# bus transfer, and debug execution. The JSON report records the exact list.
+COVERAGE_TESTS := retire_interface sequence_dependencies arm_exception_lr debug_system_speed
+COVERAGE_RAW_FILES := $(addsuffix .dat,$(addprefix $(COVERAGE_REPORT_DIR)/,$(COVERAGE_TESTS)))
 
 INTEG_COMMON_SRCS := \
 	../verification/arm7tdmis_raw_bus_checker.sv \
@@ -62,7 +72,8 @@ INTEG_EXTRA_FLAGS_retire_interface := -DARM7TDMIS_VERIFICATION
 .PHONY: all lint lint-mister lint-example lint-tb \
         quartus-analysis quartus-compile \
         quartus-conformance-analysis quartus-conformance-compile \
-        sim run wave clean help regress regress-quick \
+        sim run wave clean help regress regress-quick regress-ci \
+        coverage release-evidence \
         harness-unit harness-self-test raw-checker-self-test mutation-self-test \
         $(addprefix unit-, $(UNIT_TESTS)) unit \
         $(addprefix integ-, $(INTEG_TESTS)) integ errata
@@ -164,6 +175,43 @@ integ: $(addprefix integ-, $(INTEG_TESTS))
 
 errata: $(addprefix integ-, $(ERRATA_TESTS))
 
+# Coverage builds are separate from ordinary trace builds and write one raw
+# database per test. The top-level target merges those databases before
+# producing LCOV and the versioned machine-readable summary.
+define COVERAGE_RULE
+coverage-run-$(1):
+	mkdir -p $$(COVERAGE_OBJ_DIR)/$(1) $$(COVERAGE_REPORT_DIR)
+	$$(VERILATOR) $$(VFLAGS_COVERAGE) -Wno-SYNCASYNCNET \
+	    $$(INTEG_EXTRA_FLAGS_$(1)) \
+	    --top-module arm7tdmis_$(1)_tb \
+	    --Mdir $$(COVERAGE_OBJ_DIR)/$(1) -f $$(SIM_F) \
+	    $$(INTEG_COMMON_SRCS) \
+	    ../tb/integration/arm7tdmis_$(1)_tb.sv
+	./$$(COVERAGE_OBJ_DIR)/$(1)/Varm7tdmis_$(1)_tb \
+	    +verilator+coverage+file+$$(abspath $$(COVERAGE_REPORT_DIR))/$(1).dat
+endef
+
+$(foreach t,$(COVERAGE_TESTS),$(eval $(call COVERAGE_RULE,$(t))))
+
+.PHONY: $(addprefix coverage-run-, $(COVERAGE_TESTS))
+
+coverage:
+	rm -rf $(COVERAGE_OBJ_DIR) $(COVERAGE_REPORT_DIR)
+	mkdir -p $(COVERAGE_OBJ_DIR) $(COVERAGE_REPORT_DIR)
+	@set -eu; \
+	for test in $(COVERAGE_TESTS); do \
+	    $(MAKE) coverage-run-$$test; \
+	done
+	$(VERILATOR_COVERAGE) --write $(COVERAGE_REPORT_DIR)/coverage.dat \
+	    $(COVERAGE_RAW_FILES)
+	$(VERILATOR_COVERAGE) --write-info $(COVERAGE_REPORT_DIR)/coverage.info \
+	    $(COVERAGE_REPORT_DIR)/coverage.dat
+	PYTHONPATH=. $(PYTHON) coverage_report.py \
+	    --raw $(COVERAGE_REPORT_DIR)/coverage.dat \
+	    --lcov $(COVERAGE_REPORT_DIR)/coverage.info \
+	    --output $(COVERAGE_REPORT_DIR)/coverage.json \
+	    --tests "$(COVERAGE_TESTS)"
+
 # Release-facing entry point. The runner always starts clean, records the
 # complete source/tool/variant/seed manifest, executes every phase separately,
 # and atomically updates a machine-readable JSON result with per-phase logs.
@@ -176,6 +224,18 @@ regress-quick:
 	PYTHONPATH=. $(PYTHON) regression_harness.py --quick \
 	    --unit-tests "$(UNIT_TESTS)" \
 	    --integration-tests "$(INTEG_TESTS)"
+
+# Open-source CI uses the same report contract but cannot claim the Quartus
+# phases. The report's scope and empty FPGA manifest make that distinction
+# machine-readable.
+regress-ci:
+	PYTHONPATH=. $(PYTHON) regression_harness.py --quick --simulation-only \
+	    --variant ci-open-source \
+	    --unit-tests "$(UNIT_TESTS)" \
+	    --integration-tests "$(INTEG_TESTS)"
+
+release-evidence:
+	PYTHONPATH=. $(PYTHON) release_evidence.py
 
 harness-unit:
 	PYTHONPATH=. $(PYTHON) -m unittest discover -s tests -p 'test_*.py' -v
@@ -254,6 +314,9 @@ help:
 	@echo "  errata       run the complete 15-entry r4p3 errata evidence matrix"
 	@echo "  regress      clean full run with JSON metadata/results under reports/"
 	@echo "  regress-quick lint/harness plus one unit/integration test and smoke"
+	@echo "  regress-ci   quick simulation-only CI report without Quartus phases"
+	@echo "  coverage     measured Verilator coverage databases, LCOV, and JSON"
+	@echo "  release-evidence validate and archive clean regression/coverage reports"
 	@echo "  harness-unit unit-test the machine-readable regression harness"
 	@echo "  harness-self-test prove an intentional simulator failure stays fatal"
 	@echo "  mutation-self-test kill writeback/flag/exception/bus mutants"

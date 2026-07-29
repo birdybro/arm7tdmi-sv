@@ -86,6 +86,7 @@ def collect_metadata(
     integration_tests: Sequence[str],
     variant: str,
     seed: int,
+    include_fpga: bool = True,
 ) -> dict[str, Any]:
     status = _run_text(("git", "status", "--porcelain=v1", "--untracked-files=all"))
     return {
@@ -102,7 +103,11 @@ def collect_metadata(
         },
         "tools": {
             "verilator": _run_text(("verilator", "--version")),
-            "quartus": _run_text(("quartus_map", "--version")),
+            "quartus": (
+                _run_text(("quartus_map", "--version"))
+                if include_fpga
+                else "not requested (simulation-only profile)"
+            ),
             "python": f"Python {sys.version.replace('\n', ' ')}",
             "make": _run_text(("make", "--version")).splitlines()[0],
             "git": _run_text(("git", "--version")),
@@ -118,12 +123,16 @@ def collect_metadata(
                 "testbench",
             ],
             "harness": ["unit", "expected-failure", "raw-bus-checker"],
-            "fpga": [
-                "quartus-analysis",
-                "quartus-conformance-analysis",
-                "quartus-compile",
-                "quartus-conformance-compile",
-            ],
+            "fpga": (
+                [
+                    "quartus-analysis",
+                    "quartus-conformance-analysis",
+                    "quartus-compile",
+                    "quartus-conformance-compile",
+                ]
+                if include_fpga
+                else []
+            ),
             "unit": list(unit_tests),
             "integration": list(integration_tests),
             "smoke": ["arm7tdmis_tb_top"],
@@ -215,20 +224,22 @@ def _phases(
     integration_tests: Sequence[str],
     *,
     quick: bool,
+    include_fpga: bool = True,
 ) -> Iterable[tuple[str, tuple[str, ...]]]:
     yield _make_phase("clean", "clean")
     yield _make_phase("lint-rtl", "lint")
     yield _make_phase("lint-mister-wrapper", "lint-mister")
     yield _make_phase("lint-fpga-package-example", "lint-example")
-    yield _make_phase("quartus-analysis", "quartus-analysis")
-    yield _make_phase(
-        "quartus-conformance-analysis", "quartus-conformance-analysis"
-    )
-    if not quick:
-        yield _make_phase("quartus-compile", "quartus-compile")
+    if include_fpga:
+        yield _make_phase("quartus-analysis", "quartus-analysis")
         yield _make_phase(
-            "quartus-conformance-compile", "quartus-conformance-compile"
+            "quartus-conformance-analysis", "quartus-conformance-analysis"
         )
+        if not quick:
+            yield _make_phase("quartus-compile", "quartus-compile")
+            yield _make_phase(
+                "quartus-conformance-compile", "quartus-conformance-compile"
+            )
     yield _make_phase("lint-testbench", "lint-tb")
     yield _make_phase("harness-unit", "harness-unit")
     yield _make_phase("harness-expected-failure", "harness-self-test")
@@ -266,6 +277,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="run one unit and one integration test plus lint/harness/smoke",
     )
+    parser.add_argument(
+        "--simulation-only",
+        action="store_true",
+        help="omit all Quartus phases and report an empty FPGA manifest",
+    )
     return parser.parse_args()
 
 
@@ -283,8 +299,10 @@ def main() -> int:
         integration_tests=integration_tests,
         variant=args.variant,
         seed=args.seed,
+        include_fpga=not args.simulation_only,
     )
     report["mode"] = "quick" if args.quick else "full"
+    report["scope"] = "simulation-only" if args.simulation_only else "release"
     report["status"] = "running"
     report["results"] = []
     write_report(report_path, report)
@@ -301,7 +319,10 @@ def main() -> int:
 
     try:
         for name, command in _phases(
-            unit_tests, integration_tests, quick=args.quick
+            unit_tests,
+            integration_tests,
+            quick=args.quick,
+            include_fpga=not args.simulation_only,
         ):
             result = _run_phase(
                 name=name,

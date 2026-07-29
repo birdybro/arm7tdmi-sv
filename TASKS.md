@@ -2400,11 +2400,16 @@ No functional claim can become VERIFIED until every item here is complete.
   `tb/integration/arm7tdmis_abort_inactive_tb.sv` injects ABORT during I/C
   phases, while `tb/integration/arm7tdmis_abort_clken_tb.sv` covers an inactive
   assertion overlapping a stopped clock-enable interval.
-- [ ] **VER-008:** Publish machine-readable regression and coverage reports as release
+- [x] **VER-008:** Publish machine-readable regression and coverage reports as release
   artifacts. A console line containing `PASS` is not release evidence. The
   versioned regression JSON schema and per-phase log hashes are implemented and
-  documented in `docs/VERIFICATION.md`; coverage generation and release-artifact
-  archival remain open.
+  documented in `docs/VERIFICATION.md`. `make -C scripts coverage` now preserves
+  four named raw databases, a merged raw database, LCOV, exact test/tool/source
+  identity, and an atomic `arm7tdmis-coverage-v1` summary. The evidence packager
+  rejects failed, dirty, or cross-commit reports and hashes every report, phase
+  log, and coverage file into a commit-addressed archive. GitHub Actions uploads
+  those inspectable files and the archive only after validation. This measured
+  subset is explicitly not VAL-006 functional-coverage closure.
 - [x] **VER-009:** Expose a verification-only architectural retirement interface
   (instruction PC/opcode/state/condition result/register and CPSR effects/exception)
   instead of making all scoreboards depend on private hierarchy. Defining

@@ -19,20 +19,25 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes build-essential make python3 verilator
-      - name: Prove lint and failure propagation
-        run: |
-          make -C scripts lint
-          make -C scripts lint-mister
-          make -C scripts lint-example
-          make -C scripts lint-tb
-          make -C scripts harness-unit
-          make -C scripts harness-self-test
-          make -C scripts raw-checker-self-test
-      - name: Run representative architectural paths
-        run: |
-          make -C scripts unit-regfile
-          make -C scripts integ-retire_interface
-          make -C scripts run
+      - name: Run fail-hard simulation regression
+        run: make -C scripts regress-ci
+      - name: Measure representative RTL coverage
+        run: make -C scripts coverage
+      - name: Validate and bundle immutable evidence
+        run: make -C scripts release-evidence
+      - name: Publish commit-addressed evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm7tdmis-evidence-${{ github.sha }}
+          path: |
+            reports/generated/regression.json
+            reports/generated/logs/
+            reports/generated/coverage/
+            reports/generated/release-manifest.json
+            reports/generated/arm7tdmis-release-evidence-*.tar.gz
+            reports/generated/arm7tdmis-release-evidence-*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 90
 
   architectural-mutation:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

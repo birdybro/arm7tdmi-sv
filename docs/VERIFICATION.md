@@ -3,11 +3,14 @@
 `make -C scripts regress` is the release-facing directed regression entry point.
 It always removes the Verilator build directory first, then runs:
 
-1. Raw-core RTL, canonical MiSTer-wrapper, and testbench lint.
-2. The harness unit test and intentional-failure sentinel.
-3. Every unit test in the `UNIT_TESTS` manifest.
-4. Every directed test in the `INTEG_TESTS` manifest.
-5. The mixed-instruction smoke test.
+1. Raw-core RTL, canonical MiSTer wrapper, portable FPGA example, and
+   testbench lint.
+2. Quartus analysis and complete compile/report checks for both FPGA profiles.
+3. Harness unit tests, the intentional-failure sentinel, and raw-bus-checker
+   mutation matrix.
+4. Every unit test in the `UNIT_TESTS` manifest.
+5. Every directed test in the `INTEG_TESTS` manifest.
+6. The mixed-instruction smoke test.
 
 The runner stops at the first failing phase and returns nonzero. The intentional
 failure sentinel contains a real SystemVerilog `$fatal`; the enclosing target
@@ -24,10 +27,12 @@ architectural diagnostic, so a syntax error cannot masquerade as mutation
 coverage. `scripts/tests/test_mutation_harness.py` also proves that a survivor
 and a wrong detector fail orchestration.
 
-`.github/workflows/verification.yml` runs lint, all harness self-tests, the
-raw-bus mutation matrix, and representative architectural simulations for
-pushes and pull requests. Its Monday schedule and manual-dispatch path run the
-four-class architectural mutation suite.
+`.github/workflows/verification.yml` runs the fail-hard open-source regression,
+the raw-bus mutation matrix, representative architectural simulations, and
+measured RTL coverage for pushes and pull requests. It publishes a
+commit-addressed evidence artifact only after the reports pass clean-tree and
+same-commit validation. Its Monday schedule and manual-dispatch path also run
+the four-class architectural mutation suite.
 
 ## Machine-readable result
 
@@ -50,6 +55,41 @@ versioned artifact archive together with the corresponding clean source commit.
 `make -C scripts regress-quick` exercises the same metadata, clean-build, lint,
 harness, and smoke path with one unit and one integration test. Its report is
 explicitly marked `"mode": "quick"` and cannot be mistaken for the full run.
+
+`make -C scripts regress-ci` is the open-source CI form. It also uses quick
+selection, sets `"scope": "simulation-only"`, records an empty FPGA phase
+manifest, and never probes for or invokes Quartus. It is durable evidence for
+the phases it lists, but it is not a substitute for a clean full
+`"scope": "release"` report containing both FPGA profiles.
+
+## Coverage and immutable artifact
+
+`make -C scripts coverage` builds four named integration tests with Verilator
+line, branch, expression, toggle, and user coverage instrumentation:
+`retire_interface`, `sequence_dependencies`, `arm_exception_lr`, and
+`debug_system_speed`. It preserves each raw database, merges them into
+`reports/generated/coverage/coverage.dat`, writes standard LCOV to
+`coverage.info`, and atomically publishes schema `arm7tdmis-coverage-v1` as
+`coverage.json`.
+
+The JSON identifies the exact tests, Git commit, dirty state, source-input
+SHA-256, Verilator version, raw/LCOV hashes, per-point totals for all elaborated
+sources and RTL-only sources, and per-file LCOV line/branch totals. The report
+states its limit explicitly: these four tests are measured structural coverage,
+not the zero-uncovered-bin functional closure required by VAL-006.
+
+After regression and coverage have both run on the same clean commit,
+`make -C scripts release-evidence` validates their schemas, passing status,
+clean-tree markers, and exact commit identity. It emits:
+
+- `reports/generated/release-manifest.json`, with size and SHA-256 for every
+  included report, phase log, and coverage database;
+- `arm7tdmis-release-evidence-<commit>.tar.gz`; and
+- a sibling `.sha256` checksum.
+
+The GitHub artifact contains both the inspectable files and this self-contained
+archive. Generated local reports remain ignored; immutable retention belongs
+to the commit-addressed CI/release artifact store.
 
 ## Architectural retirement contract
 
@@ -304,6 +344,7 @@ required hidden inter-halfword BL state. Four consecutive external MRC
 transfers and their independent responses remain covered by
 `arm7tdmis_cp_erratum15_tb`.
 
-Functional/line/toggle coverage reporting, mutation testing of architectural
-controls, differential testing, and formal evidence remain separate open
-requirements in `TASKS.md` §31.
+Measured structural coverage reporting and mutation testing of architectural
+controls are implemented above. Required-bin functional coverage closure,
+independent differential testing, and formal evidence remain separate open
+requirements in `TASKS.md` §31.10.
