@@ -146,21 +146,21 @@ module etm7_adapter_tb;
         ETM_DBGRQ = 1'b1;
         #1;
 
-        check_equal({
+        check_equal({6'b0, {
             ETM_CLKEN, ETM_nRESET, ETM_nTRST, ETM_BIGEND,
             ETM_ABORT, ETM_CPA, ETM_CPB, ETM_DBGACK,
             CPU_DBGRQ, ETM_nMREQ, ETM_SEQ, ETM_MAS,
             ETM_nCPI, ETM_nEXEC, ETM_nOPC, ETM_nRW,
             ETM_RANGEOUT, ETM_TBIT, ETM_TCKEN, ETM_TDI,
             ETM_TDO, ETM_ARMTDO, ETM_TMS, ETM_INSTRVALID
-        }, {
+        }}, {6'b0, {
             CLKEN, nRESET, DBGnTRST, CFGBIGEND,
             ABORT, CPA, CPB, DBGACK,
             ETM_DBGRQ, CPnMREQ, CPSEQ, SIZE,
             CPnI, DBGnEXEC, CPnOPC, WRITE,
             DBGRNG, CPTBIT, DBGTCKEN, DBGTDI,
             DBGTDO, DBGTDO, DBGTMS, DBGINSTRVALID
-        }, "scalar and control mapping");
+        }}, "scalar and control mapping");
         check_equal(ETM_A, ADDR, "changed address direct");
         check_equal(ETM_RDATA, RDATA, "changed RDATA direct");
         check_equal(ETM_WDATA, WDATA, "changed WDATA direct");

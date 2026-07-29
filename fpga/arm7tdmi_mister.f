@@ -23,6 +23,7 @@
 ../rtl/jtag/arm7tdmis_jtag_tap.sv
 ../rtl/jtag/arm7tdmis_sync_debug_port.sv
 ../rtl/debug/arm7tdmis_ice_rt.sv
+../rtl/trace/arm7tdmis_etm7_adapter.sv
 
 ../rtl/top/arm7tdmis_top.sv
 ../rtl/top/arm7tdmi_mister.sv
