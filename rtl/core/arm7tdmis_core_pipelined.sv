@@ -2693,13 +2693,12 @@ module arm7tdmis_core_pipelined
     //
     // DBGINSTRVALID: HIGH when E has a valid decoded instruction this cycle
     //                (= executing). Bubble cycles → LOW.
-    // DBGnEXEC     : LOW when the instruction is actually executing
-    //                (passes_cond gate). HIGH for unexecuted instructions
-    //                (condition failed). See TRM Table 7-23 — even
-    //                cond-fail instructions consume cycles but signal
-    //                DBGnEXEC HIGH so ETM can distinguish.
+    // DBGnEXEC     : active-LOW condition-code success at Execute. Decoder
+    //                implementation status is deliberately irrelevant:
+    //                a condition-passing instruction that takes Undefined
+    //                still executed. See Appendix A and Table 7-23.
     assign DBGINSTRVALID = nRESET && CLKEN && executing;
-    assign DBGnEXEC      = !(nRESET && CLKEN && passes_cond);
+    assign DBGnEXEC      = !(nRESET && CLKEN && executing && condition_pass);
 
 
     // ---- TB / debug observability ----
