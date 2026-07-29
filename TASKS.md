@@ -3071,11 +3071,19 @@ number of cycles spent in an internal FSM state.
 - [ ] **JTAG-006:** Demonstrate a pinned open-source debugger/GDB flow against the
   simulated scan transport and on FPGA, or document precisely why the r4p3 scan
   protocol needs a project-specific bridge and release that bridge with protocol tests.
-- [ ] **ETM-001:** Define and verify `DBGINSTRVALID` and `DBGnEXEC` for commit,
+- [x] **ETM-001:** Define and verify `DBGINSTRVALID` and `DBGnEXEC` for commit,
   condition failure, stalls, multicycle instructions, flushes, exceptions, debug, and
   Thumb. Expose the documented bus/pipeline information required by ETM7.
-- [ ] **ETM-002:** Provide and test the external ETM wrapper contract, including direct
+  `arm7tdmis_etm_trace_matrix_tb` covers every listed runtime class, including
+  condition-passing Undefined versus condition failure.
+  `arm7tdmis_debug_inject_matrix_tb` requires one executed trace pulse for each of
+  38 debug-speed instructions. `docs/TRACE.md` defines the semantics.
+- [x] **ETM-002:** Provide and test the external ETM wrapper contract, including direct
   RDATA/WDATA visibility, `PROCID=0`, `PROCIDWR=0`, and reset propagation.
+  `arm7tdmis_etm7_adapter` implements the complete Table 6-1 transparent mapping,
+  both clock aliases, ETM-to-CPU DBGRQ, reset/TAP-reset propagation, direct data,
+  and process-ID tie-offs. `etm7_adapter_tb` verifies every mapping. This is an
+  external-macrocell adapter, not a claim that the repository implements ETM7.
 - [x] **DFT-001:** For the FPGA profile, remove DFT from all "complete" claims and tie
   it off in a named `no_dft` wrapper. If an ASIC profile remains a goal, create a
   separate scan-insertion specification and prove SE/SI/SO rather than tying SO low.

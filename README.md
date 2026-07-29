@@ -19,7 +19,7 @@ is the canonical status and release gate.
 | Exceptions/aborts | **Partial** — directed tests cover priority, ARM/Thumb LR values, DABT+FIQ, SWP, and per-beat LDM/STM abort behavior; full closure remains |
 | Bus/cycle/endian | **Partial** — little/big-endian lanes, fetch history, stalls, and selected burst/abort cases are tested; complete pin-level cycle closure remains |
 | Coprocessor/CP14/CP15 | **Partial** — directed tests cover external ready/busy/data transfers, absent internal CP15, conformant c0/c1 DCC ownership, and monitor-generated c2 `DbgAbt`; remaining CP closure is tracked in §31.6 |
-| EmbeddedICE-RT/JTAG/ETM | **Partial** — halt-mode and monitor-mode paths have directed coverage; exact pin sampling, FPGA transport synchronization, ETM, and debugger interoperability remain |
+| EmbeddedICE-RT/JTAG/ETM | **Partial** — halt/monitor modes, synchronous FPGA transport, ETM execution status, and the external ETM7 adapter are directed-tested; a real debugger and an actual ETM macrocell remain external |
 | Verification | **Partial** — registered benches fail hard and the smoke regression passes; exhaustive, differential, coverage, formal, and release closure are absent |
 | FPGA/MiSTer | **Partial** — the canonical request/response wrapper and same-clock debug transport are tested; packaging, save states, framework build, timing, hardware, and PocketStation integration remain |
 
@@ -149,10 +149,11 @@ See [docs/PIPELINE.md](docs/PIPELINE.md) for the detailed FSM, bus-overlap reaso
   scan-loaded resume, and staged bit-33 system-speed access have public-pin tests;
   the explicitly same-CLK FPGA transport is protocol-tested. An asynchronous
   pod needs a separate CDC bridge, and real-debugger integration remains open.
-- **ETM-facing instrumentation**: `DBGnEXEC` and `DBGINSTRVALID` exist, but their full
-  commit semantics and the external ETM contract are unverified.
+- **ETM-facing instrumentation**: `DBGnEXEC`/`DBGINSTRVALID` execution semantics
+  and the complete Table 6-1 external adapter are verified. The project does not
+  contain or claim an ETM trace macrocell.
 
-See [docs/DEBUG.md](docs/DEBUG.md).
+See [docs/DEBUG.md](docs/DEBUG.md) and [docs/TRACE.md](docs/TRACE.md).
 
 The implementation choices for architecturally UNPREDICTABLE and UNKNOWN
 inputs are centralized in
@@ -316,6 +317,7 @@ evidence.
 - [`docs/COPROCESSOR.md`](docs/COPROCESSOR.md) — bare-core ownership, exact CP14 decode, external CPA/CPB and pipeline-following contract, transfers, abandonment, and corrected r4p3 errata 14/15 policy.
 - [`docs/INTEGRATION.md`](docs/INTEGRATION.md) — canonical FPGA request/response wrapper, CPU-CE bridge, byte lanes, CDC/reset ownership, and optional interfaces.
 - [`docs/RAW_BUS.md`](docs/RAW_BUS.md) — raw pin-level memory timing, phase history, CLKEN/ABORT rules, LOCK/DMORE promises, and reusable protocol checker.
+- [`docs/TRACE.md`](docs/TRACE.md) — ETM execution-status semantics and exact Chapter 6 adapter/tie-offs.
 - [`docs/MULTIPLY.md`](docs/MULTIPLY.md) — MUL/MLA/UMULL/UMLAL/SMULL/SMLAL, m-parameter cycle shaping, UMLAL/SMLAL 2-cycle accumulator read across S_EXEC + S_MULL_ACC.
 - [`docs/EXCEPTIONS.md`](docs/EXCEPTIONS.md) — all 7 exception types, priority encoder, class/state-specific links, banked r14, SPSR save, memory-abort completion, LDM DABT restart, and DP/LDM exception returns.
 

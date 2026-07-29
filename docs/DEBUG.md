@@ -5,8 +5,8 @@
 > CP14 DCC have fail-hard directed coverage. Monitor-mode breakpoint/watchpoint
 > aborts, CP14 Debug Abort Status coupling, synchronous DBGRQ/DBGBREAK sampling,
 > halt-mode watchpoint/exception ordering, and the synchronous FPGA debug transport
-> are also covered end to end. ETM closure and other release blockers are tracked
-> in `TASKS.md` §31.6–§31.8.
+> are also covered end to end. The adjacent ETM7-facing boundary is documented in
+> `TRACE.md`; real-debugger interoperability remains a separate release blocker.
 
 EmbeddedICE-RT + JTAG TAP + CP14 DCC, as implemented in
 `rtl/debug/arm7tdmis_ice_rt.sv`, `rtl/jtag/arm7tdmis_jtag_tap.sv`, and

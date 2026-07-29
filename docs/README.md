@@ -20,6 +20,8 @@ because they agree with each other.
 - **[RAW_BUS.md](RAW_BUS.md)** — raw `arm7tdmis_top` address/response edge
   convention, N/S/I/C history, CLKEN/ABORT sampling, endian lanes,
   LOCK/DMORE promises, Chapter 7 interpretation, and reusable checker.
+- **[TRACE.md](TRACE.md)** — `DBGINSTRVALID`/`DBGnEXEC` semantics and the
+  exact Chapter 6 external ETM7 signal-adapter/tie-off contract.
 - **[VERIFICATION.md](VERIFICATION.md)** — fail-hard regression ordering,
   intentional-failure sentinel, reproducibility metadata, and the
   `arm7tdmis-regression-v1` machine-readable result schema.
