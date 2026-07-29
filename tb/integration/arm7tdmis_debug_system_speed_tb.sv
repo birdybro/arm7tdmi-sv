@@ -15,9 +15,10 @@
 // back at debug speed. This proves debugger-visible writes and reads rather
 // than accepting an internal register or memory-array observation alone.
 //
-// Finally, the r4p3 erratum [8] trigger is exercised exactly: with IRQ still
-// asserted in Debug state, eight-beat at-speed STM and LDM instructions must
-// finish every transfer before automatic re-entry and must never enter IRQ.
+// Finally, the r4p3 erratum [8] trigger is exercised exactly: with IRQ
+// asserted for an eight-beat at-speed STM and FIQ asserted for an eight-beat
+// at-speed LDM, every transfer must finish before automatic re-entry and
+// neither interrupt mode may be entered.
 
 `timescale 1ns/1ps
 
@@ -63,6 +64,7 @@ module arm7tdmis_debug_system_speed_tb
     logic nRESET = 1'b0;
     logic CLKEN = 1'b0;
     logic nIRQ = 1'b1;
+    logic nFIQ = 1'b1;
     logic DBGRQ = 1'b1;
     logic ABORT;
     logic DBGTCKEN = 1'b0;
@@ -99,7 +101,7 @@ module arm7tdmis_debug_system_speed_tb
         .nRESET,
         .CFGBIGEND        (1'b0),
         .nIRQ,
-        .nFIQ             (1'b1),
+        .nFIQ,
         .ABORT,
         .ADDR,
         .WRITE,
@@ -751,7 +753,11 @@ module arm7tdmis_debug_system_speed_tb
         end
 
         // Replace memory, restore r0, and repeat for an eight-beat LDM.
+        // Deassert IRQ and assert FIQ so the second long operation
+        // independently proves the higher-priority interrupt input is masked.
         wait_for_inject_idle("post-long-STM capture did not retire");
+        nIRQ = 1'b1;
+        nFIQ = 1'b0;
         write_debug_r0(LONG_BASE);
         for (int i = 1; i <= 8; i++)
             u_mem.mem[(LONG_BASE >> 2) + i - 1] =
@@ -792,12 +798,13 @@ module arm7tdmis_debug_system_speed_tb
                 "erratum-8 LDM reentry/beats=%0b/%0d expected 1/8",
                 reentered, long_beats));
         if (u_dut.u_core.cpsr.m !== 5'h13)
-            fail("pending IRQ interrupted the erratum-8 long LDM");
+            fail("pending FIQ interrupted the erratum-8 long LDM");
         if (reentered) begin
             capture_reentry_cause(reentry_cause);
             if (reentry_cause !== 1'b1)
                 fail("erratum-8 LDM re-entry did not report bit 33 HIGH");
         end
+        nFIQ = 1'b1;
 
         // Scan all nine registers through the public chain.  This is the
         // architectural oracle for LDM completion, including base writeback.
