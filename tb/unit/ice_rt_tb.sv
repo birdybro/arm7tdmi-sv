@@ -62,6 +62,7 @@ module ice_rt_tb
         .watch_tbit         (watch_tbit),
         .watch_extern       (watch_extern),
         .watch_priv         (watch_priv),
+        .core_trans1        (1'b0),
         .dbg_rq_in          (dbg_rq_in),
         .dbg_break_in       (dbg_break_in),
         .tap_restart_req    (tap_restart_req),

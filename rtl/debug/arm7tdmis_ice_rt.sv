@@ -40,7 +40,8 @@ module arm7tdmis_ice_rt
     input  logic [1:0]  watch_size,
     input  logic        watch_tbit,
     input  logic [1:0]  watch_extern,
-    input  logic        watch_priv,        // §22: PROT[1] for Debug Status[3]
+    input  logic        watch_priv,        // address-phase PROT[1] / nTRANS
+    input  logic        core_trans1,       // live core TRANS[1] for Debug Status[3]
     input  logic        dbg_rq_in,         // §22: external DBGRQ pin synced
                                             //      (used for Debug Status[1])
     input  logic        dbg_break_in,      // §22: external DBGBREAK pin
@@ -252,7 +253,7 @@ module arm7tdmis_ice_rt
     // sees current state rather than whatever was written.
     wire [4:0] dbg_status = {
         watch_tbit,         // [4] TBIT
-        watch_priv,         // [3] TRANS[1] (privileged mode bit)
+        core_trans1,        // [3] live core TRANS[1]
         ifen,               // [2] IFEN
         dbg_rq_synced,      // [1] synced DBGRQ (2-flop CDC chain)
         dbg_ack             // [0] DBGACK
@@ -478,7 +479,7 @@ module arm7tdmis_ice_rt
     // outside the macrocell, and SIZE field (size_in not yet folded into
     // the 9-bit ctrl compare) all silenced here until they have consumers.
     /* verilator lint_off UNUSEDSIGNAL */
-    wire _unused = &{1'b0, scan_wdata[37:32], watch_size};
+    wire _unused = &{1'b0, scan_wdata[37:32], watch_size, watch_priv};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule

@@ -168,7 +168,8 @@ module arm7tdmis_top
         .watch_size         (SIZE),
         .watch_tbit         (CPTBIT),
         .watch_extern       (DBGEXT),
-        .watch_priv         (PROT[1]),     // current privilege bit
+        .watch_priv         (PROT[1]),     // address-phase privilege bit
+        .core_trans1        (TRANS[1]),    // live Debug Status[3]
         .dbg_rq_in          (DBGRQ),       // §22: synchronized inside ICE-RT
         .dbg_break_in       (DBGBREAK),    // §22: synchronized inside ICE-RT
         .tap_restart_req    (tap_restart_req),
