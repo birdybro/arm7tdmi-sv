@@ -936,6 +936,8 @@ module arm7tdmis_core_pipelined
     // §18: DP shift-by-register (TRM Table 7-3 row 2) takes 1S+1I = 2
     // cycles. Detected combinationally; defers the commit to S_DP_SHIFT.
     wire dp_shift_take_cycle = passes_cond && instr_is_dp && dec.shifter_use_rs;
+    wire [31:0] dp_shift_predict_addr = de_q.pc
+                                      + (de_q.thumb ? 32'd6 : 32'd12);
 
     // TRM §4.4.4: an unmasked IRQ/FIQ can abandon an accepted
     // coprocessor instruction only while it is still busy-waiting. Give
@@ -2146,7 +2148,7 @@ module arm7tdmis_core_pipelined
                 if (state_q == S_EXEC && dp_shift_take_cycle) begin
                     dp_shift_rd_q        <= dec.rd;
                     dp_shift_result_q    <= alu_result;
-                    dp_shift_bus_addr_q  <= de_q.pc + 32'd12;
+                    dp_shift_bus_addr_q  <= dp_shift_predict_addr;
                     dp_shift_flags_q     <= alu_flags_merged;
                     dp_shift_writes_q    <= dp_writes_dest;
                     dp_shift_flags_we_q  <= passes_cond && instr_is_dp
@@ -2264,10 +2266,10 @@ module arm7tdmis_core_pipelined
                     // advertise cycle 2's pc+3i data-class address with I.
                     // The response for pc+2i is already on RDATA from the
                     // preceding sequential prefetch.
-                    ADDR  = de_q.pc + 32'd12;
+                    ADDR  = dp_shift_predict_addr;
                     TRANS = 2'(TRANS_I);
                     WRITE = WRITE_READ;
-                    SIZE  = 2'(SIZE_WORD);
+                    SIZE  = fetch_size_w;
                     PROT  = {is_priv, 1'b1};
                 end else if (mul_take_busy || mull_accum_take_cycle) begin
                     // Tables 7-7--7-10: every multiply starts with I and
