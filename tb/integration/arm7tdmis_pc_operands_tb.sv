@@ -1,8 +1,8 @@
 // ISA-005 normal-execution r15 operand regression.
 //
 // Covers every distinct architectural PC value outside coprocessor/debug
-// paths: ordinary ARM +8, ARM register-controlled-shift Rm +12, STR/STM
-// store-data +12, ARM BL link, ordinary Thumb +4, and both Thumb
+// paths: ordinary ARM +8, ARM register-controlled-shift Rm and Rn +12,
+// STR/STM store-data +12, ARM BL link, ordinary Thumb +4, and both Thumb
 // word-aligned PC-relative forms from an address whose visible PC has bit 1.
 
 `timescale 1ns/1ps
@@ -37,8 +37,13 @@ module arm7tdmis_pc_operands_tb;
         u_fixture.u_mem.mem[19] = 32'hE3A0_3C02; // 0x4C MOV r3,#0x200
         u_fixture.u_mem.mem[20] = 32'hE583_F000; // 0x50 STR pc,[r3]
         u_fixture.u_mem.mem[21] = 32'hE9A3_8000; // 0x54 STMIB r3!,{pc}
-        u_fixture.u_mem.mem[22] = 32'hEB00_0004; // 0x58 BL 0x70
-        for (int word = 23; word < 28; word++)
+        u_fixture.u_mem.mem[22] = 32'hE3A0_8000; // 0x58 MOV r8,#0
+        // Register-controlled shift adds an internal cycle: both Rm=pc and
+        // Rn=pc observe instruction-address +12, not the ordinary +8.
+        u_fixture.u_mem.mem[23] = 32'hE08F_9818; // 0x5C ADD r9,pc,r8,LSL r8
+        u_fixture.u_mem.mem[24] = 32'hE1A0_A00F; // 0x60 MOV r10,pc (=0x68)
+        u_fixture.u_mem.mem[25] = 32'hEB00_0001; // 0x64 BL 0x70
+        for (int word = 26; word < 28; word++)
             u_fixture.u_mem.mem[word] = 32'hE7FF_FFFE;
 
         u_fixture.u_mem.mem[28] = 32'hE1A0_400E; // 0x70 MOV r4,lr
@@ -81,7 +86,11 @@ module arm7tdmis_pc_operands_tb;
         check_reg(2, 32'h0000_0054,
                   "ARM register-shift MOV r2,pc,LSL r1 (+12)");
         check_reg(3, 32'h0000_0204, "STMIB base writeback");
-        check_reg(4, 32'h0000_005C, "ARM BL link value");
+        check_reg(9, 32'h0000_0068,
+                  "ARM register-shift Rn=pc (+12)");
+        check_reg(10, 32'h0000_0068,
+                  "ARM ordinary comparison PC (+8)");
+        check_reg(4, 32'h0000_0068, "ARM BL link value");
         check_reg(6, 32'h0000_0084, "Thumb MOV r6,pc (+4)");
         check_reg(7, 32'hCAFE_BABE, "Thumb aligned literal load");
         check_reg(1, 32'h0000_0088, "Thumb aligned ADD r1,pc,#0");
