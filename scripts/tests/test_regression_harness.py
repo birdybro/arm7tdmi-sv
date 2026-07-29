@@ -61,6 +61,22 @@ class RegressionHarnessTest(unittest.TestCase):
         self.assertIn("quartus-compile", full)
         self.assertIn("quartus-conformance-compile", full)
 
+    def test_simulation_only_profile_omits_every_quartus_phase(self) -> None:
+        phases = [
+            name
+            for name, _ in regression_harness._phases(
+                ("unit",),
+                ("integration",),
+                quick=True,
+                include_fpga=False,
+            )
+        ]
+
+        self.assertFalse(any(name.startswith("quartus-") for name in phases))
+        self.assertIn("lint-rtl", phases)
+        self.assertIn("harness-expected-failure", phases)
+        self.assertIn("smoke", phases)
+
     def test_atomic_report_is_machine_readable(self) -> None:
         report = {
             "schema": "arm7tdmis-regression-v1",
