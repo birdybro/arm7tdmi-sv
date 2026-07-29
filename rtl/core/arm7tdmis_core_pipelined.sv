@@ -634,6 +634,11 @@ module arm7tdmis_core_pipelined
     wire instr_is_ls_any = (dec.instr_class == INSTR_LDR_STR)
                         || (dec.instr_class == INSTR_LDRH_STRH);
     wire ls_take_data_cycle = passes_cond && instr_is_ls_any;
+    // ARM single-transfer P=0,W=1 is the translated T form. It performs
+    // the access with User permissions while execution remains in the
+    // current (typically privileged) processor mode.
+    wire ls_is_translated = (dec.instr_class == INSTR_LDR_STR)
+                          && !dec.ls_pre_index && dec.ls_writeback;
 
     // LDM ^ with PC in the register list is the CPSR-from-SPSR variant
     // (TRM §12.4): on the cycle r15 loads, CPSR atomically := SPSR-of-
@@ -1399,7 +1404,7 @@ module arm7tdmis_core_pipelined
                     SIZE  = (dec.instr_class == INSTR_LDRH_STRH)
                               ? (dec.hs_halfword ? 2'(SIZE_HALFWORD) : 2'(SIZE_BYTE))
                               : (dec.ls_byte ? 2'(SIZE_BYTE) : 2'(SIZE_WORD));
-                    PROT  = {is_priv, 1'b1};
+                    PROT  = {is_priv && !ls_is_translated, 1'b1};
                 end else if (block_take_cycle) begin
                     ADDR  = block_start_addr;
                     TRANS = 2'(TRANS_N);
