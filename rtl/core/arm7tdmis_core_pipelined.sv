@@ -251,6 +251,7 @@ module arm7tdmis_core_pipelined
     logic [31:0] fetch_pc_q;
     logic [31:0] inflight_pc_q;
     logic        inflight_valid_q;
+    logic        load_pc_refill_first_q;
     logic        block_pc_refill_first_q;
     fd_t         fd_q;
 
@@ -1839,14 +1840,19 @@ module arm7tdmis_core_pipelined
                            : block_writes_pc ? block_pc_target
                                              : pc_target_exec;
 
-    // A PC-inclusive LDM has one address-only N phase at source pc+3i
-    // after the loaded target invalidates the pipeline (Table 7-13).
-    // Retain the redirect across that S_BLOCK_WB phase; the following
-    // S_EXEC cycle can then issue the first target opcode as S.
+    // LDR/LDM-to-PC each have one address-only N phase at source pc+3i
+    // after the loaded target invalidates the pipeline (Tables 7-11/7-13).
+    // Retain the redirect across that phase; the following S_EXEC cycle
+    // can then issue the first target opcode as S.
     always_ff @(posedge CLK) begin
         if (!nRESET || dbg_pc_write) begin
+            load_pc_refill_first_q  <= 1'b0;
             block_pc_refill_first_q <= 1'b0;
         end else if (CLKEN) begin
+            if (ddata_writes_pc)
+                load_pc_refill_first_q <= 1'b1;
+            else if (load_pc_refill_first_q && issue_fetch)
+                load_pc_refill_first_q <= 1'b0;
             if (block_writes_pc)
                 block_pc_refill_first_q <= 1'b1;
             else if (block_pc_refill_first_q && issue_fetch)
@@ -2553,14 +2559,25 @@ module arm7tdmis_core_pipelined
                 PROT  = {is_priv, 1'b0};
             end
             S_LOAD_WB: begin
-                // §18: LDR/LDRB writeback I cycle. Bus drives next instr
-                // fetch — addr-class drive in S_DDATA already started
-                // this fetch, so S_LOAD_WB just continues it.
-                ADDR  = fetch_pc_q;
-                TRANS = (flush || !issue_fetch)
-                      ? 2'(TRANS_I) : source_fetch_trans_w;
-                SIZE  = fetch_size_w;
-                PROT  = {is_priv, 1'b0};
+                if (ddata_writes_pc) begin
+                    // Table 7-11 destination=pc, cycle 3: advertise the
+                    // source pc+12 as an address-only data-class N cycle.
+                    // Its response is discarded while the redirected
+                    // opcode stream starts on the following cycle.
+                    ADDR  = memory_instr_pc_q + 32'd12;
+                    TRANS = 2'(TRANS_N);
+                    WRITE = WRITE_READ;
+                    SIZE  = 2'(SIZE_WORD);
+                    PROT  = {is_priv, 1'b1};
+                end else begin
+                    // Ordinary LDR writeback I cycle. Bus drives the next
+                    // instruction fetch started during S_DDATA.
+                    ADDR  = fetch_pc_q;
+                    TRANS = (flush || !issue_fetch)
+                          ? 2'(TRANS_I) : source_fetch_trans_w;
+                    SIZE  = fetch_size_w;
+                    PROT  = {is_priv, 1'b0};
+                end
             end
             S_SWP_WB: begin
                 // §18: SWP Rd writeback I cycle (TRM 1S+2N+1I). Bus
@@ -2666,6 +2683,17 @@ module arm7tdmis_core_pipelined
         // S continuation for target+i.
         if (block_pc_refill_first_q && !block_pc_internal_phase
             && issue_fetch) begin
+            ADDR  = fetch_pc_q;
+            TRANS = 2'(TRANS_S);
+            SIZE  = fetch_size_w;
+            PROT  = {is_priv, 1'b0};
+            WRITE = WRITE_READ;
+            LOCK  = LOCK_FREE;
+        end
+
+        // Table 7-11 destination=pc, cycle 4: the discarded source pc+12
+        // phase is followed by an explicit S fetch of the loaded target.
+        if (load_pc_refill_first_q && issue_fetch) begin
             ADDR  = fetch_pc_q;
             TRANS = 2'(TRANS_S);
             SIZE  = fetch_size_w;
