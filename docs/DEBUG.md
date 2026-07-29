@@ -335,9 +335,11 @@ end else if (latch_into_fd) ...
 
 This bypasses the normal instruction-fetch RDATA latch. D decodes the injected
 instruction and E executes it; memory data phases still use the external bus.
-The accepted/retired handshake is covered with a 12-register LDM plus a
-mid-transfer CLKEN stall in
-`tb/integration/arm7tdmis_debug_inject_handshake_tb.sv`.
+The accepted/retired handshake is covered with a 12-register writeback LDM
+plus maximum 16-register STMIB and LDMIB transfers in
+`tb/integration/arm7tdmis_debug_inject_handshake_tb.sv`. Each block path is
+stalled mid-transfer; the maximum LDM includes r15 and then resumes at that
+sixteenth loaded word.
 
 Debug-speed `LDMIA`/`STMIA` without writeback follows the ARM7TDMI scan-data
 protocol used by OpenOCD: scan the block instruction, two pipeline NOPs, then

@@ -2648,12 +2648,15 @@ number of cycles spent in an internal FSM state.
   LDM/STM, without fetching or retiring an extra normal instruction. Halt only at a
   legal boundary; do not freeze and repeatedly present an unfinished external bus
   transfer. The explicit handshake is fail-hard covered at debug speed by a stalled
-  12-register LDM in `tb/integration/arm7tdmis_debug_inject_handshake_tb.sv` and at
+  12-register writeback LDM plus stalled 16-register STMIB/LDMIB transfers in
+  `tb/integration/arm7tdmis_debug_inject_handshake_tb.sv` and at
   system speed by a stalled LDR with temporary `DBGACK`, interrupt masking, and
   automatic re-entry checks in `tb/integration/arm7tdmis_debug_system_speed_tb.sv`;
   OpenOCD's MRS/MSR/STR PSR transfer is covered in
-  `tb/integration/arm7tdmis_debug_register_scan_tb.sv`. The full
-  allowed-instruction and 16-register matrix remains open.
+  `tb/integration/arm7tdmis_debug_register_scan_tb.sv`. The maximum block
+  transfers cover all 16 external beats, architectural r0-r14 effects, r15
+  store/load, and restart from the loaded r15 value. The full allowed-instruction
+  class matrix remains open.
 - [ ] **DBG-007:** Implement debug entry/exit PC formulas, temporary DBGACK behavior,
   pending interrupt preservation, interrupt masking during at-speed execution, and
   the DBGRQ/PC-modify errata policy. Scan-loaded r15 now replaces all stale
