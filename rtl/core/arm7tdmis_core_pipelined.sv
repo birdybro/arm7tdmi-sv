@@ -124,7 +124,8 @@ module arm7tdmis_core_pipelined
     output logic        dbg_exception_pending,
     output logic        dbg_breakpoint_interrupt_pending,
     output logic        dbg_exception_entry,
-    output logic        dbg_exception_vector_ready
+    output logic        dbg_exception_vector_ready,
+    output logic [31:0] dbg_exception_vector_pc
 );
 
     // =====================================================================
@@ -1297,6 +1298,12 @@ module arm7tdmis_core_pipelined
     assign dbg_exception_entry = any_exc_fires;
     assign dbg_exception_vector_ready = debug_exception_refill_q
                                       && latch_into_fd;
+    always_ff @(posedge CLK) begin
+        if (!nRESET)
+            dbg_exception_vector_pc <= 32'h0000_0000;
+        else if (CLKEN && dbg_exception_vector_ready)
+            dbg_exception_vector_pc <= inflight_pc_q;
+    end
     always_ff @(posedge CLK) begin
         if (!nRESET) begin
             debug_exception_refill_q <= 1'b0;

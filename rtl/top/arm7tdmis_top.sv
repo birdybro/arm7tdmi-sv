@@ -154,7 +154,8 @@ module arm7tdmis_top
         .dbg_breakpoint_interrupt_pending(
             ice_core_breakpoint_interrupt_pending),
         .dbg_exception_entry(ice_core_exception_entry),
-        .dbg_exception_vector_ready(ice_core_exception_vector_ready)
+        .dbg_exception_vector_ready(ice_core_exception_vector_ready),
+        .dbg_exception_vector_pc(ice_core_exception_vector_pc)
     );
 
     // ---- EmbeddedICE-RT (§22) ----
@@ -176,6 +177,7 @@ module arm7tdmis_top
     logic ice_core_breakpoint_interrupt_pending;
     logic ice_core_exception_entry;
     logic ice_core_exception_vector_ready;
+    logic [31:0] ice_core_exception_vector_pc;
     logic tap_restart_req;
     logic        core_dcc_we;
     logic        core_dcc_re;
@@ -195,6 +197,7 @@ module arm7tdmis_top
     logic        tap_chain1_capture;
     logic        ice_chain1_capture_break;
     logic        ice_entry_breakpoint;
+    logic        ice_entry_exception;
     logic        ice_data_write_q;
     logic [31:0] ice_watch_data;
 
@@ -238,6 +241,7 @@ module arm7tdmis_top
         .tap_chain1_capture (tap_chain1_capture),
         .chain1_capture_break(ice_chain1_capture_break),
         .entry_breakpoint   (ice_entry_breakpoint),
+        .entry_exception    (ice_entry_exception),
         .monitor_mode       (ice_monitor_mode),
         .monitor_data_abort (ice_monitor_data_abort),
         .dbg_break_internal (ice_dbg_break),
@@ -450,8 +454,11 @@ module arm7tdmis_top
     // NOPs without executing them in the core. A physical ARM7TDMI has
     // advanced r15 by three ARM words when the first register reaches
     // the scan data bus, so restore that visible bias for r15 only.
+    wire [31:0] dbg_entry_r15 =
+        ice_entry_exception ? (ice_core_exception_vector_pc + 32'd8)
+                            : dbg_reg_rdata;
     wire [31:0] dbg_block_capture_data =
-        (dbg_block_reg_q == 4'd15) ? (dbg_reg_rdata + 32'd12
+        (dbg_block_reg_q == 4'd15) ? (dbg_entry_r15 + 32'd12
                                      + (ice_entry_breakpoint ? 32'd4 : 32'd0))
                                    : dbg_reg_rdata;
     wire [31:0] tap_chain1_capture_data = dbg_block_active_q

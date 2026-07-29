@@ -2678,9 +2678,11 @@ number of cycles spent in an internal FSM state.
   collision with a one-cycle IRQ now proves pending-interrupt preservation and
   correct IRQ mode/LR/SPSR/vector entry, and the Data Abort collision proves
   abort-mode entry before debug halt, in
-  `tb/integration/arm7tdmis_debug_watchpoint_priority_tb.sv`. The scan-visible
-  watchpoint-with-exception and system-speed PC formulas plus the documented
-  PC-modify erratum policy remain open.
+  `tb/integration/arm7tdmis_debug_watchpoint_priority_tb.sv`. That regression
+  also scans r15 after independent Data Abort, IRQ, and FIQ collisions and
+  requires the three-address exception-entry correction to recover the fetched
+  vector. The system-speed PC formula and documented PC-modify erratum policy
+  remain open.
 - [x] **JTAG-001:** Exhaustively verify all 16 TAP states and transitions, async
   `DBGnTRST`, Capture/Shift/Update-IR, fixed `0001` capture, all five public
   instructions, and BYPASS for every other IR encoding. Fail-hard evidence:

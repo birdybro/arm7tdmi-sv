@@ -70,6 +70,7 @@ module dcc_tb;
         .tap_chain1_capture (1'b0),
         .chain1_capture_break(tb_chain1_capture_break),
         .entry_breakpoint   (tb_entry_breakpoint),
+        .entry_exception    (tb_entry_exception),
         .monitor_mode       (tb_monitor_mode),
         .monitor_data_abort (tb_monitor_data_abort),
         .core_dcc_we,
@@ -108,6 +109,7 @@ module dcc_tb;
     );
     logic tb_chain1_capture_break;
     logic tb_entry_breakpoint;
+    logic tb_entry_exception;
     logic tb_monitor_mode;
     logic tb_monitor_data_abort;
     logic tb_halt_watchpoint_event;
@@ -299,7 +301,7 @@ module dcc_tb;
                      dbg_ack, ifen, halt_request,
                      core_halt, DBGRNG, dbg_inject_we, dbg_inject_instr,
                      dbg_inject_active, tb_chain1_capture_break,
-                     tb_entry_breakpoint, tb_monitor_mode,
+                     tb_entry_breakpoint, tb_entry_exception, tb_monitor_mode,
                      tb_monitor_data_abort,
                      tb_halt_watchpoint_event,
                      scan_raddr};

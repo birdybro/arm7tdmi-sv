@@ -37,6 +37,7 @@ module arm7tdmis_ice_rt
                                             //      latched entry-cause bit
     output logic        chain1_capture_break,
     output logic        entry_breakpoint,  // retained for r15 scan formula
+    output logic        entry_exception,   // retained for r15 scan formula
     output logic        monitor_mode,       // Debug Control[4], DBGEN-gated
     output logic        monitor_data_abort, // aligned enabled data WP hit
 
@@ -249,6 +250,7 @@ module arm7tdmis_ice_rt
     logic         breakpoint_halt_q;
     logic         breakpoint_resume_q;
     logic         entry_watchpoint_q;
+    logic         entry_exception_q;
     logic         system_speed_armed_q;
     logic         system_speed_pending_q;
     logic         system_speed_active_q;
@@ -548,6 +550,7 @@ module arm7tdmis_ice_rt
             breakpoint_halt_q <= 1'b0;
             breakpoint_resume_q <= 1'b0;
             entry_watchpoint_q <= 1'b0;
+            entry_exception_q <= 1'b0;
         end else begin
             // The first chain-1 capture after entry reports the reason.
             // TAP activity is independent of CLKEN, so consumption cannot
@@ -567,6 +570,7 @@ module arm7tdmis_ice_rt
                             breakpoint_halt_q <= 1'b0;
                             breakpoint_resume_q <= 1'b0;
                             entry_watchpoint_q <= 1'b0;
+                            entry_exception_q <= 1'b0;
                         end else if (halt_exception_wait_q) begin
                             // When a watchpoint/debug request collides with
                             // an exception, §5.18.3 requires the exception
@@ -579,6 +583,7 @@ module arm7tdmis_ice_rt
                                 dbg_state_q       <= DBG_HALTED;
                                 halt_exception_wait_q <= 1'b0;
                                 breakpoint_halt_q <= 1'b0;
+                                entry_exception_q <= 1'b1;
                             end
                         end else if (breakpoint_resume_q
                                      && core_breakpoint_execute) begin
@@ -591,6 +596,7 @@ module arm7tdmis_ice_rt
                                 halt_pending_q <= 1'b0;
                                 halt_watchpoint_q <= 1'b0;
                                 entry_watchpoint_q <= halt_entry_watchpoint;
+                                entry_exception_q <= 1'b0;
                                 if (core_exception_pending
                                     || core_exception_entry) begin
                                     halt_exception_wait_q <= 1'b1;
@@ -606,6 +612,7 @@ module arm7tdmis_ice_rt
                             halt_pending_q    <= 1'b0;
                             halt_watchpoint_q <= 1'b0;
                             entry_watchpoint_q <= 1'b0;
+                            entry_exception_q <= 1'b0;
                             if (core_breakpoint_interrupt_pending) begin
                                 // §5.19.2: a pending IRQ/FIQ is remembered
                                 // at breakpoint entry. Let the exception
@@ -626,6 +633,7 @@ module arm7tdmis_ice_rt
                             breakpoint_halt_q <= 1'b0;
                             entry_watchpoint_q <= halt_watchpoint_q
                                                || halt_entry_watchpoint;
+                            entry_exception_q <= 1'b0;
                             halt_watchpoint_q <= 1'b0;
                             if (core_exception_pending
                                 || core_exception_entry) begin
@@ -648,11 +656,13 @@ module arm7tdmis_ice_rt
                             breakpoint_halt_q <= 1'b0;
                             breakpoint_resume_q <= 1'b0;
                             entry_watchpoint_q <= 1'b0;
+                            entry_exception_q <= 1'b0;
                         end else if (tap_restart_req
                                             && !system_speed_pending_q
                                             && !system_speed_active_q) begin
                             dbg_state_q <= DBG_RUNNING;
                             breakpoint_resume_q <= breakpoint_halt_q;
+                            entry_exception_q <= 1'b0;
                         end
                     end
                     DBG_MONITOR: begin
@@ -661,6 +671,7 @@ module arm7tdmis_ice_rt
                         halt_exception_wait_q <= 1'b0;
                         breakpoint_halt_q   <= 1'b0;
                         breakpoint_resume_q <= 1'b0;
+                        entry_exception_q   <= 1'b0;
                         dbg_state_q         <= DBG_MONITOR;
                     end
                     default: begin
@@ -671,6 +682,7 @@ module arm7tdmis_ice_rt
                         breakpoint_halt_q <= 1'b0;
                         breakpoint_resume_q <= 1'b0;
                         entry_watchpoint_q <= 1'b0;
+                        entry_exception_q <= 1'b0;
                     end
                 endcase
             end
@@ -679,6 +691,7 @@ module arm7tdmis_ice_rt
 
     assign chain1_capture_break = entry_watchpoint_q;
     assign entry_breakpoint = breakpoint_halt_q;
+    assign entry_exception = entry_exception_q;
 
     // This is asserted for the final running DBGRQI cycle, before
     // dbg_state_q enters HALTED. Only a debug request has the special

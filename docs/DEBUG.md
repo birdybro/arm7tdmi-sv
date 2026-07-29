@@ -387,8 +387,11 @@ the following instruction is allowed to execute:
 
 When an exception coincides with that watchpoint, the exception state and first
 vector fetch precede debug halt as described above. The mode/LR/SPSR and bus
-ordering are covered; the exception-specific scan-visible r15 correction is
-still an explicit release item in `TASKS.md` DBG-007.
+ordering are covered. The core retains that fetched vector as the debug PC
+context for the halt session, so the common `-12` scan-pipeline correction and
+the exception-entry `-8` correction recover the exact Data Abort, IRQ, or FIQ
+vector. All three public-scan cases are covered in
+`tb/integration/arm7tdmis_debug_watchpoint_priority_tb.sv`.
 
 Writing r15 through that stream also replaces the halted pipeline's fetch PC.
 The address is halfword-aligned in Thumb state and word-aligned in ARM state;
