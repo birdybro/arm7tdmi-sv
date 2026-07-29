@@ -2,9 +2,9 @@
 
 This document defines version 1 of the canonical `arm7tdmi_mister` interface.
 The wrapper is synthesizable and independent of any particular MiSTer memory
-controller. `TASKS.md` §31.9 remains the audited status ledger; save states,
-framework builds, PocketStation integration, and hardware evidence remain
-separate requirements.
+controller. `TASKS.md` §31.9 remains the audited status ledger; framework
+builds, PocketStation integration, and hardware evidence remain separate
+requirements.
 
 ## Clock and reset
 
@@ -185,6 +185,14 @@ The `DBG_STEP_*` interface is the explicitly synchronous transport specified
 in [DEBUG.md](DEBUG.md). It remains isolated when debug is disabled. It is not
 an asynchronous TCK/RTCK interface.
 
+Define `ARM7TDMIS_SAVE_STATE` for an additive six-signal architectural
+save-state port. It quiesces at a completed-instruction boundary with no live
+memory request, exports/imports a versioned 37-word state image, and refetches
+the first unexecuted instruction on resume. The exact handshake, physical
+register map, Thumb BL boundary behavior, and containing-system snapshot
+responsibilities are in [SAVESTATE.md](SAVESTATE.md). The default build omits
+the ports and their muxing.
+
 ## Public memory-bus adapters
 
 The canonical valid/ready interface remains the versioned CPU boundary. Two
@@ -315,9 +323,13 @@ and the complete locked pair, inserts independent CPU/memory stalls, accepts
 a response while CPU CE is low, maps one error into Data Abort, and still
 proves DMA forward progress in unreserved gaps.
 
+`make -C scripts integ-mister_savestate` enables the optional state port,
+quiesces behind a stalled store, mutates and restores all 37 words, compares
+two complete post-restore request traces and RAM results, and restores the
+architectural boundary between the two Thumb BL halfwords.
+
 The following are intentionally not claimed by this version of the wrapper:
 
-- save-state export/import or quiescent snapshot;
 - a PocketStation subsystem or BIOS/software bundle;
 - MiSTer framework integration, fitted/timed, or on-board evidence.
 

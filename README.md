@@ -31,7 +31,7 @@ The status words used here have the §31 meanings:
 | Raw bus and cycle behavior | **VERIFIED** for §31.5. Endian lanes, CLKEN/ABORT behavior, LOCK/DMORE, redirects, exception cycles, every Chapter 7 family, and reusable protocol assertions are linked to full-phase or specialized scoreboards. |
 | External coprocessor and CP14 | **VERIFIED** for §31.6: absent/ready/busy/abandonment, MCR/MRC/CDP/LDC/STC timing, CP14 DCC and Debug Abort Status, corrected errata 14/15 policy, and absence of internal CP15 are tested. |
 | EmbeddedICE-RT, JTAG, and trace boundary | **VERIFIED** for the checked §31.7/§31.8 requirements. The project provides the ARM-side ETM7 boundary, not an ETM macrocell. JTAG-006 real-debugger interoperability remains **PARTIAL**. |
-| FPGA/MiSTer package | **PARTIAL**. The canonical valid/ready wrapper, two public bus adapters, option profiles, CDC/reset contract, DMA arbitration, portable QIP/file lists, and two checked Quartus 17.0.2 flows exist. Save states, a real framework build, PocketStation integration, and hardware evidence remain open. |
+| FPGA/MiSTer package | **PARTIAL**. The canonical valid/ready wrapper, versioned save states, two public bus adapters, option profiles, CDC/reset contract, DMA arbitration, portable QIP/file lists, and two checked Quartus 17.0.2 flows exist. A real framework build, PocketStation integration, and hardware evidence remain open. |
 | Release evidence | **PARTIAL**. Regressions fail hard; machine-readable regression and structural-coverage reports, mutation tests, and a hashed evidence archive exist. The broader independent validation and FPGA release gates remain open. |
 
 No unchecked §31 requirement is implied by a checked neighboring row. In
@@ -48,6 +48,8 @@ debug and coprocessor inputs. Its version-1 contract, timing diagrams,
 parameters, reset behavior, endian lanes, error rules, DMA ownership, and
 Wishbone/enable-done adapters are in
 [`docs/INTEGRATION.md`](docs/INTEGRATION.md).
+The opt-in architectural save/restore schema and containing-system snapshot
+rules are in [`docs/SAVESTATE.md`](docs/SAVESTATE.md).
 
 Systems that specifically need the ARM7TDMI-S-style address/data pipeline can
 instantiate [`arm7tdmis_top`](rtl/top/arm7tdmis_top.sv). Its N/S/I/C phase,
@@ -100,6 +102,8 @@ evidence. The §31 ledger remains authoritative if a summary conflicts with it.
   CPU-enable, transaction-latency, resource, Fmax, and power data.
 - [`docs/GENERIC_SOC.md`](docs/GENERIC_SOC.md): portable
   ROM/RAM/timer/UART integration and executable program.
+- [`docs/SAVESTATE.md`](docs/SAVESTATE.md): versioned architectural state
+  handshake, exact physical-bank map, and deterministic restore contract.
 - [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md): concise prerelease blockers
   linked to the authoritative task IDs.
 - [`docs/PROVENANCE.md`](docs/PROVENANCE.md): license, specification,

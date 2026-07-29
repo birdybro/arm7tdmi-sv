@@ -13,6 +13,8 @@ module arm7tdmis_mister_savestate_tb;
     localparam int STATE_WORDS = 37;
     localparam int TRACE_LENGTH = 24;
     localparam logic [31:0] THUMB_SUFFIX_PC = 32'h0000_0082;
+    // Compact state word 25 maps physical regfile slot 26: r14_svc.
+    localparam logic [5:0] STATE_R14_SVC = 6'd25;
     localparam int REQUEST_WIDTH = 74;
 
     logic CLK;
@@ -132,7 +134,7 @@ module arm7tdmis_mister_savestate_tb;
     };
 
     task automatic state_read(
-        input  int unsigned index,
+        input  logic [5:0] index,
         output logic [31:0] value
     );
         @(negedge CLK);
@@ -142,7 +144,7 @@ module arm7tdmis_mister_savestate_tb;
     endtask
 
     task automatic state_write(
-        input int unsigned index,
+        input logic [5:0] index,
         input logic [31:0] value
     );
         @(negedge CLK);
@@ -235,7 +237,17 @@ module arm7tdmis_mister_savestate_tb;
                        "[mister_savestate] quiesced before stalled write");
         end
         @(negedge CLK);
+        CPU_CE      = 1'b0;
         ready_enable = 1'b1;
+        repeat (5) begin
+            @(posedge CLK);
+            #1;
+            if (STATE_READY)
+                $fatal(1,
+                       "[mister_savestate] quiesced while CPU_CE was low");
+        end
+        @(negedge CLK);
+        CPU_CE = 1'b1;
         wait (STATE_READY);
         #1;
         if (MEM_VALID)
@@ -243,7 +255,7 @@ module arm7tdmis_mister_savestate_tb;
 
         saved_memory = memory[64];
         for (int index = 0; index < STATE_WORDS; index++)
-            state_read(index, snapshot[index]);
+            state_read(6'(index), snapshot[index]);
         if (snapshot[30] != 32'h0000_0010)
             $fatal(1, "[mister_savestate] wrong restart PC %08x",
                    snapshot[30]);
@@ -259,17 +271,17 @@ module arm7tdmis_mister_savestate_tb;
                 mutated[index] = 32'ha000_00d3;
             else
                 mutated[index] = 32'h6200_0010 + 32'(index);
-            state_write(index, mutated[index]);
+            state_write(6'(index), mutated[index]);
         end
         for (int index = 0; index < STATE_WORDS; index++) begin
-            state_read(index, observed);
+            state_read(6'(index), observed);
             if (observed != mutated[index])
                 $fatal(1,
                        "[mister_savestate] word %0d expected %08x got %08x",
                        index, mutated[index], observed);
         end
         for (int index = 0; index < STATE_WORDS; index++)
-            state_write(index, snapshot[index]);
+            state_write(6'(index), snapshot[index]);
 
         resume();
         capture_trace(trace_first);
@@ -278,7 +290,7 @@ module arm7tdmis_mister_savestate_tb;
         request_quiescence();
         memory[64] = saved_memory;
         for (int index = 0; index < STATE_WORDS; index++)
-            state_write(index, snapshot[index]);
+            state_write(6'(index), snapshot[index]);
         resume();
         capture_trace(trace_second);
 
@@ -295,8 +307,8 @@ module arm7tdmis_mister_savestate_tb;
         // halfwords and prove the suffix consumes/restores architectural LR.
         request_quiescence();
         for (int index = 0; index < STATE_WORDS; index++)
-            state_write(index, snapshot[index]);
-        state_write(14, 32'h0000_0084);
+            state_write(6'(index), snapshot[index]);
+        state_write(STATE_R14_SVC, 32'h0000_0084);
         state_write(30, THUMB_SUFFIX_PC);
         state_write(31, 32'h0000_00f3);
         resume();
@@ -315,7 +327,7 @@ module arm7tdmis_mister_savestate_tb;
             $fatal(1, "[mister_savestate] Thumb BL suffix did not branch");
 
         request_quiescence();
-        state_read(14, observed);
+        state_read(STATE_R14_SVC, observed);
         if (observed != 32'h0000_0085)
             $fatal(1, "[mister_savestate] Thumb BL restored LR was %08x",
                    observed);

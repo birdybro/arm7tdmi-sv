@@ -76,6 +76,16 @@ module arm7tdmis_regfile
 
     // Raised when wa_enable && wa_addr==15 — instruction wants to write PC.
     output logic        pc_written
+`ifdef ARM7TDMIS_SAVE_STATE
+    ,
+    // Compact physical save-state map: indices 0..14 select storage
+    // 0..14 and indices 15..29 select storage 16..30. Reserved slot 15
+    // is deliberately absent from the architectural image.
+    input  logic        STATE_WRITE,
+    input  logic [4:0]  STATE_INDEX,
+    input  logic [31:0] STATE_WDATA,
+    output logic [31:0] STATE_RDATA
+`endif
 `ifdef ARM7TDMIS_VERIFICATION
     ,
     // Stable physical-bank snapshot for the public retirement interface.
@@ -85,6 +95,15 @@ module arm7tdmis_regfile
 );
 
     logic [31:0] regs [0:30];
+
+`ifdef ARM7TDMIS_SAVE_STATE
+    wire [4:0] state_physical_index = (STATE_INDEX < 5'd15)
+                                    ? STATE_INDEX
+                                    : (STATE_INDEX < 5'd30)
+                                    ? STATE_INDEX + 5'd1
+                                    : 5'd0;
+    assign STATE_RDATA = regs[state_physical_index];
+`endif
 
     // ---- Bank index: (reg_num, mode) → flat-array index ----
     function automatic logic [4:0] bank_index(
@@ -141,6 +160,10 @@ module arm7tdmis_regfile
     always_ff @(posedge CLK) begin
         if (!nRESET) begin
             for (int i = 0; i < 31; i = i + 1) regs[i] <= 32'h0;
+`ifdef ARM7TDMIS_SAVE_STATE
+        end else if (STATE_WRITE && STATE_INDEX < 5'd30) begin
+            regs[state_physical_index] <= STATE_WDATA;
+`endif
         end else if (dbg_we && dbg_addr != 4'd15) begin
             regs[bank_index(
                 dbg_addr,

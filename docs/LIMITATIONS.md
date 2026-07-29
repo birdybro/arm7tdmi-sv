@@ -4,8 +4,6 @@ This file is a readable snapshot for version `0.9.0-dev`. The checkbox state
 and full acceptance criteria in [`TASKS.md`](../TASKS.md) are authoritative
 and may be stricter than this summary.
 
-- Save-state export/import and restore determinism are not implemented
-  (MIST-006).
 - No real MiSTer framework, PocketStation subsystem, copyrighted BIOS or
   software image, hardware run, or long system soak is included
   (MIST-007 through MIST-009, FPGA-002, and FPGA-007).

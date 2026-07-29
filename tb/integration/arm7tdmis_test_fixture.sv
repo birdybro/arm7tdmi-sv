@@ -108,6 +108,16 @@ module arm7tdmis_test_fixture
         .DBGnTRST       (1'b1),
         .DBGnTDOEN      (DBGnTDOEN),
         .DMORE          (DMORE)
+`ifdef ARM7TDMIS_SAVE_STATE
+        ,
+        .STATE_CAPTURE  (1'b0),
+        .STATE_RESUME   (1'b0),
+        .STATE_WRITE    (1'b0),
+        .STATE_INDEX    (6'h00),
+        .STATE_WDATA    (32'h0000_0000),
+        .STATE_BOUNDARY (state_unused[0]),
+        .STATE_RDATA    (state_unused[32:1])
+`endif
 `ifdef ARM7TDMIS_VERIFICATION
         ,
         .VER_RETIRE_VALID(ver_retire_unused[0]),
@@ -127,6 +137,11 @@ module arm7tdmis_test_fixture
 `ifdef ARM7TDMIS_VERIFICATION
     wire [1255:0] ver_retire_unused;
     wire _unused_ver_retire = &{1'b0, ver_retire_unused};
+`endif
+
+`ifdef ARM7TDMIS_SAVE_STATE
+    wire [32:0] state_unused;
+    wire _unused_state = &{1'b0, state_unused};
 `endif
 
     arm7tdmis_memory #(

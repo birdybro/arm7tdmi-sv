@@ -20,6 +20,9 @@ because they agree with each other.
 - **[INTEGRATION.md](INTEGRATION.md)** — versioned canonical FPGA wrapper,
   valid/ready memory timing, CPU clock-enable bridge, byte lanes, reset/CDC
   ownership, and optional debug/coprocessor parameters.
+- **[SAVESTATE.md](SAVESTATE.md)** — opt-in versioned CPU state schema,
+  quiescence handshake, exact word map, restore rules, and whole-system
+  snapshot responsibilities.
 - **[GENERIC_SOC.md](GENERIC_SOC.md)** — synthesizable ROM/RAM/timer/UART
   example, memory map, executable ARM program, and independent open-source
   frontend commands.

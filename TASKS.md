@@ -3210,11 +3210,23 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   `fpga/arm7tdmis_conformance.{qsf,sdc}` separately preserves and fits every
   raw debug, JTAG, coprocessor, trace, endian, and bus boundary. A real
   framework build remains MIST-007.
-- [ ] **MIST-006:** Add a versioned architectural state export/import handshake for
+- [x] **MIST-006:** Add a versioned architectural state export/import handshake for
   MiSTer save states. Include all visible registers, banked registers, CPSR/SPSRs,
   pipeline and any in-flight bus/debug state (including a snapshot between Thumb BL
   halfwords), or quiesce to a precisely defined snapshot boundary. Verify restore
   determinism.
+  Defining `ARM7TDMIS_SAVE_STATE` adds the six-signal request/ready indexed
+  state port without changing the default wrapper API. Schema 1.0 exports all
+  30 physical r0-r14 locations, restart PC, CPSR, and five SPSRs in 37 words.
+  The wrapper drains a pending response, completes the current architectural
+  instruction, cancels only a side-effect-free speculative request, and
+  freezes with no live memory transaction; restore flushes microstate and
+  refetches the saved first-unexecuted PC. `docs/SAVESTATE.md` freezes the
+  handshake, word map, validation rules, debug exclusion, and whole-system
+  responsibilities. `arm7tdmis_mister_savestate_tb.sv` requests behind a
+  stalled store, reads/mutates/restores every word, proves identical accepted
+  request traces and RAM results across two restores, and imports the exact
+  Thumb BL prefix/suffix boundary to check target and LR.
 - [ ] **MIST-007:** Integrate into a real MiSTer framework build targeting the selected
   Cyclone V device. Archive the exact framework commit, build command, timing report,
   resource report, and generated bitstream hash.

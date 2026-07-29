@@ -126,6 +126,19 @@ module arm7tdmis_core_pipelined
     output logic [31:0] dbg_exception_vector_pc,
     output logic        dbg_pc_redirect_pending,
     output logic [31:0] dbg_pc_redirect_pc
+`ifdef ARM7TDMIS_SAVE_STATE
+    ,
+    // Architectural save-state port. STATE_CAPTURE is a one-cycle pulse on
+    // a completed instruction boundary. STATE_RESUME discards all younger
+    // pipeline state and refetches from the saved/imported restart PC.
+    input  logic        STATE_CAPTURE,
+    input  logic        STATE_RESUME,
+    input  logic        STATE_WRITE,
+    input  logic [5:0]  STATE_INDEX,
+    input  logic [31:0] STATE_WDATA,
+    output logic        STATE_BOUNDARY,
+    output logic [31:0] STATE_RDATA
+`endif
 `ifdef ARM7TDMIS_VERIFICATION
     ,
     // VER-009 architectural retirement contract. These ports exist only
@@ -185,7 +198,7 @@ module arm7tdmis_core_pipelined
     logic        halt_response_tag_q;
 
     always_ff @(posedge CLK) begin
-        if (!nRESET) begin
+        if (!nRESET || state_resume_w) begin
             halt_response_valid_q <= 1'b0;
             halt_response_data_q  <= 32'h0;
             halt_response_abort_q <= 1'b0;
@@ -263,6 +276,16 @@ module arm7tdmis_core_pipelined
     logic        cp_ls_writeback_q;
     logic        cp_ls_first_q;
     logic        cp_ls_response_q;
+
+`ifdef ARM7TDMIS_SAVE_STATE
+    logic [31:0] state_resume_pc_q;
+    logic [31:0] state_gpr_rdata;
+    logic [31:0] state_psr_rdata;
+    wire state_resume_w = STATE_RESUME;
+`else
+    wire [31:0] state_resume_pc_q = 32'h0000_0000;
+    wire state_resume_w = 1'b0;
+`endif
 
     // =====================================================================
     // F stage
@@ -360,6 +383,13 @@ module arm7tdmis_core_pipelined
             fd_q             <= '{instr:32'h0, pc:32'h0, thumb:1'b0,
                               pabort:1'b0, breakpoint:1'b0, injected:1'b0,
                               valid:1'b0};
+        end else if (state_resume_w) begin
+            fetch_pc_q       <= state_resume_pc_q;
+            inflight_pc_q    <= state_resume_pc_q;
+            inflight_valid_q <= 1'b0;
+            fd_q             <= '{instr:32'h0, pc:32'h0, thumb:1'b0,
+                              pabort:1'b0, breakpoint:1'b0, injected:1'b0,
+                              valid:1'b0};
         end else if (dbg_pc_write) begin
             // A debug-speed LDM of r15 restores the debugger-selected
             // resume address while the normal core enable is stopped.
@@ -434,7 +464,7 @@ module arm7tdmis_core_pipelined
 
     // D stage update.
     always_ff @(posedge CLK) begin
-        if (!nRESET) begin
+        if (!nRESET || state_resume_w) begin
             de_q <= '0;
         end else if (dbg_pc_write) begin
             de_q.valid <= 1'b0;
@@ -605,6 +635,14 @@ module arm7tdmis_core_pipelined
         .exc_enter_en        (exc_enter_en_effective),
         .exc_target_spsr_idx (exc_target_spsr_idx),
         .exc_new_cpsr        (exc_new_cpsr)
+`ifdef ARM7TDMIS_SAVE_STATE
+        ,
+        .STATE_WRITE         (STATE_WRITE && STATE_INDEX >= 6'd31
+                            && STATE_INDEX < 6'd37),
+        .STATE_INDEX         (3'(STATE_INDEX - 6'd31)),
+        .STATE_WDATA         (STATE_WDATA),
+        .STATE_RDATA         (state_psr_rdata)
+`endif
 `ifdef ARM7TDMIS_VERIFICATION
         ,
         .VER_CPSR            (VER_RETIRE_CPSR),
@@ -708,6 +746,13 @@ module arm7tdmis_core_pipelined
         .dbg_force_user_bank(dbg_reg_force_user),
         .dbg_rdata       (dbg_reg_rdata),
         .pc_written      (rf_pc_written)
+`ifdef ARM7TDMIS_SAVE_STATE
+        ,
+        .STATE_WRITE     (STATE_WRITE && STATE_INDEX < 6'd30),
+        .STATE_INDEX     (STATE_INDEX[4:0]),
+        .STATE_WDATA     (STATE_WDATA),
+        .STATE_RDATA     (state_gpr_rdata)
+`endif
 `ifdef ARM7TDMIS_VERIFICATION
         ,
         .VER_GPRS        (VER_RETIRE_GPRS)
@@ -1080,6 +1125,24 @@ module arm7tdmis_core_pipelined
     // combinational indication on the same enabled edge as the commit.
     assign dbg_halt_boundary = (state_next == S_EXEC);
 
+`ifdef ARM7TDMIS_SAVE_STATE
+    // The save-state boundary is the same final microcycle used for debug
+    // halts, but save state is unavailable during debug injection/halt.
+    assign STATE_BOUNDARY = (state_next == S_EXEC)
+                          && !dbg_inject_active && !dbg_halted;
+
+    always_comb begin
+        if (STATE_INDEX < 6'd30)
+            STATE_RDATA = state_gpr_rdata;
+        else if (STATE_INDEX == 6'd30)
+            STATE_RDATA = state_resume_pc_q;
+        else if (STATE_INDEX < 6'd37)
+            STATE_RDATA = state_psr_rdata;
+        else
+            STATE_RDATA = 32'h0000_0000;
+    end
+`endif
+
     // =====================================================================
     // Writeback / commit / flush computation (S_EXEC + memory substates)
     // =====================================================================
@@ -1105,7 +1168,7 @@ module arm7tdmis_core_pipelined
                              && (state_next == S_EXEC);
 
     always_ff @(posedge CLK) begin
-        if (!nRESET) begin
+        if (!nRESET || state_resume_w) begin
             dbg_inject_started_q <= 1'b0;
         end else if (CLKEN) begin
             if (dbg_inject_we || dbg_inject_retire)
@@ -1120,7 +1183,7 @@ module arm7tdmis_core_pipelined
     // same time we latch de_q.
     logic dec_is_unimplemented_q;
     always_ff @(posedge CLK) begin
-        if (!nRESET)
+        if (!nRESET || state_resume_w)
             dec_is_unimplemented_q <= 1'b0;
         else if (CLKEN) begin
             if (flush)
@@ -1247,7 +1310,7 @@ module arm7tdmis_core_pipelined
                                   && (nIRQ || cpsr.i);
 
     always_ff @(posedge CLK) begin
-        if (!nRESET) begin
+        if (!nRESET || state_resume_w) begin
             undef_instr_pc_q    <= 32'h0000_0000;
             undef_instr_thumb_q <= 1'b0;
         end else if (CLKEN && undef_recognition_starts) begin
@@ -1332,7 +1395,7 @@ module arm7tdmis_core_pipelined
     logic external_data_abort_q;
     logic debug_data_abort_q;
     always_ff @(posedge CLK) begin
-        if (!nRESET) begin
+        if (!nRESET || state_resume_w) begin
             data_abort_q          <= 1'b0;
             external_data_abort_q <= 1'b0;
             debug_data_abort_q    <= 1'b0;
@@ -1398,7 +1461,7 @@ module arm7tdmis_core_pipelined
     // for the coincident enabled cycle. Returning from FIQ resumes the
     // untouched Data Abort vector.
     always_ff @(posedge CLK) begin
-        if (!nRESET) begin
+        if (!nRESET || state_resume_w) begin
             fiq_after_dabt_q       <= 1'b0;
             fiq_after_dabt_delay_q <= 2'd0;
         end else if (CLKEN) begin
@@ -1496,7 +1559,7 @@ module arm7tdmis_core_pipelined
     end
 
     always_ff @(posedge CLK) begin
-        if (!nRESET) begin
+        if (!nRESET || state_resume_w) begin
             VER_RETIRE_VALID           <= 1'b0;
             VER_RETIRE_PC              <= 32'h0000_0000;
             VER_RETIRE_OPCODE          <= 32'h0000_0000;
@@ -1579,7 +1642,7 @@ module arm7tdmis_core_pipelined
                             : (de_q.pc + 32'd4);
 
     always_ff @(posedge CLK) begin
-        if (!nRESET) begin
+        if (!nRESET || state_resume_w) begin
             debug_irq_pending_q <= 1'b0;
             debug_fiq_pending_q <= 1'b0;
         end else if (CLKEN) begin
@@ -1606,7 +1669,7 @@ module arm7tdmis_core_pipelined
     assign dbg_exception_vector_ready = debug_exception_refill_q
                                       && latch_into_fd;
     always_ff @(posedge CLK) begin
-        if (!nRESET)
+        if (!nRESET || state_resume_w)
             exception_vector_first_q <= 1'b0;
         else if (CLKEN) begin
             if (any_exc_fires)
@@ -1616,13 +1679,13 @@ module arm7tdmis_core_pipelined
         end
     end
     always_ff @(posedge CLK) begin
-        if (!nRESET)
+        if (!nRESET || state_resume_w)
             dbg_exception_vector_pc <= 32'h0000_0000;
         else if (CLKEN && dbg_exception_vector_ready)
             dbg_exception_vector_pc <= inflight_pc_q;
     end
     always_ff @(posedge CLK) begin
-        if (!nRESET) begin
+        if (!nRESET || state_resume_w) begin
             debug_exception_refill_q <= 1'b0;
         end else if (CLKEN) begin
             if (any_exc_fires)
@@ -2023,10 +2086,36 @@ module arm7tdmis_core_pipelined
                            : block_writes_pc ? block_pc_target
                                              : pc_target_exec;
 
+`ifdef ARM7TDMIS_SAVE_STATE
+    // Capture the first instruction that has not executed. A single-cycle
+    // completion consumes de_q and promotes fd_q; a multicycle completion
+    // has already promoted its successor into de_q. Redirects restart at
+    // their architectural target. This compact PC plus architectural LR is
+    // sufficient at the legal boundary between Thumb BL halfwords.
+    always_ff @(posedge CLK) begin
+        if (!nRESET) begin
+            state_resume_pc_q <= 32'h0000_0000;
+        end else if (STATE_WRITE && STATE_INDEX == 6'd30) begin
+            state_resume_pc_q <= STATE_WDATA;
+        end else if (STATE_CAPTURE) begin
+            if (flush)
+                state_resume_pc_q <= flush_target_pc;
+            else if (state_q != S_EXEC && de_q.valid)
+                state_resume_pc_q <= de_q.pc;
+            else if (fd_q.valid)
+                state_resume_pc_q <= fd_q.pc;
+            else if (inflight_valid_q)
+                state_resume_pc_q <= inflight_pc_q;
+            else
+                state_resume_pc_q <= fetch_pc_q;
+        end
+    end
+`endif
+
     // LDM-to-PC defers target/N until S_BLOCK_WB. LDR-to-PC can issue
     // target/N on its S_LOAD_WB redirect edge and needs no retained phase.
     always_ff @(posedge CLK) begin
-        if (!nRESET || dbg_pc_write) begin
+        if (!nRESET || dbg_pc_write || state_resume_w) begin
             block_pc_refill_first_q <= 1'b0;
         end else if (CLKEN) begin
             if (block_writes_pc)
@@ -2044,7 +2133,7 @@ module arm7tdmis_core_pipelined
     // policy for r4p3 erratum [13]: DBGRQ is synchronous at this interface,
     // and a legal-boundary halt observes the complete PC modification.
     always_ff @(posedge CLK) begin
-        if (!nRESET) begin
+        if (!nRESET || state_resume_w) begin
             dbg_pc_redirect_pending <= 1'b0;
             dbg_pc_redirect_pc      <= 32'h0000_0000;
         end else if (dbg_pc_write) begin
@@ -2064,7 +2153,7 @@ module arm7tdmis_core_pipelined
     // E-stage sequential state
     // =====================================================================
     always_ff @(posedge CLK) begin
-        if (!nRESET) begin
+        if (!nRESET || state_resume_w) begin
                 state_q             <= S_EXEC;
                 ls_data_addr_q      <= 32'h0;
                 ls_store_data_q     <= 32'h0;
@@ -2397,7 +2486,7 @@ module arm7tdmis_core_pipelined
     // drives the architecturally explicit S target and therefore becomes
     // valid new history for the following target+i S cycle.
     always_ff @(posedge CLK) begin
-        if (!nRESET) begin
+        if (!nRESET || state_resume_w) begin
             bus_history_valid_q <= 1'b0;
             bus_history_addr_q  <= 32'h0;
             bus_history_write_q <= WRITE_READ;
@@ -2809,7 +2898,7 @@ module arm7tdmis_core_pipelined
 
         // Reset is an idle bus cycle regardless of stale pre-reset state
         // or CLKEN. The first real request is generated after release.
-        if (!nRESET) begin
+        if (!nRESET || state_resume_w) begin
             ADDR  = 32'h0000_0000;
             WRITE = WRITE_READ;
             SIZE  = 2'(SIZE_WORD);
@@ -2884,6 +2973,8 @@ module arm7tdmis_core_pipelined
     always_ff @(posedge CLK) begin
         if (!nRESET)
             pc_q <= 32'h0;
+        else if (state_resume_w)
+            pc_q <= state_resume_pc_q;
         else if (dbg_pc_write)
             pc_q <= dbg_pc_aligned;
         else if (CLKEN) begin

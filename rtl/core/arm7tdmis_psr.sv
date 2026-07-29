@@ -75,6 +75,14 @@ module arm7tdmis_psr
     input  logic        exc_enter_en,
     input  logic [2:0]  exc_target_spsr_idx,
     input  psr_t        exc_new_cpsr
+`ifdef ARM7TDMIS_SAVE_STATE
+    ,
+    // STATE_INDEX 0 is CPSR; 1..5 are SPSR FIQ/IRQ/SVC/ABT/UND.
+    input  logic        STATE_WRITE,
+    input  logic [2:0]  STATE_INDEX,
+    input  logic [31:0] STATE_WDATA,
+    output logic [31:0] STATE_RDATA
+`endif
 `ifdef ARM7TDMIS_VERIFICATION
     ,
     // Stable storage snapshots for the public retirement interface.
@@ -143,6 +151,17 @@ module arm7tdmis_psr
     assign spsr_valid = mode_has_spsr(cur_mode);
     assign spsr       = spsr_valid ? psr_t'(spsr_q[cur_spsr_ix]) : '0;
 
+`ifdef ARM7TDMIS_SAVE_STATE
+    always_comb begin
+        if (STATE_INDEX == 3'd0)
+            STATE_RDATA = cpsr_q;
+        else if (STATE_INDEX <= 3'd5)
+            STATE_RDATA = spsr_q[STATE_INDEX - 3'd1];
+        else
+            STATE_RDATA = 32'h0000_0000;
+    end
+`endif
+
 `ifdef ARM7TDMIS_VERIFICATION
     assign VER_CPSR = cpsr_q;
     for (genvar ver_spsr = 0; ver_spsr < 5;
@@ -165,6 +184,13 @@ module arm7tdmis_psr
             spsr_q[2] <= 32'h0;
             spsr_q[3] <= 32'h0;
             spsr_q[4] <= 32'h0;
+`ifdef ARM7TDMIS_SAVE_STATE
+        end else if (STATE_WRITE) begin
+            if (STATE_INDEX == 3'd0)
+                cpsr_q <= STATE_WDATA;
+            else if (STATE_INDEX <= 3'd5)
+                spsr_q[STATE_INDEX - 3'd1] <= STATE_WDATA;
+`endif
         end else if (CLKEN) begin
                 cpsr_next = cpsr_q;
 

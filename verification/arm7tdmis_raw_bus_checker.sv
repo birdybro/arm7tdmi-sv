@@ -25,6 +25,13 @@ module arm7tdmis_raw_bus_checker
     input logic        CPSEQ,
     input logic        CPnOPC,
     input logic        CPnI
+`ifdef ARM7TDMIS_SAVE_STATE
+    ,
+    // A save-state resume is an explicit architectural restart while
+    // CLKEN remains LOW; pipeline outputs may return to their idle values.
+    input logic        STATE_RESUME,
+    input logic        STATE_WRITE
+`endif
 );
 
     logic        cfg_valid_q;
@@ -45,6 +52,18 @@ module arm7tdmis_raw_bus_checker
 
     logic        stall_seen_q;
     logic [72:0] stalled_bus_q;
+
+`ifdef ARM7TDMIS_SAVE_STATE
+    logic state_access_seen_q;
+    always_ff @(posedge CLK) begin
+        if (!nRESET)
+            state_access_seen_q <= 1'b0;
+        else
+            state_access_seen_q <= STATE_RESUME || STATE_WRITE;
+    end
+`else
+    wire state_access_seen_q = 1'b0;
+`endif
 
     wire active = TRANS inside {TRANS_N, TRANS_S};
     wire phase_active_q = phase_trans_q inside {TRANS_N, TRANS_S};
@@ -182,7 +201,7 @@ module arm7tdmis_raw_bus_checker
     // alter the idle pins while stopped; checking begins only after the
     // first enabled post-reset bus edge.
     always_ff @(negedge CLK) begin
-        if (!nRESET || CLKEN || !enabled_since_reset_q
+        if (!nRESET || CLKEN || state_access_seen_q || !enabled_since_reset_q
             || !stopped_edge_q) begin
             stall_seen_q <= 1'b0;
         end else if (!stall_seen_q) begin

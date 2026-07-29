@@ -68,6 +68,18 @@ module arm7tdmis_top
 
     // LDM/STM continuation hint to memory controllers
     output logic        DMORE
+`ifdef ARM7TDMIS_SAVE_STATE
+    ,
+    // Optional architectural state transport, enabled only in the
+    // save-state build profile so the raw r4p3 pin contract is unchanged.
+    input  logic        STATE_CAPTURE,
+    input  logic        STATE_RESUME,
+    input  logic        STATE_WRITE,
+    input  logic [5:0]  STATE_INDEX,
+    input  logic [31:0] STATE_WDATA,
+    output logic        STATE_BOUNDARY,
+    output logic [31:0] STATE_RDATA
+`endif
 `ifdef ARM7TDMIS_VERIFICATION
     ,
     // Public, verification-only architectural completion contract.
@@ -179,6 +191,16 @@ module arm7tdmis_top
         .dbg_exception_vector_pc(ice_core_exception_vector_pc),
         .dbg_pc_redirect_pending(ice_core_pc_redirect_pending),
         .dbg_pc_redirect_pc(ice_core_pc_redirect_pc)
+`ifdef ARM7TDMIS_SAVE_STATE
+        ,
+        .STATE_CAPTURE(STATE_CAPTURE),
+        .STATE_RESUME(STATE_RESUME),
+        .STATE_WRITE(STATE_WRITE),
+        .STATE_INDEX(STATE_INDEX),
+        .STATE_WDATA(STATE_WDATA),
+        .STATE_BOUNDARY(STATE_BOUNDARY),
+        .STATE_RDATA(STATE_RDATA)
+`endif
 `ifdef ARM7TDMIS_VERIFICATION
         ,
         .VER_RETIRE_VALID(VER_RETIRE_VALID),

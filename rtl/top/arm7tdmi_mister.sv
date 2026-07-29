@@ -78,7 +78,24 @@ module arm7tdmi_mister
     output logic [1:0]  DBGRNG,
     output logic        DBGCOMMTX,
     output logic        DBGCOMMRX
+`ifdef ARM7TDMIS_SAVE_STATE
+    ,
+    // Version-1 architectural save-state transport. Assert REQUEST until
+    // READY, read or write one of STATE_WORDS words, then deassert REQUEST
+    // to discard the saved pipeline and refetch from the state PC.
+    input  logic        STATE_REQUEST,
+    output logic        STATE_READY,
+    input  logic        STATE_WRITE,
+    input  logic [5:0]  STATE_INDEX,
+    input  logic [31:0] STATE_WDATA,
+    output logic [31:0] STATE_RDATA
+`endif
 );
+
+`ifdef ARM7TDMIS_SAVE_STATE
+    localparam logic [31:0] STATE_SCHEMA_VERSION = 32'h0001_0000;
+    localparam int unsigned STATE_WORDS = 37;
+`endif
 
     // ------------------------------------------------------------------
     // Board/framework event synchronization
@@ -178,7 +195,30 @@ module arm7tdmi_mister
     // When no raw memory response is pending, CPU_CE advances ordinary
     // opcode/internal cycles. While a response is pending, only a buffered
     // or same-edge memory completion can release that enabled edge.
-    wire core_clken = CPU_CE && (!bus_waiting || response_available);
+`ifdef ARM7TDMIS_SAVE_STATE
+    logic state_halted_q;
+    logic core_state_boundary;
+    wire state_capture = STATE_REQUEST && !state_halted_q
+                       && core_clken && core_state_boundary;
+    wire state_resume = state_halted_q && !STATE_REQUEST;
+    wire state_access_write = STATE_WRITE && STATE_READY
+                            && (STATE_INDEX < 6'(STATE_WORDS));
+    assign STATE_READY = state_halted_q;
+
+    always_ff @(posedge CLK or negedge RESET_N) begin
+        if (!RESET_N)
+            state_halted_q <= 1'b0;
+        else if (state_capture)
+            state_halted_q <= 1'b1;
+        else if (state_resume)
+            state_halted_q <= 1'b0;
+    end
+`else
+    wire state_halted_q = 1'b0;
+`endif
+
+    wire core_clken = CPU_CE && !state_halted_q
+                    && (!bus_waiting || response_available);
     wire core_abort = bus_waiting && response_available
                     && (response_valid_q ? response_error_q : MEM_ERROR);
     wire [31:0] core_rdata = response_valid_q
@@ -221,8 +261,16 @@ module arm7tdmi_mister
                 if (bus_waiting)
                     response_valid_q <= 1'b0;
 
+`ifdef ARM7TDMIS_SAVE_STATE
+                request_valid_q <= state_capture ? 1'b0 : raw_active;
+`else
                 request_valid_q <= raw_active;
-                if (raw_active) begin
+`endif
+                if (raw_active
+`ifdef ARM7TDMIS_SAVE_STATE
+                    && !state_capture
+`endif
+                ) begin
                     request_addr_q       <= raw_addr;
                     request_write_q      <= raw_write;
                     request_size_q       <= raw_size;
@@ -340,6 +388,16 @@ module arm7tdmi_mister
         .DBGnTRST       (RESET_N),
         .DBGnTDOEN      (raw_dbgntdoen),
         .DMORE          (raw_dmore)
+`ifdef ARM7TDMIS_SAVE_STATE
+        ,
+        .STATE_CAPTURE  (state_capture),
+        .STATE_RESUME   (state_resume),
+        .STATE_WRITE    (state_access_write),
+        .STATE_INDEX    (STATE_INDEX),
+        .STATE_WDATA    (STATE_WDATA),
+        .STATE_BOUNDARY (core_state_boundary),
+        .STATE_RDATA    (STATE_RDATA)
+`endif
 `ifdef ARM7TDMIS_VERIFICATION
         ,
         .VER_RETIRE_VALID(ver_retire_unused[0]),

@@ -78,7 +78,13 @@ class SaveStateContractTest(unittest.TestCase):
             "-DARM7TDMIS_SAVE_STATE",
             makefile,
         )
-        self.assertIn("mister_savestate", regression)
+        # The runner deliberately consumes the Make manifest instead of
+        # duplicating individual test names.
+        self.assertIn(
+            "integration_tests = tuple(args.integration_tests.split())",
+            regression,
+        )
+        self.assertIn('f"integ-{test}"', regression)
         self.assertIn("- [x] **MIST-006:**", tasks)
         block = tasks[tasks.index("**MIST-006:**"):tasks.index("**MIST-007:**")]
         self.assertIn("arm7tdmis_mister_savestate_tb.sv", block)

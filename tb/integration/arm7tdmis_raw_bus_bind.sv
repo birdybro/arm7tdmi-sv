@@ -18,4 +18,9 @@ bind arm7tdmis_top arm7tdmis_raw_bus_checker u_raw_bus_checker (
     .CPSEQ,
     .CPnOPC,
     .CPnI
+`ifdef ARM7TDMIS_SAVE_STATE
+    ,
+    .STATE_RESUME,
+    .STATE_WRITE
+`endif
 );
