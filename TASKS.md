@@ -3362,14 +3362,32 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   requirement ID → source section → RTL → directed/random/formal tests → coverage bin
   → latest result. Also prove every RTL feature and every test maps back to a
   requirement.
-- [ ] **DOC-004:** Publish the two integration APIs with timing diagrams, reset and
+- [x] **DOC-004:** Publish the two integration APIs with timing diagrams, reset and
   clock rules, parameter/tie-off tables, error behavior, synthesis examples, and
   compatibility/version policy.
-- [ ] **DOC-005:** Record copyright/license/SPDX status for RTL, tests, manuals,
+  `docs/INTEGRATION.md` and `docs/RAW_BUS.md` are the version-1 public
+  contracts and contain the edge diagrams, reset/clock/response rules,
+  option or tie-off tables, error semantics, complete example ownership,
+  checked synthesis commands, and compatibility policy.
+  `scripts/tests/test_release_hygiene.py` fails if either contract loses a
+  required section.
+- [x] **DOC-005:** Record copyright/license/SPDX status for RTL, tests, manuals,
   third-party suites, reference emulator code, MiSTer fragments, firmware, and ROM
   handling. Do not redistribute copyrighted BIOS/software without permission.
-- [ ] **DOC-006:** Add a changelog, semantic version, support matrix, known-limitations
+  `docs/PROVENANCE.md` inventories the repository-authored RTL, tests,
+  hand-encoded programs, tools, docs, FPGA fragments, included Arm manual,
+  non-vendored errata, absent third-party suites/reference emulators, and
+  user-supplied firmware/ROM policy with explicit SPDX conclusions.
+  `scripts/tests/test_release_hygiene.py` enforces the document and license
+  vocabulary.
+- [x] **DOC-006:** Add a changelog, semantic version, support matrix, known-limitations
   file, security/debug notes, and a release manifest containing source/tool/spec hashes.
+  `VERSION`, `CHANGELOG.md`, `docs/SUPPORT.md`, `docs/LIMITATIONS.md`, and
+  `SECURITY.md` publish the prerelease contract without weakening any open
+  gate. `scripts/release_evidence.py` writes `release-manifest.json` with the
+  project version; commit, Git-tree, and source hashes; canonical tool-version
+  and executable manifests; exact TRM/license hashes; and every evidence-file
+  hash. `scripts/tests/test_release_hygiene.py` locks the schema and documents.
 - [x] **DOC-007:** Remove stale "pending", "scaffold", and "deferred" comments only
   when the corresponding requirement is verified; otherwise keep them and link the
   owning task ID. Obsolete scaffold/milestone language was removed from the verified

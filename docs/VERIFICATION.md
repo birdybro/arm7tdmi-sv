@@ -83,7 +83,10 @@ After regression and coverage have both run on the same clean commit,
 clean-tree markers, and exact commit identity. It emits:
 
 - `reports/generated/release-manifest.json`, with size and SHA-256 for every
-  included report, phase log, and coverage database;
+  included report, phase log, and coverage database, plus the semantic
+  project version, Git tree hash, regression source hash, canonical tool
+  version hash, available tool-executable hashes, and specification/license
+  hashes;
 - `arm7tdmis-release-evidence-<commit>.tar.gz`; and
 - a sibling `.sha256` checksum.
 

@@ -28,7 +28,7 @@ The status words used here have the §31 meanings:
 |---|---|
 | ARM/Thumb architecture | **VERIFIED** for the directed requirements in §31.3, including all Thumb format families, reserved space, PC/PSR rules, operand policies, dependencies, and state changes. Independent differential, functional-coverage, formal, compiler, and soak closure remain **PARTIAL** under §31.10. |
 | Exceptions and aborts | **VERIFIED** for §31.4: priority, ARM/Thumb link values, DABT+FIQ, reset/interrupt sampling, Table 7-16 entry/return buses, and per-beat LDM/STM/SWP abort behavior have fail-hard matrices. |
-| Raw bus and cycle behavior | **PARTIAL**. Endian lanes, CLKEN/ABORT behavior, LOCK/DMORE, redirects, exception cycles, core Table 7 families, and reusable protocol assertions are tested. BUS-002 and BUS-003 still require one all-cycle oracle and a final table-by-table derivation. |
+| Raw bus and cycle behavior | **VERIFIED** for §31.5. Endian lanes, CLKEN/ABORT behavior, LOCK/DMORE, redirects, exception cycles, every Chapter 7 family, and reusable protocol assertions are linked to full-phase or specialized scoreboards. |
 | External coprocessor and CP14 | **VERIFIED** for §31.6: absent/ready/busy/abandonment, MCR/MRC/CDP/LDC/STC timing, CP14 DCC and Debug Abort Status, corrected errata 14/15 policy, and absence of internal CP15 are tested. |
 | EmbeddedICE-RT, JTAG, and trace boundary | **VERIFIED** for the checked §31.7/§31.8 requirements. The project provides the ARM-side ETM7 boundary, not an ETM macrocell. JTAG-006 real-debugger interoperability remains **PARTIAL**. |
 | FPGA/MiSTer package | **PARTIAL**. The canonical valid/ready wrapper, two public bus adapters, option profiles, CDC/reset contract, DMA arbitration, portable QIP/file lists, and two checked Quartus 17.0.2 flows exist. Save states, a real framework build, PocketStation integration, and hardware evidence remain open. |
@@ -94,6 +94,16 @@ evidence. The §31 ledger remains authoritative if a summary conflicts with it.
   lint exceptions and their expiry conditions.
 - [`docs/ERRATA.md`](docs/ERRATA.md): all 15 published r4p3 errata and their
   corrected-default evidence.
+- [`docs/SUPPORT.md`](docs/SUPPORT.md): supported API, simulator, FPGA-tool,
+  framework, and system-integration profiles.
+- [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md): concise prerelease blockers
+  linked to the authoritative task IDs.
+- [`docs/PROVENANCE.md`](docs/PROVENANCE.md): license, specification,
+  third-party, test-program, firmware, and ROM handling.
+- [`SECURITY.md`](SECURITY.md): debug exposure and containing-system security
+  responsibilities.
+- [`CHANGELOG.md`](CHANGELOG.md) and [`VERSION`](VERSION): semantic project
+  version and user-visible release history.
 
 ARMv5+ features are intentionally absent: no `BKPT`, `BLX`, `CLZ`, Q flag,
 `MAS[1:0]`, `DBGRESTART`, or separate `DBGINSTR`. ARM7TDMI-S uses `SIZE[1:0]`
@@ -159,5 +169,5 @@ docs/
 Repository software is distributed under [`LICENSE`](LICENSE). The included
 `ARM_DDI_0234B_ARM7TDMI-S_r4p3_TRM.pdf` remains under its original Arm
 copyright and is a specification reference, not project-licensed source.
-The detailed provenance/SPDX release review remains DOC-005 until that
-inventory is published.
+The complete release inventory and SPDX conclusions are in
+[`docs/PROVENANCE.md`](docs/PROVENANCE.md).

@@ -49,6 +49,14 @@ When `CLKEN=0`, no address is accepted and no response completes. Hold the
 response for the pending phase until an enabled rising edge. Do not count an
 active `TRANS` value repeatedly while the clock is stopped.
 
+`nRESET` asserts asynchronously. Hold it low for at least two `CLK` cycles.
+The top-level reset-release synchronizer keeps the core in reset for two
+rising edges after deassertion. Reset does not depend on `CLKEN`; it cancels
+the active processor transaction and returns the bus controls to idle.
+`nIRQ`, `nFIQ`, raw debug controls, memory response, coprocessor handshake,
+and JTAG clock-enable inputs are synchronous unless a containing wrapper
+explicitly synchronizes them.
+
 The core holds its architectural state and bus outputs stable across a
 continued stop. Appendix B permits outputs to settle in the first cycle in
 which `CLKEN` becomes low; consumers must take their reference after that
@@ -196,6 +204,58 @@ locks the base-family interpretation; the multiply, redirect, exception,
 coprocessor, block-transfer, and condition-fail matrices cover their
 specialized rows.
 
+## Integration example
+
+The raw surface exposes every ARM-side optional interface. An integration
+that does not use external coprocessors or debug must tie inputs explicitly:
+
+| Input | Required inactive/static value |
+|---|---|
+| `CFGBIGEND` | Static `0` for little endian or `1` for big endian |
+| `nIRQ`, `nFIQ` | `1` when no interrupt is pending |
+| `ABORT` | `0` unless completing an accepted N/S phase with an error |
+| `CPA`, `CPB` | `1`, external coprocessor absent |
+| `DBGEN`, `DBGRQ`, `DBGBREAK`, `DBGEXT` | `0`, debug disabled/no event |
+| `DBGTCKEN`, `DBGTMS`, `DBGTDI` | `0` when no scan transport is active |
+| `DBGnTRST` | `0` to hold the unused TAP in reset |
+
+The following excerpt shows the ownership pattern; normal named connections
+are used for every output so no hierarchy is required:
+
+```systemverilog
+arm7tdmis_top u_cpu (
+    .CLK(CLK), .CLKEN(cpu_advance), .nRESET(reset_n),
+    .CFGBIGEND(BIG_ENDIAN),
+    .nIRQ(irq_n), .nFIQ(fiq_n), .ABORT(mem_abort),
+    .ADDR(mem_addr), .WRITE(mem_write), .SIZE(mem_size),
+    .PROT(mem_prot), .LOCK(mem_lock), .TRANS(mem_trans),
+    .WDATA(mem_wdata), .RDATA(mem_rdata),
+    .CPA(1'b1), .CPB(1'b1),
+    .CPnMREQ(), .CPSEQ(), .CPnTRANS(), .CPnOPC(),
+    .CPTBIT(), .CPnI(),
+    .DBGEN(1'b0), .DBGRQ(1'b0), .DBGBREAK(1'b0),
+    .DBGEXT(2'b00), .DBGACK(), .DBGnEXEC(),
+    .DBGINSTRVALID(), .DBGRNG(), .DBGCOMMTX(), .DBGCOMMRX(),
+    .DBGTCKEN(1'b0), .DBGTMS(1'b0), .DBGTDI(1'b0),
+    .DBGnTRST(1'b0), .DBGTDO(), .DBGnTDOEN(),
+    .DMORE(mem_more)
+);
+```
+
+The memory pipeline must latch address metadata on each enabled N/S edge and
+return the corresponding response on the next enabled edge, as shown in the
+edge diagram above. To synthesize and characterize the complete raw
+interface for the selected Cyclone V device, run:
+
+```sh
+make -C scripts lint
+make -C scripts quartus-conformance-analysis
+make -C scripts quartus-conformance-compile
+```
+
+Most new FPGA systems should use the canonical wrapper instead; it converts
+independent memory backpressure to the shared raw `CLKEN` contract.
+
 ## Reusable checker
 
 Instantiate `verification/arm7tdmis_raw_bus_checker.sv` beside the raw core in
@@ -221,3 +281,17 @@ make -C scripts raw-checker-self-test
 The target runs one legal mixed sequence and eleven expected-failure
 mutations, requires every mutation to exit nonzero, and verifies the exact
 assertion class that rejected it.
+
+## Version and compatibility
+
+This document defines raw bus API version 1 against ARM DDI 0234B r4p3.
+The repository prerelease version is in [`VERSION`](../VERSION), and
+user-visible changes are recorded in [`CHANGELOG.md`](../CHANGELOG.md).
+
+Within raw API version 1, pin names, widths, polarities, phase ownership,
+CLKEN sampling, lane mapping, reset behavior, and r4p3 compatibility policies
+will not change incompatibly. New optional integration helpers must not alter
+these pins. A pin or semantic change requires a new raw API version and an
+explicit breaking changelog entry. Verification-only ports selected by
+`ARM7TDMIS_VERIFICATION` and internal hierarchy are outside the production
+compatibility contract.

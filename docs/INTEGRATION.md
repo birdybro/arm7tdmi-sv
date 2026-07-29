@@ -73,6 +73,23 @@ A completing response and the already-present next raw address phase may be
 consumed/captured on the same CPU-enabled edge. This permits back-to-back
 requests without duplicating either transaction.
 
+## Error behavior
+
+`MEM_ERROR` is meaningful only on an edge with both `MEM_VALID` and
+`MEM_READY`. It replaces a successful completion; a target must not commit
+selected write lanes on that edge. An error on a code request supplies the
+raw Prefetch Abort response, which becomes an architectural exception only
+if that fetched instruction reaches Execute. An error on a data request
+follows the Data Abort completion and restart rules in
+[EXCEPTIONS.md](EXCEPTIONS.md), including the remaining beats of an aborted
+LDM/STM.
+
+`MEM_ERROR` while no request is valid, or while `MEM_READY=0`, has no effect.
+Reset cancels an outstanding request and any buffered response; a target
+must not send a delayed completion from the canceled transaction into the
+new reset epoch. Adapters map Wishbone `ERR` or the selected host error
+directly to this qualified response and do not retry internally.
+
 ### Unified-memory and self-modifying-code contract
 
 The CPU has no instruction or data cache and presents one unified request
@@ -305,3 +322,18 @@ The following are intentionally not claimed by this version of the wrapper:
 
 Those remain visible release blockers in `TASKS.md` rather than implicit
 features of the canonical memory handshake.
+
+## Version and compatibility
+
+This document defines canonical wrapper API version 1. The repository
+prerelease version is in [`VERSION`](../VERSION), and user-visible changes are
+recorded in [`CHANGELOG.md`](../CHANGELOG.md).
+
+Within API version 1, existing ports, polarities, handshake meaning, default
+parameter behavior, byte lanes, reset sequencing, and error mapping will not
+change incompatibly. Additive optional outputs or parameters must have safe
+defaults and receive a project minor-version change. A required port,
+polarity change, handshake change, or changed default architectural behavior
+requires a new API version and is called out as breaking in the changelog.
+Internal hierarchy and verification-only ports are not compatibility
+surfaces.

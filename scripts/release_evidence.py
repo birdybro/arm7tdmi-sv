@@ -9,7 +9,9 @@ import hashlib
 import json
 import os
 import pathlib
+import shutil
 import subprocess
+import sys
 import tarfile
 from typing import Any
 
@@ -18,6 +20,9 @@ SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 REPORT_ROOT = REPO_ROOT / "reports" / "generated"
 MANIFEST_SCHEMA = "arm7tdmis-release-evidence-v1"
+VERSION_PATH = REPO_ROOT / "VERSION"
+TRM_PATH = REPO_ROOT / "ARM_DDI_0234B_ARM7TDMI-S_r4p3_TRM.pdf"
+LICENSE_PATH = REPO_ROOT / "LICENSE"
 
 
 def validate_evidence(
@@ -46,6 +51,17 @@ def _sha256(path: pathlib.Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _json_sha256(value: Any) -> str:
+    """Hash a JSON value using a stable, whitespace-free representation."""
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 def _git_commit() -> str:
     return subprocess.run(
         ("git", "rev-parse", "HEAD"),
@@ -55,6 +71,17 @@ def _git_commit() -> str:
         stderr=subprocess.STDOUT,
         text=True,
     ).stdout.strip()
+
+
+def _git_tree_sha256() -> str:
+    tree = subprocess.run(
+        ("git", "ls-tree", "-r", "--full-tree", "HEAD"),
+        cwd=REPO_ROOT,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    ).stdout
+    return hashlib.sha256(tree).hexdigest()
 
 
 def _git_status() -> str:
@@ -123,6 +150,85 @@ def _validated_files(
     return sorted(set(candidates))
 
 
+def _file_entry(path: pathlib.Path) -> dict[str, Any]:
+    resolved = path.resolve()
+    return {
+        "path": resolved.relative_to(REPO_ROOT).as_posix(),
+        "bytes": resolved.stat().st_size,
+        "sha256": _sha256(resolved),
+    }
+
+
+def _tool_executable_manifest(tools: dict[str, str]) -> dict[str, Any]:
+    commands = {
+        "git": "git",
+        "make": "make",
+        "python": sys.executable,
+        "quartus": "quartus_map",
+        "verilator": "verilator",
+    }
+    executables: dict[str, Any] = {}
+    for label in sorted(tools):
+        command = commands.get(label)
+        if command is None:
+            continue
+        located = (
+            pathlib.Path(command)
+            if pathlib.Path(command).is_absolute()
+            else pathlib.Path(found)
+            if (found := shutil.which(command))
+            else None
+        )
+        if located is None or not located.is_file():
+            executables[label] = {
+                "command": command,
+                "status": "not-found",
+            }
+            continue
+        resolved = located.resolve()
+        executables[label] = {
+            "command": command,
+            "path": str(resolved),
+            "bytes": resolved.stat().st_size,
+            "sha256": _sha256(resolved),
+        }
+    return executables
+
+
+def build_manifest(
+    *,
+    candidates: list[pathlib.Path],
+    git_commit: str,
+    source_sha256: str,
+    tools: dict[str, str],
+    created_utc: str,
+) -> dict[str, Any]:
+    """Build the canonical release manifest without writing any artifacts."""
+    version = VERSION_PATH.read_text(encoding="utf-8").strip()
+    executable_manifest = _tool_executable_manifest(tools)
+    specifications = [_file_entry(TRM_PATH), _file_entry(LICENSE_PATH)]
+    return {
+        "schema": MANIFEST_SCHEMA,
+        "version": version,
+        "created_utc": created_utc,
+        # Retained for v1 manifest-reader compatibility.
+        "git_commit": git_commit,
+        "source": {
+            "git_commit": git_commit,
+            "git_tree_sha256": _git_tree_sha256(),
+            "source_sha256": source_sha256,
+        },
+        "tools": {
+            "versions": tools,
+            "versions_sha256": _json_sha256(tools),
+            "executables": executable_manifest,
+            "executables_sha256": _json_sha256(executable_manifest),
+        },
+        "specifications": specifications,
+        "files": [_file_entry(path) for path in sorted(set(candidates))],
+    }
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -168,19 +274,13 @@ def main() -> int:
         coverage_path=args.coverage,
     )
 
-    manifest = {
-        "schema": MANIFEST_SCHEMA,
-        "created_utc": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
-        "git_commit": commit,
-        "files": [
-            {
-                "path": str(path.relative_to(REPO_ROOT)),
-                "bytes": path.stat().st_size,
-                "sha256": _sha256(path),
-            }
-            for path in candidates
-        ],
-    }
+    manifest = build_manifest(
+        candidates=candidates,
+        git_commit=commit,
+        source_sha256=regression["git"]["source_sha256"],
+        tools=regression["tools"],
+        created_utc=dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+    )
     manifest_path = REPORT_ROOT / "release-manifest.json"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_temporary = manifest_path.with_suffix(".json.tmp")

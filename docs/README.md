@@ -31,6 +31,12 @@ because they agree with each other.
 - **[VERIFICATION.md](VERIFICATION.md)** — fail-hard regression ordering,
   intentional-failure sentinel, reproducibility metadata, and the
   `arm7tdmis-regression-v1` machine-readable result schema.
+- **[SUPPORT.md](SUPPORT.md)** — supported API, simulator, synthesis-tool,
+  MiSTer, and PocketStation profiles.
+- **[LIMITATIONS.md](LIMITATIONS.md)** — prerelease limitations mapped to the
+  authoritative open requirements.
+- **[PROVENANCE.md](PROVENANCE.md)** — SPDX/license inventory and rules for
+  specifications, third-party tests, firmware, BIOS, ROM, and reference code.
 - **[WARNING_POLICY.md](WARNING_POLICY.md)** — mechanically enforced fatal
   warning/assertion policy and the owner, rationale, and expiry condition for
   every command-line or inline suppression class.
