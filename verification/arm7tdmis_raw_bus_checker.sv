@@ -140,7 +140,11 @@ module arm7tdmis_raw_bus_checker
                     assert (active_continuation || merged_is
                             || coprocessor_stream_start)
                         else $fatal(1,
-                            "raw bus: S address lacks legal burst history");
+                            "raw bus: S address lacks legal burst history (current A=%08x W=%0b SZ=%0b P=%0b L=%0b; previous T=%0b A=%08x W=%0b SZ=%0b P=%0b L=%0b CPnI=%0b)",
+                            ADDR, WRITE, SIZE, PROT, LOCK,
+                            phase_trans_q, phase_addr_q, phase_write_q,
+                            phase_size_q, phase_prot_q, phase_lock_q,
+                            phase_cpni_q);
                     assert (SIZE != 2'(SIZE_BYTE))
                         else $fatal(1, "raw bus: byte burst is forbidden");
                 end
