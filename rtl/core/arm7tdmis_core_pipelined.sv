@@ -2362,12 +2362,24 @@ module arm7tdmis_core_pipelined
 
         unique case (state_q)
             S_EXEC: begin
-                if (dp_shift_take_cycle && dp_writes_pc) begin
-                    // Table 7-6 register-controlled shift to r15, cycle 2:
-                    // an address-only data-class N phase at pc+12. The
-                    // result commits and redirects in S_DP_SHIFT.
+                if (dp_shift_take_cycle) begin
+                    // Table 7-6 cycle 1 predicts the internal operation:
+                    // advertise cycle 2's pc+3i data-class address with I.
+                    // The response for pc+2i is already on RDATA from the
+                    // preceding sequential prefetch.
                     ADDR  = de_q.pc + 32'd12;
-                    TRANS = 2'(TRANS_N);
+                    TRANS = 2'(TRANS_I);
+                    WRITE = WRITE_READ;
+                    SIZE  = 2'(SIZE_WORD);
+                    PROT  = {is_priv, 1'b1};
+                end else if (mul_take_busy || mull_accum_take_cycle) begin
+                    // Tables 7-7--7-10: every multiply starts with I and
+                    // data-class controls. Accumulate forms hold pc+2i for
+                    // their extra accumulator cycle; all other forms can
+                    // advertise pc+3i immediately.
+                    ADDR  = dec.mul_accumulate
+                          ? (de_q.pc + 32'd8) : fetch_pc_q;
+                    TRANS = 2'(TRANS_I);
                     WRITE = WRITE_READ;
                     SIZE  = 2'(SIZE_WORD);
                     PROT  = {is_priv, 1'b1};
@@ -2424,11 +2436,13 @@ module arm7tdmis_core_pipelined
                 // fetch — §18 bus overlap saves the cycle the non-
                 // pipelined model used to spend re-fetching.
                 ADDR  = fetch_pc_q;
-                TRANS = (flush || !issue_fetch)
-                      ? 2'(TRANS_I) : source_fetch_trans_w;
+                TRANS = ls_load_q ? 2'(TRANS_I) : 2'(TRANS_N);
                 WRITE = WRITE_READ;
                 SIZE  = fetch_size_w;
-                PROT  = {is_priv, 1'b0};
+                // A load's I/S writeback pair is a merged data-class
+                // cycle. A store has no internal writeback cycle, so its
+                // trailing N address is the next opcode fetch.
+                PROT  = {is_priv, ls_load_q};
                 WDATA = ls_load_q ? 32'h0 : store_wdata;
             end
             S_BLOCK_DATA: begin
@@ -2444,11 +2458,10 @@ module arm7tdmis_core_pipelined
                 end else begin
                     // Last beat — overlap with next instr fetch.
                     ADDR  = fetch_pc_q;
-                    TRANS = (flush || !issue_fetch)
-                          ? 2'(TRANS_I) : source_fetch_trans_w;
+                    TRANS = block_load_q ? 2'(TRANS_I) : 2'(TRANS_N);
                     WRITE = WRITE_READ;
                     SIZE  = fetch_size_w;
-                    PROT  = {is_priv, 1'b0};
+                    PROT  = {is_priv, block_load_q};
                 end
                 // ARM ARM A4.1.97: when an STM writeback base is the
                 // lowest register in the list, store its original value,
@@ -2494,36 +2507,36 @@ module arm7tdmis_core_pipelined
                 // Addr-class overlaps with next instr fetch — LOCK
                 // drops since the locked sequence has ended.
                 ADDR  = fetch_pc_q;
-                TRANS = (flush || !issue_fetch)
-                      ? 2'(TRANS_I) : source_fetch_trans_w;
+                TRANS = 2'(TRANS_I);
                 WRITE = WRITE_READ;
                 SIZE  = fetch_size_w;
-                PROT  = {is_priv, 1'b0};
+                PROT  = {is_priv, 1'b1};
                 LOCK  = LOCK_FREE;
                 WDATA = swp_wdata;
             end
             S_MULL_HI: begin
                 // No bus access for the multiply — drive the next fetch.
                 ADDR  = fetch_pc_q;
-                TRANS = (flush || !issue_fetch)
-                      ? 2'(TRANS_I) : source_fetch_trans_w;
+                TRANS = 2'(TRANS_S);
                 SIZE  = fetch_size_w;
-                PROT  = {is_priv, 1'b0};
+                PROT  = {is_priv, 1'b1};
             end
             S_MUL_BUSY: begin
                 // Only the last busy cycle (state_next == S_EXEC) drives
                 // the next fetch — earlier cycles let the bus stay idle.
-                if (state_next == S_EXEC) begin
-                    ADDR  = fetch_pc_q;
-                    TRANS = (flush || !issue_fetch)
-                          ? 2'(TRANS_I) : source_fetch_trans_w;
-                    SIZE  = fetch_size_w;
-                    PROT  = {is_priv, 1'b0};
-                end
+                ADDR  = fetch_pc_q;
+                TRANS = (state_next == S_EXEC)
+                      ? 2'(TRANS_S) : 2'(TRANS_I);
+                SIZE  = fetch_size_w;
+                PROT  = {is_priv, 1'b1};
             end
             S_MULL_ACC: begin
-                // Idle bus — no bus access during the UMLAL/SMLAL
-                // accumulator-read cycle.
+                // UMLAL/SMLAL's accumulator-read cycle advances from the
+                // held pc+2i address to pc+3i, still as data-class I.
+                ADDR  = fetch_pc_q;
+                TRANS = 2'(TRANS_I);
+                SIZE  = fetch_size_w;
+                PROT  = {is_priv, 1'b1};
             end
             S_BLOCK_WB: begin
                 if (block_pc_internal_phase) begin
@@ -2543,20 +2556,18 @@ module arm7tdmis_core_pipelined
                     // writeback happens via the regfile mux below; overlap
                     // the successor's source-prefetch address phase.
                     ADDR  = fetch_pc_q;
-                    TRANS = (flush || !issue_fetch)
-                          ? 2'(TRANS_I) : source_fetch_trans_w;
+                    TRANS = 2'(TRANS_S);
                     SIZE  = fetch_size_w;
-                    PROT  = {is_priv, 1'b0};
+                    PROT  = {is_priv, 1'b1};
                 end
             end
             S_DP_SHIFT: begin
                 // §18: DP shift-by-reg I cycle. No data access; bus
                 // drives the next instr fetch (overlap).
                 ADDR  = fetch_pc_q;
-                TRANS = (flush || !issue_fetch)
-                      ? 2'(TRANS_I) : source_fetch_trans_w;
+                TRANS = 2'(TRANS_S);
                 SIZE  = fetch_size_w;
-                PROT  = {is_priv, 1'b0};
+                PROT  = {is_priv, 1'b1};
             end
             S_LOAD_WB: begin
                 if (ddata_writes_pc) begin
@@ -2573,20 +2584,18 @@ module arm7tdmis_core_pipelined
                     // Ordinary LDR writeback I cycle. Bus drives the next
                     // instruction fetch started during S_DDATA.
                     ADDR  = fetch_pc_q;
-                    TRANS = (flush || !issue_fetch)
-                          ? 2'(TRANS_I) : source_fetch_trans_w;
+                    TRANS = 2'(TRANS_S);
                     SIZE  = fetch_size_w;
-                    PROT  = {is_priv, 1'b0};
+                    PROT  = {is_priv, 1'b1};
                 end
             end
             S_SWP_WB: begin
                 // §18: SWP Rd writeback I cycle (TRM 1S+2N+1I). Bus
                 // continues the next-instr fetch started in S_SWP_WDATA.
                 ADDR  = fetch_pc_q;
-                TRANS = (flush || !issue_fetch)
-                      ? 2'(TRANS_I) : source_fetch_trans_w;
+                TRANS = 2'(TRANS_S);
                 SIZE  = fetch_size_w;
-                PROT  = {is_priv, 1'b0};
+                PROT  = {is_priv, 1'b1};
             end
             S_CP_WAIT: begin
                 ADDR = cp_instr_pc_q + 32'd8;
