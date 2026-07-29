@@ -102,6 +102,43 @@ class RegressionHarnessTest(unittest.TestCase):
         self.assertNotIn("integration-ordinary", phases)
         self.assertNotIn("integration-later", phases)
 
+    def test_full_aggregate_phases_consume_selected_report(self) -> None:
+        alternate = (
+            regression_harness.REPO_ROOT
+            / "reports/generated/alternate-regression.json"
+        )
+        phases = dict(
+            regression_harness._phases(
+                ("unit",),
+                ("integration",),
+                quick=False,
+                include_fpga=False,
+                regression_report=alternate,
+            )
+        )
+
+        assignment = f"REGRESSION_REPORT={alternate}"
+        self.assertEqual(phases["table7-cross"][-1], assignment)
+        self.assertEqual(phases["functional-coverage"][-1], assignment)
+        self.assertNotIn(assignment, phases["formal"])
+
+    def test_full_aggregate_report_must_be_repository_local(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            outside = pathlib.Path(directory) / "regression.json"
+            with self.assertRaisesRegex(
+                ValueError, "full regression report must be inside"
+            ):
+                regression_harness.resolve_report_path(
+                    outside, require_repo_local=True
+                )
+
+            self.assertEqual(
+                regression_harness.resolve_report_path(
+                    outside, require_repo_local=False
+                ),
+                outside.resolve(),
+            )
+
     def test_atomic_report_is_machine_readable(self) -> None:
         report = {
             "schema": "arm7tdmis-regression-v1",
