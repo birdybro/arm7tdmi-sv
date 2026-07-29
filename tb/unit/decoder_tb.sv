@@ -77,6 +77,34 @@ module decoder_tb
         check_eq4("  rm",      dec.rm,          4'd1);
         check_eq1("  dp_use_imm", dec.dp_use_imm, 1'b0);
 
+        // ---- Immediate shift amount zero has operation-specific meaning.
+        // ARM ARM A5.1: LSR #0 and ASR #0 encode a shift by 32, while
+        // ROR #0 encodes RRX. Register-specified amount zero remains a
+        // true no-op and therefore must not be rewritten.
+        instr = 32'hE1B00021;   // MOVS r0,r1,LSR #0 (= LSR #32)
+        check_class("MOVS r0,r1,LSR #32 encoding", INSTR_DP);
+        check_eq4("  LSR op", 4'(dec.shifter_op), 4'(SHIFT_LSR));
+        check_eq32("  LSR encoded-zero amount", {24'h0, dec.shifter_amount}, 32'd32);
+        check_eq1("  LSR is not RRX", dec.shifter_is_rrx, 1'b0);
+
+        instr = 32'hE1B00041;   // MOVS r0,r1,ASR #0 (= ASR #32)
+        check_class("MOVS r0,r1,ASR #32 encoding", INSTR_DP);
+        check_eq4("  ASR op", 4'(dec.shifter_op), 4'(SHIFT_ASR));
+        check_eq32("  ASR encoded-zero amount", {24'h0, dec.shifter_amount}, 32'd32);
+        check_eq1("  ASR is not RRX", dec.shifter_is_rrx, 1'b0);
+
+        instr = 32'hE1B00061;   // MOVS r0,r1,ROR #0 (= RRX)
+        check_class("MOVS r0,r1,RRX encoding", INSTR_DP);
+        check_eq4("  RRX op", 4'(dec.shifter_op), 4'(SHIFT_ROR));
+        check_eq32("  RRX amount remains zero", {24'h0, dec.shifter_amount}, 32'd0);
+        check_eq1("  RRX select", dec.shifter_is_rrx, 1'b1);
+
+        instr = 32'hE1B00231;   // MOVS r0,r1,LSR r2
+        check_class("MOVS r0,r1,LSR r2", INSTR_DP);
+        check_eq1("  register shift uses Rs", dec.shifter_use_rs, 1'b1);
+        check_eq4("  register shift Rs", dec.rs, 4'd2);
+        check_eq32("  register shift decoded amount", {24'h0, dec.shifter_amount}, 32'd0);
+
         // ---- DP test op: TST r0, #5 → 0xE3100005 ----
         instr = 32'hE3100005;
         check_class("TST r0,#5", INSTR_DP);
