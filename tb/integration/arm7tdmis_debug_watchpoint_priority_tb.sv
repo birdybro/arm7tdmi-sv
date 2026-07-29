@@ -32,6 +32,8 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
     localparam int unsigned FIQ_SCENARIO   = 4;
 
     localparam logic [31:0] STM_INSTR = 32'hE8A0_000E;
+    localparam logic [31:0] DEBUG_STM_PC = 32'hE880_8000;
+    localparam logic [31:0] DEBUG_NOP    = 32'hE1A0_8008;
     localparam logic [31:0] WATCH_ADDR =
         (SCENARIO == STM_SCENARIO) ? 32'h0000_0104
                                    : 32'h0000_0100;
@@ -160,11 +162,26 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
         load_ir(4'(IR_INTEST));
     endtask
 
+    task automatic select_chain1;
+        load_ir(4'(IR_SCAN_N));
+        shift_dr(4, 38'd1);
+        load_ir(4'(IR_INTEST));
+    endtask
+
     task automatic write_ice(
         input logic [4:0] addr,
         input logic [31:0] data
     );
         shift_dr(38, chain2_serial_in(1'b1, addr, data));
+    endtask
+
+    task automatic clock_out(input logic [31:0] data);
+        shift_dr(SCAN_CHAIN1_WIDTH, chain1_serial_in(data, 1'b0));
+    endtask
+
+    task automatic clock_data_in(output logic [31:0] data);
+        shift_dr(SCAN_CHAIN1_WIDTH, chain1_serial_in(32'h0, 1'b0));
+        data = chain1_parallel_data(scan_ignored);
     endtask
 
     logic range_seen;
@@ -200,6 +217,8 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
 
     initial begin : run
         bit halted;
+        logic [31:0] scanned_r15;
+        logic [31:0] corrected_pc;
 
         done   = 1'b0;
         failed = 1'b0;
@@ -321,6 +340,26 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
                                    u_dut.u_core.cpsr.m));
             end
         endcase
+
+        // TRM §§5.18.3 and 5.18.6: watchpoint entry that overlaps an
+        // exception advances the PC by three addresses, not the four used
+        // for a normal break/watch. Reproduce the public scan-chain STM
+        // capture and the debugger's two corrections. The result must be
+        // the exception vector that was fetched immediately before DBGACK.
+        if ((SCENARIO == DABT_SCENARIO)
+            || (SCENARIO == IRQ_SCENARIO)
+            || (SCENARIO == FIQ_SCENARIO)) begin
+            select_chain1();
+            clock_out(DEBUG_STM_PC);
+            clock_out(DEBUG_NOP);
+            clock_out(DEBUG_NOP);
+            clock_data_in(scanned_r15);
+            corrected_pc = scanned_r15 - 32'd12 - 32'd8;
+            if (corrected_pc !== EXCEPTION_VECTOR)
+                fail($sformatf(
+                    "exception PC correction expected %08x, got %08x (scanned r15=%08x)",
+                    EXCEPTION_VECTOR, corrected_pc, scanned_r15));
+        end
 
         done = 1'b1;
     end
