@@ -3220,8 +3220,16 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
 - [ ] **MIST-011:** Publish maximum CPU rate, master-clock/CE ratios, latency rules,
   resource budget, required memories/DSPs, reset duration, endian configuration, and
   optional-feature costs.
-- [ ] **MIST-012:** Test coexistence with DMA/bus arbitration, including SWP LOCK,
+- [x] **MIST-012:** Test coexistence with DMA/bus arbitration, including SWP LOCK,
   LDM/STM DMORE, stalls, and abort/error responses.
+  `arm7tdmis_mister_dma_arbitration_tb` runs a real ARM program against a
+  permanently contending synthetic DMA master and shared memory. Independent
+  deterministic CPU-CE and memory-ready stalls produce completions while CE
+  is low. The arbiter reserves gaps across both three-beat STM/LDM DMORE
+  chains and exactly two locked SWP transfers, while still proving DMA
+  forward progress outside those regions. An injected LDR `MEM_ERROR` reaches
+  the Data Abort handler exactly once; the resumed program preserves the SWP
+  read value and writes its final signature.
 - [x] **MIST-013:** Supply checked thin adapters from the canonical wrapper interface
   to the selected MiSTer `enable/done` convention and at least one standard FPGA bus
   (Avalon-MM or Wishbone). Keep the CPU contract independent of any one adapter.

@@ -21,7 +21,7 @@ is the canonical status and release gate.
 | Coprocessor/CP14/CP15 | **Partial** — directed tests cover external ready/busy/data transfers, absent internal CP15, conformant c0/c1 DCC ownership, and monitor-generated c2 `DbgAbt`; remaining CP closure is tracked in §31.6 |
 | EmbeddedICE-RT/JTAG/ETM | **Partial** — halt/monitor modes, synchronous FPGA transport, ETM execution status, and the external ETM7 adapter are directed-tested; a real debugger and an actual ETM macrocell remain external |
 | Verification | **Partial** — registered benches fail hard and the smoke regression passes; exhaustive, differential, coverage, formal, and release closure are absent |
-| FPGA/MiSTer | **Partial** — the canonical request/response wrapper and same-clock debug transport are tested; packaging, save states, framework build, timing, hardware, and PocketStation integration remain |
+| FPGA/MiSTer | **Partial** — the canonical wrapper, public package/adapters, debug transport, and DMA arbitration contract are tested; save states, a real framework build, hardware, and PocketStation integration remain |
 
 ---
 

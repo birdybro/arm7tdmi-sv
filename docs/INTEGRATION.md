@@ -278,12 +278,18 @@ maps, proves disabled/live coprocessor claiming, and shifts the default
 IDCODE through every debug-enabled instance while requiring complete
 isolation from every trimmed instance.
 
+`make -C scripts integ-mister_dma_arbitration` runs STM, LDM, SWP, and an
+aborted LDR while a synthetic DMA master permanently contends for the same
+memory. The checked arbiter retains CPU ownership across each DMORE promise
+and the complete locked pair, inserts independent CPU/memory stalls, accepts
+a response while CPU CE is low, maps one error into Data Abort, and still
+proves DMA forward progress in unreserved gaps.
+
 The following are intentionally not claimed by this version of the wrapper:
 
 - save-state export/import or quiescent snapshot;
 - a PocketStation subsystem or BIOS/software bundle;
-- MiSTer framework integration, fitted/timed, or on-board evidence;
-- DMA/arbitration behavior beyond the exposed lock/more hints.
+- MiSTer framework integration, fitted/timed, or on-board evidence.
 
 Those remain visible release blockers in `TASKS.md` rather than implicit
 features of the canonical memory handshake.
