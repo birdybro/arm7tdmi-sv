@@ -17,6 +17,10 @@ SDC = FPGA_DIR / "arm7tdmi_mister.sdc"
 CONFORMANCE_QSF = FPGA_DIR / "arm7tdmis_conformance.qsf"
 CONFORMANCE_SDC = FPGA_DIR / "arm7tdmis_conformance.sdc"
 EXAMPLE = FPGA_DIR / "example" / "arm7tdmi_mister_example_top.sv"
+WISHBONE_ADAPTER = REPO_ROOT / "rtl" / "top" / "arm7tdmi_wishbone_adapter.sv"
+ENABLE_DONE_ADAPTER = (
+    REPO_ROOT / "rtl" / "top" / "arm7tdmi_mister_enable_done_adapter.sv"
+)
 NO_DFT_WRAPPER = REPO_ROOT / "rtl" / "top" / "arm7tdmis_no_dft.sv"
 MISLEADING_DFT_WRAPPER = REPO_ROOT / "rtl" / "top" / "arm7tdmis_chip.sv"
 
@@ -109,6 +113,29 @@ class FpgaPackageTest(unittest.TestCase):
             "fetch_pc_q",
         ):
             self.assertNotIn(forbidden, text)
+
+    def test_public_adapters_are_packaged_and_hierarchy_free(self) -> None:
+        filelist_sources = _resolved_filelist_sources()
+        qip_sources = _qip_sources()
+        for path, module_name in (
+            (WISHBONE_ADAPTER, "arm7tdmi_wishbone_adapter"),
+            (ENABLE_DONE_ADAPTER, "arm7tdmi_mister_enable_done_adapter"),
+        ):
+            relative = path.relative_to(REPO_ROOT)
+            with self.subTest(adapter=module_name):
+                self.assertTrue(path.is_file(), f"missing adapter: {relative}")
+                text = path.read_text(encoding="utf-8")
+                self.assertRegex(text, rf"\bmodule\s+{module_name}\b")
+                self.assertIn(relative, filelist_sources)
+                self.assertIn(relative, qip_sources)
+                for forbidden in (
+                    "arm7tdmi_mister",
+                    "arm7tdmis_top",
+                    ".u_core.",
+                    "request_valid_q",
+                    "response_valid_q",
+                ):
+                    self.assertNotIn(forbidden, text)
 
     def test_non_dft_compatibility_wrapper_is_honest_and_excluded(self) -> None:
         self.assertFalse(
