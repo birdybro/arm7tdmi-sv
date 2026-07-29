@@ -162,6 +162,13 @@ Abort, the abort takes priority and the breakpoint tag is discarded without
 entering debug, as required by TRM §5.19.1 and covered by
 `tb/integration/arm7tdmis_debug_breakpoint_pabt_tb.sv`.
 
+If an unmasked IRQ or FIQ is present when that breakpoint reaches Execute,
+the breakpointed instruction remains unexecuted, but the interrupt is
+remembered. The core commits the interrupt mode/LR/SPSR and fetches its first
+vector word before EmbeddedICE asserts DBGACK, matching TRM §5.19.2. Both
+interrupt classes and one-cycle requests are covered by
+`tb/integration/arm7tdmis_debug_breakpoint_interrupt_tb.sv`.
+
 `tap_restart_req` is sampled on the edge that enters Run-Test/Idle with
 IR=RESTART, matching TRM §5.13.5.
 
@@ -229,6 +236,11 @@ and IFEN suppresses later interrupts during the exception refill. STM
 completion, external Data Abort priority, retained IRQ, vector-before-DBGACK,
 and watchpoint priority over simultaneous DBGRQ are covered by
 `tb/integration/arm7tdmis_debug_watchpoint_priority_tb.sv`.
+
+The same exception-refill holdoff applies to a synchronous DBGRQ coincident
+with an exception. The exact corrected-r4p3 erratum conditions—Undefined,
+absent/bounced coprocessor, Prefetch Abort, and load/store Data Abort—are
+covered by `tb/integration/arm7tdmis_debug_dbgrq_exception_tb.sv`.
 
 ## JTAG TAP
 

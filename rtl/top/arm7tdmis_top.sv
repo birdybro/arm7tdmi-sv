@@ -151,6 +151,8 @@ module arm7tdmis_top
         .dbg_breakpoint_execute(ice_breakpoint_execute),
         .dbg_abort_taken  (ice_debug_abort_taken),
         .dbg_exception_pending(ice_core_exception_pending),
+        .dbg_breakpoint_interrupt_pending(
+            ice_core_breakpoint_interrupt_pending),
         .dbg_exception_entry(ice_core_exception_entry),
         .dbg_exception_vector_ready(ice_core_exception_vector_ready)
     );
@@ -171,6 +173,7 @@ module arm7tdmis_top
     logic ice_halt_watchpoint_event;
     logic ice_debug_abort_taken;
     logic ice_core_exception_pending;
+    logic ice_core_breakpoint_interrupt_pending;
     logic ice_core_exception_entry;
     logic ice_core_exception_vector_ready;
     logic tap_restart_req;
@@ -223,6 +226,8 @@ module arm7tdmis_top
         .core_halt_boundary (ice_halt_boundary),
         .core_breakpoint_execute(ice_breakpoint_execute),
         .core_exception_pending(ice_core_exception_pending),
+        .core_breakpoint_interrupt_pending(
+            ice_core_breakpoint_interrupt_pending),
         .core_exception_entry(ice_core_exception_entry),
         .core_exception_vector_ready(ice_core_exception_vector_ready),
         .dbg_rq_in          (DBGRQ),

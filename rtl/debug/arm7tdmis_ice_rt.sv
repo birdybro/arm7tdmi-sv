@@ -21,6 +21,7 @@ module arm7tdmis_ice_rt
     input  logic        core_halt_boundary,// current instruction commits this edge
     input  logic        core_breakpoint_execute,
     input  logic        core_exception_pending,
+    input  logic        core_breakpoint_interrupt_pending,
     input  logic        core_exception_entry,
     input  logic        core_exception_vector_ready,
     input  logic        dbg_rq_in,         // Appendix B: synchronous soft-
@@ -582,13 +583,21 @@ module arm7tdmis_ice_rt
                             end
                         end else if (core_breakpoint_execute
                                      && !monitor_mode) begin
-                            // The core suppresses this edge's execution and
-                            // freezes while this FSM enters debug state.
-                            dbg_state_q       <= DBG_HALTED;
                             halt_pending_q    <= 1'b0;
                             halt_watchpoint_q <= 1'b0;
-                            breakpoint_halt_q <= 1'b1;
                             entry_watchpoint_q <= 1'b0;
+                            if (core_breakpoint_interrupt_pending) begin
+                                // §5.19.2: a pending IRQ/FIQ is remembered
+                                // at breakpoint entry. Let the exception
+                                // edge run, then halt after its vector fetch.
+                                halt_exception_wait_q <= 1'b1;
+                                breakpoint_halt_q <= 1'b0;
+                            end else begin
+                                // The core suppresses this edge's execution
+                                // while this FSM enters debug state.
+                                dbg_state_q       <= DBG_HALTED;
+                                breakpoint_halt_q <= 1'b1;
+                            end
                         end else if ((halt_pending_q || halt_entry_req)
                                      && core_halt_boundary) begin
                             // The core commits its final state on this edge;
@@ -723,6 +732,7 @@ module arm7tdmis_ice_rt
     wire breakpoint_stop = (dbg_state_q == DBG_RUNNING)
                          && DBGEN && core_breakpoint_execute
                          && !monitor_mode
+                         && !core_breakpoint_interrupt_pending
                          && !breakpoint_resume_q;
 
     // Core un-halts while injecting.

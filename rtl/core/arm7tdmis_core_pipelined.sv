@@ -122,6 +122,7 @@ module arm7tdmis_core_pipelined
     output logic        dbg_breakpoint_execute,
     output logic        dbg_abort_taken,
     output logic        dbg_exception_pending,
+    output logic        dbg_breakpoint_interrupt_pending,
     output logic        dbg_exception_entry,
     output logic        dbg_exception_vector_ready
 );
@@ -1120,7 +1121,8 @@ module arm7tdmis_core_pipelined
     // after the watched instruction's final architectural writeback.
     logic debug_irq_pending_q;
     logic debug_fiq_pending_q;
-    wire debug_halt_collision = dbg_watchpoint_halt || dbg_halt_req;
+    wire debug_halt_collision = dbg_watchpoint_halt || dbg_halt_req
+                              || dbg_breakpoint_execute;
     wire debug_irq_pending_now = debug_halt_collision
                                && !nIRQ && !cpsr.i;
     wire debug_fiq_pending_now = debug_halt_collision
@@ -1129,6 +1131,12 @@ module arm7tdmis_core_pipelined
                                  || debug_fiq_pending_q
                                  || debug_irq_pending_now
                                  || debug_fiq_pending_now;
+    // Narrow combinational qualifier for the immediate breakpoint stop
+    // gate. Keep this independent of data-watchpoint inputs so no
+    // WDATA/comparator-to-core-halt feedback path is created.
+    assign dbg_breakpoint_interrupt_pending =
+        dbg_breakpoint_execute
+        && ((!nIRQ && !cpsr.i) || (!nFIQ && !cpsr.f));
 
     wire irq_pending   = (executing && !nIRQ && !cpsr.i)
                        || cp_wait_irq_pending

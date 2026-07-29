@@ -68,6 +68,7 @@ module ice_rt_tb
         .core_halt_boundary (1'b1),
         .core_breakpoint_execute(1'b0),
         .core_exception_pending(1'b0),
+        .core_breakpoint_interrupt_pending(1'b0),
         .core_exception_entry(1'b0),
         .core_exception_vector_ready(1'b0),
         .dbg_rq_in          (dbg_rq_in),

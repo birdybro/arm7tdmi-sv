@@ -2583,8 +2583,13 @@ number of cycles spent in an internal FSM state.
   covered by `tb/integration/arm7tdmis_debug_watchpoint_priority_tb.sv`.
   A Prefetch Abort on the breakpointed fetch is proven to discard the
   breakpoint without debug entry by
-  `tb/integration/arm7tdmis_debug_breakpoint_pabt_tb.sv`. Remaining
-  breakpoint/vector-catch/exception priority cases and the complete DBGEN
+  `tb/integration/arm7tdmis_debug_breakpoint_pabt_tb.sv`. Coincident
+  one-cycle IRQ and FIQ requests are retained through their banked-state
+  transition and vector fetch by
+  `tb/integration/arm7tdmis_debug_breakpoint_interrupt_tb.sv`; DBGRQ with
+  Undefined, bounced-coprocessor, Prefetch Abort, and load/store Data Abort
+  is covered by `tb/integration/arm7tdmis_debug_dbgrq_exception_tb.sv`.
+  Remaining vector-catch/exception priority cases and the complete DBGEN
   matrix keep this item open.
 - [ ] **DBG-002:** Feed Debug Status TRANS from the actual `TRANS[1]`, not PROT.
   Align address/control and read/write data before data-dependent watchpoint comparison.
@@ -2641,8 +2646,9 @@ number of cycles spent in an internal FSM state.
   correct IRQ mode/LR/SPSR/vector entry, and the Data Abort collision proves
   abort-mode entry before debug halt, in
   `tb/integration/arm7tdmis_debug_watchpoint_priority_tb.sv`. The scan-visible
-  watchpoint-with-exception and system-speed PC formulas, the broader pending-
-  interrupt matrix, and the documented PC-modify erratum policy remain open.
+  watchpoint-with-exception and system-speed PC formulas, the documented
+  PC-modify erratum policy, and any pending-interrupt cases not covered by
+  the breakpoint IRQ/FIQ and DBGRQ exception matrices remain open.
 - [x] **JTAG-001:** Exhaustively verify all 16 TAP states and transitions, async
   `DBGnTRST`, Capture/Shift/Update-IR, fixed `0001` capture, all five public
   instructions, and BYPASS for every other IR encoding. Fail-hard evidence:
