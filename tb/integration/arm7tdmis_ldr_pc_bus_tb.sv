@@ -1,11 +1,12 @@
 // BUS-003/BUS-008/BUS-011: ARM LDR-to-PC raw-bus timing.
 //
-// TRM Table 7-11 gives the destination-PC form a discarded pc+8 source
-// prefetch, the data request and load-writeback I phase, an address-only
-// data-class N phase at pc+12, then two S target opcode fetches.  Each row
-// starts from reset and repeats the complete pin proof in Supervisor and
-// User mode so both PROT[1] values are covered.  LDR-to-PC is not available
-// in Thumb state.
+// TRM Table 7-11 gives the destination-PC form five Execute cycles.  With
+// §7.1's pipelining applied to the raw output pins, they are:
+//   data-address/N, pc+12/I, target/N, target+4/S, target+8/S.
+// The returned data in those cycles is respectively the discarded pc+8
+// opcode, loaded PC value, no transfer, target opcode, and target+4 opcode.
+// Each row repeats the complete proof in Supervisor and User mode so both
+// PROT[1] values are covered. LDR-to-PC is not available in Thumb state.
 
 `timescale 1ns/1ps
 
@@ -129,12 +130,6 @@ module arm7tdmis_ldr_pc_bus_tb
     endtask
 
     task automatic run_row(input int row);
-        logic [31:0] previous_addr;
-        logic        previous_write;
-        logic [1:0]  previous_size;
-        logic [1:0]  previous_prot;
-        logic        previous_lock;
-        logic [1:0]  previous_trans;
         int unsigned wait_cycles;
 
         @(negedge CLK);
@@ -144,22 +139,10 @@ module arm7tdmis_ldr_pc_bus_tb
         @(negedge CLK);
         nRESET = 1'b1;
 
-        previous_addr  = 32'h0;
-        previous_write = WRITE_READ;
-        previous_size  = 2'(SIZE_WORD);
-        previous_prot  = 2'(PROT_OPC_PRIV);
-        previous_lock  = LOCK_FREE;
-        previous_trans = 2'(TRANS_I);
         wait_cycles = 0;
         while (!(u_dut.u_core.state_q == 4'd0
                  && u_dut.u_core.de_q.valid
                  && u_dut.u_core.de_q.pc == TEST_PC)) begin
-            previous_addr  = ADDR;
-            previous_write = WRITE;
-            previous_size  = SIZE;
-            previous_prot  = PROT;
-            previous_lock  = LOCK;
-            previous_trans = TRANS;
             @(negedge CLK);
             wait_cycles++;
             if (wait_cycles > 100)
@@ -170,20 +153,18 @@ module arm7tdmis_ldr_pc_bus_tb
             || u_dut.u_core.cpsr.t)
             fail(row, "source mode/state setup is wrong");
 
-        check_bus(row, "discarded source prefetch",
-                  previous_addr, previous_write, previous_size,
-                  previous_prot, previous_lock, previous_trans,
-                  TEST_PC + 32'd8, opcode_prot(row), 2'(TRANS_N));
         check_bus(row, "data request",
                   ADDR, WRITE, SIZE, PROT, LOCK, TRANS,
                   DATA_ADDRESS, data_prot(row), 2'(TRANS_N));
+        if (RDATA !== u_mem.mem[(TEST_PC + 32'd8) >> 2])
+            fail(row, "discarded pc+8 opcode response is wrong");
 
         @(negedge CLK);
         if (u_dut.u_core.state_q !== 4'd1)
             fail(row, "data response did not use S_DDATA");
-        check_bus(row, "load writeback I phase",
+        check_bus(row, "load-response I phase",
                   ADDR, WRITE, SIZE, PROT, LOCK, TRANS,
-                  TEST_PC + 32'd12, opcode_prot(row), 2'(TRANS_I));
+                  TEST_PC + 32'd12, data_prot(row), 2'(TRANS_I));
         if (RDATA !== TARGET)
             fail(row, $sformatf(
                 "data response expected %08x got %08x", TARGET, RDATA));
@@ -192,25 +173,25 @@ module arm7tdmis_ldr_pc_bus_tb
         if (u_dut.u_core.state_q !== 4'd10
             || !u_dut.u_core.flush)
             fail(row, "LDR pc did not redirect from S_LOAD_WB");
-        check_bus(row, "pc+12 address-only phase",
+        check_bus(row, "first target request",
                   ADDR, WRITE, SIZE, PROT, LOCK, TRANS,
-                  TEST_PC + 32'd12, data_prot(row), 2'(TRANS_N));
+                  TARGET, opcode_prot(row), 2'(TRANS_N));
         if (u_dut.u_core.flush_target_pc !== TARGET)
             fail(row, "redirect target is wrong");
 
         @(negedge CLK);
-        check_bus(row, "first target fetch",
-                  ADDR, WRITE, SIZE, PROT, LOCK, TRANS,
-                  TARGET, opcode_prot(row), 2'(TRANS_S));
-        if (!u_dut.u_core.load_pc_refill_first_q)
-            fail(row, "first-target refill latch was not retained");
-
-        @(negedge CLK);
-        check_bus(row, "following target fetch",
+        check_bus(row, "following target request",
                   ADDR, WRITE, SIZE, PROT, LOCK, TRANS,
                   TARGET + 32'd4, opcode_prot(row), 2'(TRANS_S));
-        if (u_dut.u_core.load_pc_refill_first_q)
-            fail(row, "first-target refill latch did not clear");
+        if (RDATA !== u_mem.mem[TARGET >> 2])
+            fail(row, "target opcode response is wrong");
+
+        @(negedge CLK);
+        check_bus(row, "second following target request",
+                  ADDR, WRITE, SIZE, PROT, LOCK, TRANS,
+                  TARGET + 32'd8, opcode_prot(row), 2'(TRANS_S));
+        if (RDATA !== u_mem.mem[(TARGET >> 2) + 1])
+            fail(row, "target+4 opcode response is wrong");
 
         repeat (12) @(negedge CLK);
         if (u_dut.u_core.u_regfile.regs[7] !== 32'h0000_0001)
@@ -219,51 +200,10 @@ module arm7tdmis_ldr_pc_bus_tb
             fail(row, "discarded successor retired");
     endtask
 
-    task automatic check_reset_during_refill;
-        int unsigned wait_cycles;
-
-        @(negedge CLK);
-        nRESET = 1'b0;
-        repeat (4) @(posedge CLK);
-        setup_row(0);
-        @(negedge CLK);
-        nRESET = 1'b1;
-
-        wait_cycles = 0;
-        while (!(u_dut.u_core.state_q == 4'd10
-                 && u_dut.u_core.flush
-                 && u_dut.u_core.flush_target_pc == TARGET)) begin
-            @(negedge CLK);
-            wait_cycles++;
-            if (wait_cycles > 100)
-                fail(0, "reset case never reached LDR-pc redirect");
-        end
-
-        @(negedge CLK);
-        if (!u_dut.u_core.load_pc_refill_first_q
-            || ADDR !== TARGET || TRANS !== 2'(TRANS_S))
-            fail(0, "reset case did not reach first target refill");
-
-        #1;
-        nRESET = 1'b0;
-        #1;
-        if (u_dut.core_nreset !== 1'b0)
-            fail(0, "reset did not assert asynchronously during refill");
-        @(posedge CLK);
-        #1;
-        if (u_dut.u_core.load_pc_refill_first_q !== 1'b0
-            || u_dut.u_core.fetch_pc_q !== 32'h0000_0000
-            || u_dut.u_core.inflight_valid_q !== 1'b0
-            || TRANS !== 2'(TRANS_I))
-            fail(0, "reset did not clear the retained refill state");
-    endtask
-
     initial begin
         for (int row = 0; row < ROW_COUNT; row++)
             run_row(row);
-        check_reset_during_refill();
-        $display("[ldr_pc_bus] PASS (%0d mode rows + refill reset)",
-                 ROW_COUNT);
+        $display("[ldr_pc_bus] PASS (%0d mode rows)", ROW_COUNT);
         $finish;
     end
 
