@@ -1380,6 +1380,67 @@ module arm7tdmis_core_pipelined
     // Helper: fetch size based on T-bit. Used in many places below.
     wire [1:0] fetch_size_w = cpsr.t ? 2'(SIZE_HALFWORD) : 2'(SIZE_WORD);
 
+    // §3.3 / BUS-005: classify a fetch from the address-class phase that
+    // actually preceded it. A sequential transfer either continues an
+    // active same-control word/halfword burst at +4/+2, or commits a merged
+    // I-S cycle at the same address. Everything else starts with N.
+    logic        bus_history_valid_q;
+    logic [31:0] bus_history_addr_q;
+    logic        bus_history_write_q;
+    logic [1:0]  bus_history_size_q;
+    logic [1:0]  bus_history_prot_q;
+    logic        bus_history_lock_q;
+    logic [1:0]  bus_history_trans_q;
+
+    wire bus_history_active_q = (bus_history_trans_q == 2'(TRANS_N))
+                             || (bus_history_trans_q == 2'(TRANS_S));
+    wire fetch_controls_match = !bus_history_write_q
+                             && (bus_history_size_q == fetch_size_w)
+                             && (bus_history_prot_q == {is_priv, 1'b0})
+                             && (bus_history_lock_q == LOCK_FREE);
+    wire [31:0] fetch_history_step = (fetch_size_w == 2'(SIZE_HALFWORD))
+                                   ? 32'd2 : 32'd4;
+    wire fetch_continues_burst = bus_history_valid_q
+                              && bus_history_active_q
+                              && fetch_controls_match
+                              && (fetch_pc_q
+                                  == (bus_history_addr_q + fetch_history_step));
+    wire fetch_commits_merged_is = bus_history_valid_q
+                                && (bus_history_trans_q == 2'(TRANS_I))
+                                && fetch_controls_match
+                                && (fetch_pc_q == bus_history_addr_q);
+    wire [1:0] fetch_trans_w = (fetch_continues_burst
+                              || fetch_commits_merged_is)
+                             ? 2'(TRANS_S) : 2'(TRANS_N);
+
+    // Capture only enabled address-class phases. A redirect without an
+    // overlapped target fetch invalidates the old advertised address even
+    // if it happens to equal the destination. The early branch/BX path
+    // drives an explicit N target and is therefore valid new history.
+    always_ff @(posedge CLK) begin
+        if (!nRESET) begin
+            bus_history_valid_q <= 1'b0;
+            bus_history_addr_q  <= 32'h0;
+            bus_history_write_q <= WRITE_READ;
+            bus_history_size_q  <= 2'(SIZE_WORD);
+            bus_history_prot_q  <= 2'(PROT_OPC_PRIV);
+            bus_history_lock_q  <= LOCK_FREE;
+            bus_history_trans_q <= 2'(TRANS_I);
+        end else if (CLKEN) begin
+            if (flush && !early_flush_fetch) begin
+                bus_history_valid_q <= 1'b0;
+            end else begin
+                bus_history_valid_q <= 1'b1;
+                bus_history_addr_q  <= ADDR;
+                bus_history_write_q <= WRITE;
+                bus_history_size_q  <= SIZE;
+                bus_history_prot_q  <= PROT;
+                bus_history_lock_q  <= LOCK;
+                bus_history_trans_q <= TRANS;
+            end
+        end
+    end
+
     always_comb begin
         // Default: idle bus with fetch_pc_q on ADDR (cosmetic).
         ADDR  = fetch_pc_q;
@@ -1420,7 +1481,7 @@ module arm7tdmis_core_pipelined
                 end else begin
                     // Standard fetch.
                     ADDR  = fetch_pc_q;
-                    TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                    TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : fetch_trans_w;
                     SIZE  = fetch_size_w;
                     PROT  = {is_priv, 1'b0};
                 end
@@ -1431,7 +1492,7 @@ module arm7tdmis_core_pipelined
                 // fetch — §18 bus overlap saves the cycle the non-
                 // pipelined model used to spend re-fetching.
                 ADDR  = fetch_pc_q;
-                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : fetch_trans_w;
                 WRITE = WRITE_READ;
                 SIZE  = fetch_size_w;
                 PROT  = {is_priv, 1'b0};
@@ -1450,7 +1511,7 @@ module arm7tdmis_core_pipelined
                 end else begin
                     // Last beat — overlap with next instr fetch.
                     ADDR  = fetch_pc_q;
-                    TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                    TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : fetch_trans_w;
                     WRITE = WRITE_READ;
                     SIZE  = fetch_size_w;
                     PROT  = {is_priv, 1'b0};
@@ -1473,7 +1534,7 @@ module arm7tdmis_core_pipelined
                 // Addr-class overlaps with next instr fetch — LOCK
                 // drops since the locked sequence has ended.
                 ADDR  = fetch_pc_q;
-                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : fetch_trans_w;
                 WRITE = WRITE_READ;
                 SIZE  = fetch_size_w;
                 PROT  = {is_priv, 1'b0};
@@ -1483,7 +1544,7 @@ module arm7tdmis_core_pipelined
             S_MULL_HI: begin
                 // No bus access for the multiply — drive the next fetch.
                 ADDR  = fetch_pc_q;
-                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : fetch_trans_w;
                 SIZE  = fetch_size_w;
                 PROT  = {is_priv, 1'b0};
             end
@@ -1492,7 +1553,7 @@ module arm7tdmis_core_pipelined
                 // the next fetch — earlier cycles let the bus stay idle.
                 if (state_next == S_EXEC) begin
                     ADDR  = fetch_pc_q;
-                    TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                    TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : fetch_trans_w;
                     SIZE  = fetch_size_w;
                     PROT  = {is_priv, 1'b0};
                 end
@@ -1507,7 +1568,7 @@ module arm7tdmis_core_pipelined
                 // instr fetch addr-class (overlap, same pattern as
                 // S_DDATA-last etc.).
                 ADDR  = fetch_pc_q;
-                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : fetch_trans_w;
                 SIZE  = fetch_size_w;
                 PROT  = {is_priv, 1'b0};
             end
@@ -1515,7 +1576,7 @@ module arm7tdmis_core_pipelined
                 // §18: DP shift-by-reg I cycle. No data access; bus
                 // drives the next instr fetch (overlap).
                 ADDR  = fetch_pc_q;
-                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : fetch_trans_w;
                 SIZE  = fetch_size_w;
                 PROT  = {is_priv, 1'b0};
             end
@@ -1524,7 +1585,7 @@ module arm7tdmis_core_pipelined
                 // fetch — addr-class drive in S_DDATA already started
                 // this fetch, so S_LOAD_WB just continues it.
                 ADDR  = fetch_pc_q;
-                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : fetch_trans_w;
                 SIZE  = fetch_size_w;
                 PROT  = {is_priv, 1'b0};
             end
@@ -1532,7 +1593,7 @@ module arm7tdmis_core_pipelined
                 // §18: SWP Rd writeback I cycle (TRM 1S+2N+1I). Bus
                 // continues the next-instr fetch started in S_SWP_WDATA.
                 ADDR  = fetch_pc_q;
-                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : 2'(TRANS_S);
+                TRANS = (flush || !issue_fetch) ? 2'(TRANS_I) : fetch_trans_w;
                 SIZE  = fetch_size_w;
                 PROT  = {is_priv, 1'b0};
             end
