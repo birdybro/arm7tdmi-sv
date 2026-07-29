@@ -1,10 +1,16 @@
-// DBG-006/JTAG-003 system-speed scan-chain-1 regression.
+// DBG-006/JTAG-003/JTAG-005 system-speed scan-chain-1 regression.
 //
 // Follow the ARM7TDMI debugger sequence used for an at-speed memory access:
 // scan NOP/0, NOP/1, then LDR/0; issue RESTART; wait for automatic re-entry.
 // The LDR must not execute before RESTART, must run only under CLKEN with
 // DBGACK temporarily low, must survive a mid-transfer stall while IRQ is
 // masked, and must report bit 33 HIGH on the first capture after re-entry.
+//
+// Then reproduce OpenOCD's complete word-memory path through public JTAG:
+// load r0/r1-r4 at debug speed, run STMIA r0!,{r1-r4} at system speed,
+// restore r0, run LDMIA r0!,{r5-r8} at system speed, and scan r0/r5-r8
+// back at debug speed. This proves debugger-visible writes and reads rather
+// than accepting an internal register or memory-array observation alone.
 
 `timescale 1ns/1ps
 
@@ -17,6 +23,17 @@ module arm7tdmis_debug_system_speed_tb
     localparam int CYCLE_LIMIT = 2600;
     localparam logic [31:0] DEBUG_NOP = 32'hE1A0_0000;
     localparam logic [31:0] SYSTEM_LDR = 32'hE590_4000; // LDR r4,[r0]
+    localparam logic [31:0] DEBUG_LDM_R0_R4 = 32'hE890_001F;
+    localparam logic [31:0] DEBUG_LDM_R0    = 32'hE890_0001;
+    localparam logic [31:0] DEBUG_STM_R0_R8 = 32'hE880_01E1;
+    localparam logic [31:0] SYSTEM_STM_R1_R4 = 32'hE8A0_001E;
+    localparam logic [31:0] SYSTEM_LDM_R5_R8 = 32'hE8B0_01E0;
+    localparam logic [31:0] ROUNDTRIP_BASE   = 32'h0000_0120;
+    localparam logic [31:0] ROUNDTRIP_END    = 32'h0000_0130;
+    localparam logic [31:0] ROUNDTRIP_WORD1  = 32'h1122_3344;
+    localparam logic [31:0] ROUNDTRIP_WORD2  = 32'h5566_7788;
+    localparam logic [31:0] ROUNDTRIP_WORD3  = 32'h99AA_BBCC;
+    localparam logic [31:0] ROUNDTRIP_WORD4  = 32'hDDEE_F00D;
 
     logic CLK = 1'b0;
     initial forever #5 CLK = ~CLK;
@@ -200,8 +217,15 @@ module arm7tdmis_debug_system_speed_tb
             fail("unreachable capture sentinel");
     endtask
 
+    task automatic capture_data(output logic [31:0] data);
+        logic [37:0] captured;
+        shift_dr(33, chain1_serial_in(32'h0, 1'b0), captured);
+        data = chain1_parallel_data(captured);
+    endtask
+
     initial begin : run_test
         logic [31:0] normal_r13;
+        logic [31:0] scanned_data;
         logic [31:0] stalled_addr;
         logic [31:0] stalled_wdata;
         logic        stalled_write;
@@ -215,6 +239,7 @@ module arm7tdmis_debug_system_speed_tb
         bit          saw_target_access;
         bit          pre_restart_access;
         bit          reentered;
+        int unsigned roundtrip_beats;
 
         $dumpfile("debug_system_speed.fst");
         $dumpvars(0, arm7tdmis_debug_system_speed_tb);
@@ -346,6 +371,158 @@ module arm7tdmis_debug_system_speed_tb
             if (reentry_cause !== 1'b1)
                 fail("system-speed re-entry did not scan out bit 33 HIGH");
         end
+
+        // OpenOCD arm7_9_write_memory() word path. Load the base and four
+        // source registers through the debug-speed scan data bus.
+        wait_for_inject_idle("post-capture NOP did not retire");
+        inject(DEBUG_LDM_R0_R4, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        inject(ROUNDTRIP_BASE, 1'b0);
+        inject(ROUNDTRIP_WORD1, 1'b0);
+        inject(ROUNDTRIP_WORD2, 1'b0);
+        inject(ROUNDTRIP_WORD3, 1'b0);
+        inject(ROUNDTRIP_WORD4, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        wait_for_inject_idle("debug-speed write-register tail did not retire");
+
+        // OpenOCD arm7tdmi_store_word_regs(): NOP/0, NOP/1, then
+        // STMIA r0!,{r1-r4}/0. The W bit keeps this instruction on the
+        // external system-speed path rather than the scan-data adapter.
+        inject(DEBUG_NOP, 1'b0);
+        wait_for_inject_idle("word-write setup NOP did not retire");
+        inject(DEBUG_NOP, 1'b1);
+        wait_for_inject_idle("word-write bit-33 NOP did not retire");
+        inject(SYSTEM_STM_R1_R4, 1'b0);
+        load_ir(4'(IR_RESTART));
+
+        roundtrip_beats = 0;
+        reentered = 1'b0;
+        for (int i = 0; i < 300; i++) begin
+            @(posedge CLK);
+            #1;
+            if (CLKEN && ((TRANS == 2'(TRANS_N))
+                       || (TRANS == 2'(TRANS_S)))
+                && (ADDR >= ROUNDTRIP_BASE) && (ADDR < ROUNDTRIP_END)) begin
+                if (!WRITE)
+                    fail("word-memory write issued a read transfer");
+                if (ADDR !== (ROUNDTRIP_BASE + 32'(roundtrip_beats * 4)))
+                    fail($sformatf(
+                        "word-memory write address %0d expected %08x got %08x",
+                        roundtrip_beats,
+                        ROUNDTRIP_BASE + 32'(roundtrip_beats * 4), ADDR));
+                roundtrip_beats = roundtrip_beats + 1;
+            end
+            if (DBGACK && u_dut.u_ice.core_halt
+                && (TRANS == 2'(TRANS_I))) begin
+                reentered = 1'b1;
+                break;
+            end
+        end
+        if (!reentered)
+            fail("system-speed STM did not automatically re-enter debug");
+        if (roundtrip_beats != 4)
+            fail($sformatf(
+                "system-speed STM expected 4 external beats, saw %0d",
+                roundtrip_beats));
+
+        if (reentered) begin
+            capture_reentry_cause(reentry_cause);
+            if (reentry_cause !== 1'b1)
+                fail("system-speed STM re-entry did not report bit 33 HIGH");
+        end
+
+        // Restore r0 through OpenOCD's debug-speed register-write path.
+        wait_for_inject_idle("post-STM capture NOP did not retire");
+        inject(DEBUG_LDM_R0, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        inject(ROUNDTRIP_BASE, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        wait_for_inject_idle("debug-speed base restore tail did not retire");
+
+        // OpenOCD arm7tdmi_load_word_regs(): read the same four words into
+        // r5-r8 at system speed, with architectural base writeback.
+        inject(DEBUG_NOP, 1'b0);
+        wait_for_inject_idle("word-read setup NOP did not retire");
+        inject(DEBUG_NOP, 1'b1);
+        wait_for_inject_idle("word-read bit-33 NOP did not retire");
+        inject(SYSTEM_LDM_R5_R8, 1'b0);
+        load_ir(4'(IR_RESTART));
+
+        roundtrip_beats = 0;
+        reentered = 1'b0;
+        for (int i = 0; i < 300; i++) begin
+            @(posedge CLK);
+            #1;
+            if (CLKEN && ((TRANS == 2'(TRANS_N))
+                       || (TRANS == 2'(TRANS_S)))
+                && (ADDR >= ROUNDTRIP_BASE) && (ADDR < ROUNDTRIP_END)) begin
+                if (WRITE)
+                    fail("word-memory read issued a write transfer");
+                if (ADDR !== (ROUNDTRIP_BASE + 32'(roundtrip_beats * 4)))
+                    fail($sformatf(
+                        "word-memory read address %0d expected %08x got %08x",
+                        roundtrip_beats,
+                        ROUNDTRIP_BASE + 32'(roundtrip_beats * 4), ADDR));
+                roundtrip_beats = roundtrip_beats + 1;
+            end
+            if (DBGACK && u_dut.u_ice.core_halt
+                && (TRANS == 2'(TRANS_I))) begin
+                reentered = 1'b1;
+                break;
+            end
+        end
+        if (!reentered)
+            fail("system-speed LDM did not automatically re-enter debug");
+        if (roundtrip_beats != 4)
+            fail($sformatf(
+                "system-speed LDM expected 4 external beats, saw %0d",
+                roundtrip_beats));
+
+        if (reentered) begin
+            capture_reentry_cause(reentry_cause);
+            if (reentry_cause !== 1'b1)
+                fail("system-speed LDM re-entry did not report bit 33 HIGH");
+        end
+        wait_for_inject_idle("post-LDM capture NOP did not retire");
+
+        // OpenOCD read_core_regs_target_buffer(): scan r0 then r5-r8.
+        // This is the only oracle for the loaded data, so the test cannot
+        // pass from an internal memory-array or register-file observation.
+        inject(DEBUG_STM_R0_R8, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        capture_data(scanned_data);
+        if (scanned_data !== ROUNDTRIP_END)
+            fail($sformatf(
+                "system-speed base writeback expected %08x, scanned %08x",
+                ROUNDTRIP_END, scanned_data));
+        capture_data(scanned_data);
+        if (scanned_data !== ROUNDTRIP_WORD1)
+            fail($sformatf(
+                "word 0 expected %08x, scanned %08x",
+                ROUNDTRIP_WORD1, scanned_data));
+        capture_data(scanned_data);
+        if (scanned_data !== ROUNDTRIP_WORD2)
+            fail($sformatf(
+                "word 1 expected %08x, scanned %08x",
+                ROUNDTRIP_WORD2, scanned_data));
+        capture_data(scanned_data);
+        if (scanned_data !== ROUNDTRIP_WORD3)
+            fail($sformatf(
+                "word 2 expected %08x, scanned %08x",
+                ROUNDTRIP_WORD3, scanned_data));
+        capture_data(scanned_data);
+        if (scanned_data !== ROUNDTRIP_WORD4)
+            fail($sformatf(
+                "word 3 expected %08x, scanned %08x",
+                ROUNDTRIP_WORD4, scanned_data));
+
+        if (u_dut.u_core.u_regfile.regs[13] !== normal_r13)
+            fail("normal program instruction retired during memory round trip");
+        if (!DBGACK)
+            fail("debug memory round trip unexpectedly left debug state");
 
         if (errors != 0)
             $fatal(1, "[debug_system_speed] FAIL (%0d errors)", errors);
