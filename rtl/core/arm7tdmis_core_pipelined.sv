@@ -2278,7 +2278,7 @@ module arm7tdmis_core_pipelined
                           ? (de_q.pc + 32'd8) : fetch_pc_q;
                     TRANS = 2'(TRANS_I);
                     WRITE = WRITE_READ;
-                    SIZE  = 2'(SIZE_WORD);
+                    SIZE  = fetch_size_w;
                     PROT  = {is_priv, 1'b1};
                 end else if (ls_take_data_cycle) begin
                     // §18 overlap: drive the data addr-class one cycle
