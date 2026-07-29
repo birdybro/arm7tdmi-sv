@@ -870,17 +870,28 @@ module arm7tdmis_core_pipelined
     wire cp_undef_trap = executing && condition_pass && instr_is_cp
                       && (instr_is_cp14 ? !cp14_supported : CPA);
 
-    wire cp14_mcr_data_fires   = passes_cond && cp14_mcr_data;
-    wire cp14_mrc_data_fires   = passes_cond && cp14_mrc_data;
-    wire cp14_mcr_dbgabt_fires = passes_cond && cp14_mcr_dbgabt;
+    wire cp14_mrc_control_fires = passes_cond && cp14_mrc_control;
+    wire cp14_mcr_data_fires    = passes_cond && cp14_mcr_data;
+    wire cp14_mrc_data_fires    = passes_cond && cp14_mrc_data;
+    wire cp14_mrc_dbgabt_fires  = passes_cond && cp14_mrc_dbgabt;
+    wire cp14_mcr_dbgabt_fires  = passes_cond && cp14_mcr_dbgabt;
+    wire cp14_mrc_fires         = cp14_mrc_control_fires
+                                || cp14_mrc_data_fires
+                                || cp14_mrc_dbgabt_fires;
+    wire [31:0] cp14_mrc_value  = cp14_mrc_control_fires ? core_dcc_control
+                                : cp14_mrc_data_fires    ? core_dcc_rdata
+                                                        : core_dbgabt_rdata;
+    wire [31:0] cp14_mcr_value  = (dec.rd == 4'd15)
+                                ? (de_q.pc + 32'd12)
+                                : rf_rc_data;
 
     // c1 has separate processor-facing directions. A read consumes RX;
     // a write fills TX. c2 is a one-bit software-visible status register.
     assign core_dcc_we        = cp14_mcr_data_fires;
     assign core_dcc_re        = cp14_mrc_data_fires;
-    assign core_dcc_wdata = rf_rc_data;
+    assign core_dcc_wdata     = cp14_mcr_value;
     assign core_dbgabt_we     = cp14_mcr_dbgabt_fires;
-    assign core_dbgabt_wdata  = rf_rc_data[0];
+    assign core_dbgabt_wdata  = cp14_mcr_value[0];
 
     wire msr_fires   = passes_cond && instr_is_msr;
     wire mrs_fires   = passes_cond && instr_is_mrs;
@@ -1228,21 +1239,12 @@ module arm7tdmis_core_pipelined
             rf_write_addr = dec.rd;
             rf_write_data = dec.psr_use_spsr ? 32'(spsr_value) : 32'(cpsr);
             rf_write_en   = 1'b1;
-        end else if (passes_cond && cp14_mrc_control) begin
-            // MRC p14,0,Rd,c0,c0,0 — DCC control/version/status.
+        end else if (cp14_mrc_fires) begin
+            // Exact c0/c1/c2 CP14 reads share normal MRC destination
+            // semantics. Rd=r15 updates NZCV below rather than the PC.
             rf_write_addr = dec.rd;
-            rf_write_data = core_dcc_control;
-            rf_write_en   = 1'b1;
-        end else if (cp14_mrc_data_fires) begin
-            // MRC p14,0,Rd,c1,c0,0 — consume DCC RX data.
-            rf_write_addr = dec.rd;
-            rf_write_data = core_dcc_rdata;
-            rf_write_en   = 1'b1;
-        end else if (passes_cond && cp14_mrc_dbgabt) begin
-            // MRC p14,0,Rd,c2,c0,0 — Debug Abort Status.
-            rf_write_addr = dec.rd;
-            rf_write_data = core_dbgabt_rdata;
-            rf_write_en   = 1'b1;
+            rf_write_data = cp14_mrc_value;
+            rf_write_en   = (dec.rd != 4'd15);
         end else if (state_q == S_DP_SHIFT) begin
             // §18 DP shift-by-reg: commit deferred from S_EXEC. Uses
             // latched values since dec.* and alu_result have moved on
@@ -1261,14 +1263,17 @@ module arm7tdmis_core_pipelined
     wire        flags_from_dp_shift  = (state_q == S_DP_SHIFT) && dp_shift_flags_we_q;
     wire        flags_from_cp_mrc    = (state_q == S_CP_MRC_WB)
                                      && (cp_mrc_rd_q == 4'd15);
+    wire        flags_from_cp14_mrc  = cp14_mrc_fires && (dec.rd == 4'd15);
     wire [3:0]  flags_value          = flags_from_mul
                                        ? {mul_n_out, mul_z_out, cpsr.c, cpsr.v}
                                        : alu_flags_merged;
     assign cpsr_write_en   = writes_flags || msr_to_cpsr
-                           || flags_from_dp_shift || flags_from_cp_mrc;
+                           || flags_from_dp_shift || flags_from_cp_mrc
+                           || flags_from_cp14_mrc;
     assign cpsr_write_data = msr_to_cpsr      ? sh_result
                            : flags_from_dp_shift ? {dp_shift_flags_q, 28'h0}
                            : flags_from_cp_mrc   ? {cp_mrc_data_q[31:28], 28'h0}
+                           : flags_from_cp14_mrc ? {cp14_mrc_value[31:28], 28'h0}
                                                  : {flags_value, 28'h0};
     assign cpsr_write_mask = msr_to_cpsr ? dec.msr_field_mask : 4'b1000;
 
