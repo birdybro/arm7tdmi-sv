@@ -11,9 +11,10 @@
 //     `condition_pass`.
 //   - DBGnEXEC is HIGH whenever an instruction reaches Execute but
 //     `condition_pass=0` (TRM §30.18.16 / §3.5).
-//   - Cycle accounting is independent of `condition_pass`: an instruction
-//     that fails its condition still consumes the same number of cycles
-//     it would have on success (TRM §7.20 Table 7-23 — "+S" at PC+2i).
+//   - Cycle accounting is overridden by condition failure: every
+//     unexecuted instruction takes exactly one S opcode cycle, regardless
+//     of the multicycle path it would have taken on success (TRM §7.20
+//     Table 7-23 — opcode data at PC+2i, next address PC+3i).
 //
 // COND_NV is UNPREDICTABLE in ARMv4. ARMv5+ repurposed the encoding for
 // unconditional instructions (BLX-imm, PLD); this ARM7TDMI-S implementation
