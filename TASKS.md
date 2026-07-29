@@ -2512,9 +2512,20 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   eight BX-driven instruction-fetch rows. It checks results, sign extension,
   stores, exact raw address/size/direction, both locked SWP cycles, endian lanes,
   destination state, and word/halfword fetch alignment.
-- [ ] **ISA-010:** Verify every load/store P/U/B/W/L combination, immediate and shifted
+- [x] **ISA-010:** Verify every load/store P/U/B/W/L combination, immediate and shifted
   register offset, base/destination alias, writeback, r15 use, and defined/
-  UNPREDICTABLE case.
+  UNPREDICTABLE case. `tb/integration/arm7tdmis_single_ls_matrix_tb.sv`
+  executes all 64 Addressing Mode 2 combinations (P/U/B/W/L x
+  immediate/register), including LSL, LSR, ASR, and encoded-RRX shifter paths, and
+  checks the exact data-cycle pins, privilege, data, destination, and base
+  update. `tb/integration/arm7tdmis_extra_ls_matrix_tb.sv` independently
+  executes all 64 Addressing Mode 3 rows (STRH/LDRH/LDRSB/LDRSH x P/U/W x
+  immediate/register). `tb/integration/arm7tdmis_single_ls_policy_tb.sv`
+  adds 26 reset-per-case rows for defined aliases and r15 values plus every
+  statically detectable unsafe Rn/Rd/Rm/writeback combination class. The selected
+  ISA-016 policy takes a precise Undefined trap before any would-be data
+  cycle; defined aliases retain their architectural result. Mode 2 `ROR #0`
+  now selects RRX in the shared shifter control.
 - [ ] **ISA-011:** Verify LDM/STM IA/IB/DA/DB, S/W/L, all 16 register-list bits,
   user-bank forms, PC-in-list CPSR restore, base-in-list rules, and a documented empty
   list policy.

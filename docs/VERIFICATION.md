@@ -62,6 +62,26 @@ is architectural. Odd halfword behavior is labeled architecturally
 UNPREDICTABLE and checked only as this implementation's deterministic r4p3
 bus/lane policy.
 
+## ARM single-transfer evidence
+
+Three reset-per-case matrices close the ARM Addressing Mode 2 and Mode 3
+functional space:
+
+- `arm7tdmis_single_ls_matrix_tb` executes all 64 combinations of
+  P/U/B/W/L and immediate/register offset. Register-offset rows exercise LSL,
+  LSR, ASR, and the encoded `ROR #0` RRX case.
+- `arm7tdmis_extra_ls_matrix_tb` executes STRH, LDRH, LDRSB, and LDRSH for
+  every P/U/W and immediate/register combination (64 rows).
+- `arm7tdmis_single_ls_policy_tb` executes 12 defined alias/r15 cases and 14
+  statically detectable ARMv4T UNPREDICTABLE operand combinations.
+
+Every ordinary row checks the transfer address, size, direction, privilege,
+lock state, load/store data, destination, and base writeback. Unsafe operand
+rows require the project's deterministic precise-Undefined policy, including
+the exact LR/SPSR/handler state, no data cycle, no successor retirement, and
+unchanged memory. The policy is implementation behavior, not an architectural
+promise about UNPREDICTABLE encodings.
+
 Functional/line/toggle coverage reporting, mutation testing of architectural
 controls, differential testing, and formal evidence remain separate open
 requirements in `TASKS.md` §31.

@@ -38,8 +38,8 @@ the evidence required to promote a path to VERIFIED are listed in `TASKS.md` §3
 | Data-processing (16 opcodes) | Immediate/register and shifter paths exist; flag and r15 edge behavior is incomplete |
 | Multiply | Paths for MUL, MLA, UMULL, UMLAL, SMULL, SMLAL and m-cycle control exist |
 | Branch | B, BL, and BX paths exist |
-| Load/Store | Broad LDR/STR byte/word addressing paths exist; the full encoding/alias space is unverified |
-| Halfword / signed L/S | Broad LDRH/STRH/LDRSH/LDRSB paths exist |
+| Load/Store | LDR/STR byte/word Addressing Mode 2 is verified across all P/U/B/W/L and immediate/register rows; alias/r15 policy is directed-tested |
+| Halfword / signed L/S | LDRH/STRH/LDRSH/LDRSB Addressing Mode 3 is verified across every P/U/W and immediate/register row |
 | Block transfer | LDM/STM paths include IA/IB/DA/DB, writeback, user-bank, and PC-list cases; abort behavior is wrong |
 | Swap | SWP/SWPB paths and LOCK output exist; atomic/abort/endian closure is missing |
 | PSR transfer | MRS/MSR register/immediate and field-mask paths exist; privilege/reserved-bit handling is incomplete |
@@ -268,6 +268,9 @@ evidence.
 | `debug_reserved_regs` | public-JTAG RAZ/WI checks for every reserved EmbeddedICE-RT address |
 | `debug_dbgen_sources` | Complete core-facing DBGEN disable matrix across requests, comparators, monitor mode, outputs, and IRQ/FIQ pass-through |
 | `debug_inject_matrix` | All §5.16.1 debug-speed classes with one-accept/one-retire checks and pre-response CLKEN stalls |
+| `single_ls_matrix` | All 64 ARM Addressing Mode 2 P/U/B/W/L and immediate/shifted-register combinations |
+| `extra_ls_matrix` | All 64 ARM Addressing Mode 3 access/P/U/W and immediate/register combinations |
+| `single_ls_policy` | Defined load/store aliases and precise-Undefined policy for 14 unsafe operand combinations |
 | `abort` | DABT during LDR — Rd preserved, vector entry |
 | `pabt` | PABT propagation via `fd_q.pabort` |
 | `ldm_abort` | Per-beat load suppression, base writeback/restoration, and r15 protection |
