@@ -488,6 +488,7 @@ module arm7tdmis_core_pipelined
     logic         dp_shift_writes_q;
     logic         dp_shift_flags_we_q;
     logic         dp_shift_writes_pc_q;
+    logic         dp_shift_restore_q;
 
     // §18 LDR/LDRB writeback I cycle. Holds the load value across S_DDATA
     // → S_LOAD_WB so the regfile commit happens at the architecturally
@@ -1355,7 +1356,12 @@ module arm7tdmis_core_pipelined
                              && (block_curr_reg_q == 4'd15)
                              && block_user_mode_q
                              && !data_abort_q && !data_abort_now;
-    assign cpsr_restore_now = (dp_writes_pc && dec.s_bit) || block_ldm_pc_restore;
+    wire dp_shift_pc_restore = (state_q == S_DP_SHIFT)
+                             && dp_shift_restore_q;
+    assign cpsr_restore_now = (dp_writes_pc && dec.s_bit
+                               && !dp_shift_take_cycle)
+                            || dp_shift_pc_restore
+                            || block_ldm_pc_restore;
     assign bx_set_t_en      = bx_writes_pc;
     assign bx_set_t_value   = rf_rb_data[0];
 
@@ -1405,8 +1411,36 @@ module arm7tdmis_core_pipelined
     assign exc_target_spsr_idx = exc_spsr_target;
     assign exc_new_cpsr        = exc_cpsr_built;
 
-    // PC targets per class.
-    wire [31:0] dp_pc_target = alu_result;
+    // PC targets per class. Every write is aligned for the destination
+    // state before it reaches either the early-refill bus path or the
+    // ordinary fetch restart. This is observable at the raw address pins;
+    // relying on a memory system to ignore insignificant low bits would
+    // leave the architectural PC itself misaligned.
+    // The discarded low input bit(s) are the purpose of this helper.
+    /* verilator lint_off UNUSEDSIGNAL */
+    function automatic logic [31:0] align_pc_for_state(
+        input logic [31:0] value,
+        input logic        thumb
+    );
+        return thumb ? {value[31:1], 1'b0}
+                     : {value[31:2], 2'b00};
+    endfunction
+    /* verilator lint_on UNUSEDSIGNAL */
+
+    wire dp_shift_pc_write = (state_q == S_DP_SHIFT)
+                           && dp_shift_writes_pc_q;
+    wire dp_pc_restores_state = spsr_valid
+                              && (dp_shift_pc_write
+                                  ? dp_shift_restore_q
+                                  : (dp_writes_pc && dec.s_bit));
+    wire pc_exec_target_t = any_exc_fires ? 1'b0
+                          : dp_shift_pc_write
+                            ? (dp_pc_restores_state ? spsr_value.t : cpsr.t)
+                          : bx_writes_pc ? rf_rb_data[0]
+                          : dp_pc_restores_state ? spsr_value.t
+                                                : cpsr.t;
+    wire [31:0] dp_pc_raw_target = dp_shift_pc_write
+                                 ? dp_shift_result_q : alu_result;
     wire [31:0] branch_base  = dec.branch_use_rn_base
                               ? rf_ra_data
                               : de_q.pc + (de_q.thumb ? 32'd4 : 32'd8);
@@ -1415,10 +1449,14 @@ module arm7tdmis_core_pipelined
                                   ? (rf_rb_data & 32'hFFFF_FFFE)
                                   : (rf_rb_data & 32'hFFFF_FFFC);
 
-    wire [31:0] pc_target_exec = any_exc_fires   ? exc_pc_target_addr :
-                                 instr_is_branch ? branch_pc_target :
-                                 instr_is_bx     ? bx_pc_target     :
-                                                   dp_pc_target;
+    wire [31:0] pc_target_exec_raw =
+                                 any_exc_fires     ? exc_pc_target_addr :
+                                 dp_shift_pc_write ? dp_pc_raw_target   :
+                                 instr_is_branch   ? branch_pc_target   :
+                                 instr_is_bx       ? bx_pc_target       :
+                                                     dp_pc_raw_target;
+    wire [31:0] pc_target_exec =
+        align_pc_for_state(pc_target_exec_raw, pc_exec_target_t);
 
     // L/S address generation
     wire [31:0] ls_offset_value =
@@ -1637,11 +1675,15 @@ module arm7tdmis_core_pipelined
     // Also excluded: ddata_writes_pc (LDR Rd=PC, TRM 2S+2N+1I, the loaded
     // value isn't bus-stable in time) and block_writes_pc (LDM with PC).
     wire early_flush_fetch = writes_pc_exec && !any_exc_fires;
-    wire early_flush_t = bx_writes_pc ? rf_rb_data[0]
-                       : ((dp_writes_pc && dec.s_bit && spsr_valid)
-                          ? spsr_value.t : cpsr.t);
-    assign flush_target_pc = ddata_writes_pc ? load_value_q
-                           : block_writes_pc ? RDATA
+    wire early_flush_t = pc_exec_target_t;
+    wire block_pc_target_t = (block_ldm_pc_restore && spsr_valid)
+                           ? spsr_value.t : cpsr.t;
+    wire [31:0] ddata_pc_target =
+        align_pc_for_state(load_value_q, cpsr.t);
+    wire [31:0] block_pc_target =
+        align_pc_for_state(RDATA, block_pc_target_t);
+    assign flush_target_pc = ddata_writes_pc ? ddata_pc_target
+                           : block_writes_pc ? block_pc_target
                                              : pc_target_exec;
 
     // A synchronous debug request can stop the core after a PC-modifying
@@ -1717,6 +1759,7 @@ module arm7tdmis_core_pipelined
                 dp_shift_writes_q        <= 1'b0;
                 dp_shift_flags_we_q      <= 1'b0;
                 dp_shift_writes_pc_q     <= 1'b0;
+                dp_shift_restore_q       <= 1'b0;
                 load_value_q             <= 32'h0;
                 cp_instr_pc_q            <= 32'h0;
                 cp_mcr_data_q            <= 32'h0;
@@ -1913,6 +1956,7 @@ module arm7tdmis_core_pipelined
                     dp_shift_writes_q    <= dp_writes_dest;
                     dp_shift_flags_we_q  <= passes_cond && instr_is_dp && dec.s_bit;
                     dp_shift_writes_pc_q <= dp_writes_pc;
+                    dp_shift_restore_q   <= dp_writes_pc && dec.s_bit;
                 end
 
                 // §18 LDR/LDRB: latch the formatted load value at S_DDATA
