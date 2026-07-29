@@ -318,6 +318,8 @@ evidence.
 - [`docs/INTEGRATION.md`](docs/INTEGRATION.md) — canonical FPGA request/response wrapper, CPU-CE bridge, byte lanes, CDC/reset ownership, and optional interfaces.
 - [`docs/RAW_BUS.md`](docs/RAW_BUS.md) — raw pin-level memory timing, phase history, CLKEN/ABORT rules, LOCK/DMORE promises, and reusable protocol checker.
 - [`docs/TRACE.md`](docs/TRACE.md) — ETM execution-status semantics and exact Chapter 6 adapter/tie-offs.
+- [`docs/ERRATA.md`](docs/ERRATA.md) — official source hash, corrected-default
+  policy, and complete evidence matrix for all 15 ARM7TDMI-S errata.
 - [`docs/MULTIPLY.md`](docs/MULTIPLY.md) — MUL/MLA/UMULL/UMLAL/SMULL/SMLAL, m-parameter cycle shaping, UMLAL/SMLAL 2-cycle accumulator read across S_EXEC + S_MULL_ACC.
 - [`docs/EXCEPTIONS.md`](docs/EXCEPTIONS.md) — all 7 exception types, priority encoder, class/state-specific links, banked r14, SPSR save, memory-abort completion, LDM DABT restart, and DP/LDM exception returns.
 

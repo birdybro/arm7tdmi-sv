@@ -22,6 +22,9 @@ because they agree with each other.
   LOCK/DMORE promises, Chapter 7 interpretation, and reusable checker.
 - **[TRACE.md](TRACE.md)** — `DBGINSTRVALID`/`DBGnEXEC` semantics and the
   exact Chapter 6 external ETM7 signal-adapter/tie-off contract.
+- **[ERRATA.md](ERRATA.md)** — official errata-list provenance/hash, the
+  corrected-default policy, and complete conditions-to-test mapping for all
+  15 entries.
 - **[VERIFICATION.md](VERIFICATION.md)** — fail-hard regression ordering,
   intentional-failure sentinel, reproducibility metadata, and the
   `arm7tdmis-regression-v1` machine-readable result schema.

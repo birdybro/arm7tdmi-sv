@@ -3109,17 +3109,24 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
 | [7] Debug entry coincident with DBGRQ | Corrected | Regression |
 | [8] Interrupt during at-speed debug instruction | Corrected in r4p3 | Regression with long LDM/STM |
 | [9] wrong ICE version through JTAG | Corrected in r4p3 | Return selected r4p3 value consistently |
-| [10] Thumb EIS log error | Corrected / non-synthesized | Ensure project trace logger is correct |
+| [10] Thumb EIS log error | Corrected / non-synthesized | Not applicable: the repository has no EIS logger/disassembler, and the Arm notice excludes the netlist and ETM; retain independent ETM-facing tests |
 | [11] SWI/PABT after condition-failed Undef | Present in r4p3 | Corrected only: a failed UDF retires as one S cycle and the following SWI/PABT is selected independently; no defect-emulation parameter; `arm7tdmis_cond_fail_matrix_tb.sv`, `arm7tdmis_pabt_pipeline_tb.sv` |
 | [12] Thumb DABT LR low-bit error | Corrected in r4p3 | Regression |
 | [13] async DBGRQ during PC modification | Present in r4p3 | Corrected default: synchronous `DBGRQ` contract, atomic PC commit, retained redirect regression; synchronize asynchronous sources externally |
 | [14] non-indexed LDC/STC decode | Present in r4p3 | Corrected only: execute P=0,U=1,W=0 LDC/LDCL/STC/STCL architecturally; no defect-emulation parameter; `arm7tdmis_cp_erratum14_tb.sv` |
 | [15] sequential MRC timing | Present in r4p3 | Corrected only: execute each consecutive opcode1=x1x MRC independently, including early CPA/CPB; no defect-emulation parameter; `arm7tdmis_cp_erratum15_tb.sv` |
 
-- [ ] **ERR-001:** Vendor/hash the errata list, review every entry's full conditions,
-  freeze the policy column, and link each applicable test/result.
-- [ ] **ERR-002:** Default to architectural corrections. Any real-silicon defect
+- [x] **ERR-001:** Record the official errata source and exact hash without
+  redistributing its restricted PDF, review every entry's full conditions, freeze the
+  policy column, and link each applicable test/result.
+  `docs/ERRATA.md` records the official URL, byte length, SHA-256, review date,
+  all 15 full-condition dispositions, exact tests, and the reviewed passing baseline.
+  `make -C scripts errata` is the reproducible focused evidence target.
+- [x] **ERR-002:** Default to architectural corrections. Any real-silicon defect
   emulation is opt-in, has a named parameter, and is included in regression and docs.
+  The release has no defect-emulation parameters: [11], [13], [14], and [15], which
+  remain present in physical r4p3, are corrected only. Introducing emulation requires
+  a new versioned compatibility profile and dual-setting tests. See `docs/ERRATA.md`.
 
 ## 31.9 P0 — MiSTer and PocketStation integration
 
