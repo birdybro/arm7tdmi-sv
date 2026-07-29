@@ -258,6 +258,7 @@ module arm7tdmis_block_ls_policy_tb
         logic [31:0] expected_spsr;
         int data_cycles;
         int pc_internal_cycles;
+        int merged_internal_cycles;
         logic test_seen;
 
         @(negedge CLK);
@@ -270,32 +271,49 @@ module arm7tdmis_block_ls_policy_tb
 
         data_cycles = 0;
         pc_internal_cycles = 0;
+        merged_internal_cycles = 0;
         test_seen = 1'b0;
         repeat (130) begin
             @(negedge CLK);
             if ((u_dut.u_core.state_q == 5'd0)
                 && (u_dut.u_core.de_q.pc == TEST_PC))
                 test_seen = 1'b1;
+            if (test_seen && u_dut.u_core.block_pc_internal_phase) begin
+                pc_internal_cycles++;
+                if (!(case_id inside {6, 7})
+                    || ADDR !== 32'h0000_0180
+                    || WRITE !== WRITE_READ
+                    || SIZE !== 2'(SIZE_WORD)
+                    || PROT !== 2'(PROT_OPC_PRIV)
+                    || LOCK !== LOCK_FREE
+                    || TRANS !== 2'(TRANS_N))
+                    fail(case_id, {label,
+                        " emitted a malformed LDM target phase"});
+            end
             if (test_seen
                 && (TRANS inside {TRANS_N, TRANS_S})
                 && PROT[PROT_BIT_DATA]) begin
-                if (u_dut.u_core.block_pc_internal_phase) begin
-                    pc_internal_cycles++;
-                    if (!(case_id inside {6, 7})
-                        || ADDR !== (TEST_PC + 32'd12)
-                        || WRITE !== WRITE_READ
-                        || SIZE !== 2'(SIZE_WORD)
-                        || PROT !== 2'(PROT_DAT_PRIV)
-                        || LOCK !== LOCK_FREE
-                        || TRANS !== 2'(TRANS_N))
-                        fail(case_id, {label,
-                            " emitted a malformed LDM pc+3i phase"});
-                end else begin
+                if (ADDR >= DATA_BASE
+                    && ADDR < (DATA_BASE + 32'd8)) begin
                     data_cycles++;
                     if (SIZE !== 2'(SIZE_WORD))
                         fail(case_id, {label, " issued a non-word beat"});
                     if (LOCK)
                         fail(case_id, {label, " asserted LOCK"});
+                end else begin
+                    // Table 7-13 retains data-class controls while an
+                    // ordinary LDM's final internal writeback merges with
+                    // the pc+12/S prefetch.
+                    merged_internal_cycles++;
+                    if (!(case_id inside {3, 5, 13})
+                        || ADDR !== (TEST_PC + 32'd12)
+                        || WRITE !== WRITE_READ
+                        || SIZE !== 2'(SIZE_WORD)
+                        || PROT !== 2'(PROT_DAT_PRIV)
+                        || LOCK !== LOCK_FREE
+                        || TRANS !== 2'(TRANS_S))
+                        fail(case_id, {label,
+                            " emitted an unexpected merged LDM phase"});
                 end
             end
         end
@@ -308,9 +326,15 @@ module arm7tdmis_block_ls_policy_tb
                 label, expected_data_cycles, data_cycles));
         if (pc_internal_cycles != ((case_id inside {6, 7}) ? 1 : 0))
             fail(case_id, $sformatf(
-                "%s pc+3i phase count expected %0d got %0d",
+                "%s target phase count expected %0d got %0d",
                 label, (case_id inside {6, 7}) ? 1 : 0,
                 pc_internal_cycles));
+        if (merged_internal_cycles
+            != ((case_id inside {3, 5, 13}) ? 1 : 0))
+            fail(case_id, $sformatf(
+                "%s merged phase count expected %0d got %0d",
+                label, (case_id inside {3, 5, 13}) ? 1 : 0,
+                merged_internal_cycles));
 
         if (is_trap_case(case_id)) begin
             if (u_dut.u_core.cpsr.m !== 5'(MODE_UNDEFINED)
