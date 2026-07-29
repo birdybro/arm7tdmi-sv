@@ -254,6 +254,44 @@ module ice_watchpoint_tb;
         check(DBGRNG == 2'b00, "watchpoint match survived enabled completion");
     endtask
 
+    task automatic expect_monitor_transfer(
+        input logic [1:0] extern_value,
+        input logic [1:0] expected_range,
+        input logic expected_abort,
+        input string description
+    );
+        @(negedge CLK);
+        watch_addr   = EXACT_ADDR;
+        watch_data   = ~EXACT_DATA;
+        watch_nopc   = 1'b1;
+        watch_nrw    = 1'b1;
+        watch_size   = 2'b10;
+        watch_priv   = 1'b1;
+        watch_extern = extern_value;
+        core_trans1  = 1'b1;
+        @(posedge CLK);
+        #1;
+        watch_addr   = 32'hDEAD_0000;
+        watch_data   = EXACT_DATA;
+        core_trans1  = 1'b0;
+        #1;
+        check(tb_monitor_mode,
+              $sformatf("%s monitor mode output was LOW", description));
+        check(DBGRNG === expected_range,
+              $sformatf("%s range expected %02b got %02b",
+                        description, expected_range, DBGRNG));
+        check(tb_monitor_data_abort === expected_abort,
+              $sformatf("%s abort expected %b got %b",
+                        description, expected_abort,
+                        tb_monitor_data_abort));
+        check(dbg_break_internal === expected_abort,
+              $sformatf("%s internal event expected %b got %b",
+                        description, expected_abort,
+                        dbg_break_internal));
+        @(posedge CLK);
+        #1;
+    endtask
+
     initial begin
         $dumpfile("ice_watchpoint.fst");
         $dumpvars(0, ice_watchpoint_tb);
@@ -370,6 +408,37 @@ module ice_watchpoint_tb;
         expect_transfer(TARGET_ADDR, ~QUAL_DATA, 1'b1, 1'b0, 2'b00,
                         1'b1, 2'b00, 2'b00, 1'b0,
                         "RANGE includes WP1 data comparison");
+
+        // Monitor mode supports address/control qualifiers but not
+        // data-dependent or RANGE/CHAIN-coupled break/watchpoints.
+        // Control[5] must suppress even a fully supported match while
+        // registers are being reprogrammed.
+        program_wp(1'b0, EXACT_ADDR, 32'h0, 32'h0, 32'hFFFF_FFFF,
+                   9'b1_00_1_11_10_1, 8'b11_0_0_0_00_0);
+        write_reg(5'h00, 32'h0000_0030);
+        expect_monitor_transfer(2'b01, 2'b00, 1'b0,
+                                "monitor ICE disable");
+
+        write_reg(5'h00, 32'h0000_0010);
+        expect_monitor_transfer(2'b01, 2'b01, 1'b1,
+                                "monitor supported DBGEXT match");
+        expect_monitor_transfer(2'b00, 2'b00, 1'b0,
+                                "monitor DBGEXT mismatch");
+
+        // The full comparator and DBGRNG still see the data match, but an
+        // unsupported data-dependent setup must not generate an abort.
+        program_wp(1'b0, EXACT_ADDR, 32'h0, EXACT_DATA, 32'h0,
+                   9'b1_00_1_11_10_1, 8'b11_0_0_0_00_0);
+        expect_monitor_transfer(2'b01, 2'b01, 1'b0,
+                                "monitor rejects data dependency");
+
+        // Likewise, selecting WP1 RANGE as a qualifier is unsupported in
+        // monitor mode even when its current zero value makes the full
+        // WP0 comparator match.
+        program_wp(1'b0, EXACT_ADDR, 32'h0, 32'h0, 32'hFFFF_FFFF,
+                   9'b1_00_1_11_10_1, 8'b01_0_0_0_00_0);
+        expect_monitor_transfer(2'b01, 2'b01, 1'b0,
+                                "monitor rejects RANGE coupling");
 
         if (errors != 0)
             $fatal(1, "ice_watchpoint_tb: FAIL (%0d errors)", errors);
