@@ -15,7 +15,7 @@ module arm7tdmis_sequence_dependencies_tb
     import arm7tdmis_types_pkg::*;
 ;
 
-    localparam int CASE_COUNT = 15;
+    localparam int CASE_COUNT = 16;
     localparam logic [31:0] DATA_BASE = 32'h0000_0200;
 
     logic CLK;
@@ -114,6 +114,7 @@ module arm7tdmis_sequence_dependencies_tb
             13: return "branch to MOV-pc to branch";
             14: return "branch to LDR-pc to branch";
             15: return "ARM/Thumb/ARM adjacent BX chain";
+            16: return "back-to-back UMULL result independence";
             default: return "invalid";
         endcase
     endfunction
@@ -311,6 +312,15 @@ module arm7tdmis_sequence_dependencies_tb
                 u_mem.mem[64] = 32'h0000_0041;
                 u_mem.mem[65] = 32'h0000_0060;
             end
+            16: begin
+                u_mem.mem[8]  = mov_imm(4'd0, 8'd4);
+                u_mem.mem[9]  = mov_imm(4'd1, 8'd8);
+                u_mem.mem[10] = 32'hE083_2190; // UMULL r2,r3,r0,r1
+                u_mem.mem[11] = 32'hE3E0_0000; // MVN r0,#0
+                u_mem.mem[12] = 32'hE3E0_1000; // MVN r1,#0
+                u_mem.mem[13] = 32'hE083_2190; // UMULL r2,r3,r0,r1
+                install_marker(32'h0000_0038, 8'(case_id));
+            end
             default: ;
         endcase
     endtask
@@ -386,6 +396,11 @@ module arm7tdmis_sequence_dependencies_tb
                     || u_dut.u_core.u_regfile.regs[5] !== 32'h0
                     || u_dut.u_core.cpsr.t !== 1'b0)
                     fail(case_id, "interworking redirect chain failed");
+            end
+            16: begin
+                if (u_dut.u_core.u_regfile.regs[2] !== 32'h0000_0001
+                 || u_dut.u_core.u_regfile.regs[3] !== 32'hFFFF_FFFE)
+                    fail(case_id, "second UMULL reused stale operands/result");
             end
             default: ;
         endcase
