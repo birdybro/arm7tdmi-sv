@@ -340,6 +340,7 @@ module arm7tdmis_core_pipelined
     // for the LDM paths and for block-transfer iteration.
     logic         block_writeback_q;
     logic [31:0]  block_writeback_addr_q;
+    logic [31:0]  block_base_value_q;
     logic [3:0]   block_rn_q;
 
     // §18 DP shift-by-reg: TRM Table 7-3 says these take 1S+1I = 2 cycles
@@ -1257,6 +1258,7 @@ module arm7tdmis_core_pipelined
                 block_has_pc_q         <= 1'b0;
                 block_writeback_q      <= 1'b0;
                 block_writeback_addr_q <= 32'h0;
+                block_base_value_q     <= 32'h0;
                 block_rn_q             <= 4'h0;
                 swp_addr_q          <= 32'h0;
                 swp_store_q         <= 32'h0;
@@ -1321,6 +1323,7 @@ module arm7tdmis_core_pipelined
                     block_has_pc_q         <= dec.block_reg_list[15];
                     block_writeback_q      <= dec.block_writeback;
                     block_writeback_addr_q <= block_writeback_addr;
+                    block_base_value_q     <= rf_ra_data;
                     block_rn_q             <= dec.rn;
                 end
 
@@ -1578,7 +1581,18 @@ module arm7tdmis_core_pipelined
                     SIZE  = fetch_size_w;
                     PROT  = {is_priv, 1'b0};
                 end
-                WDATA = block_load_q ? 32'h0 : rf_rc_data;
+                // ARM ARM A4.1.97: when an STM writeback base is the
+                // lowest register in the list, store its original value,
+                // even though r4p3's Base Updated abort model requires
+                // architectural writeback before any response can abort.
+                // Other base-in-list positions are architecturally
+                // UNPREDICTABLE and retain the deterministic updated-base
+                // behavior.
+                WDATA = block_load_q ? 32'h0
+                      : (block_first_beat_q
+                         && block_writeback_q
+                         && (block_curr_reg_q == block_rn_q))
+                        ? block_base_value_q : rf_rc_data;
             end
             S_SWP_RDATA: begin
                 if (data_abort_now) begin
