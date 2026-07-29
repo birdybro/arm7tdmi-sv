@@ -264,7 +264,7 @@ module arm7tdmis_debug_inject_matrix_tb
 
     task automatic inject_internal_stalled(
         input logic [31:0] instruction,
-        input logic [3:0] expected_state,
+        input logic [4:0] expected_state,
         input string description
     );
         int unsigned accept_before;
@@ -368,6 +368,8 @@ module arm7tdmis_debug_inject_matrix_tb
                 instruction[20] = 1'b1;
                 instruction[15:12] = 4'h0;
             end
+            if ((opcode == 13) || (opcode == 15))
+                instruction[19:16] = 4'h0;
             carry_before = u_dut.u_core.cpsr.c;
             destination_before = u_dut.u_core.u_regfile.regs[2];
             expected = expected_dp_result(4'(opcode), carry_before);
@@ -389,7 +391,7 @@ module arm7tdmis_debug_inject_matrix_tb
         // Register-controlled shifts use the dedicated S_DP_SHIFT cycle.
         inject_and_wait(32'hE3A0_4002, "MOV r4,#2");
         inject_internal_stalled(
-            32'hE1A0_2411, 4'd9, "MOV r2,r1,LSL r4");
+            32'hE1A0_2411, 5'd9, "MOV r2,r1,LSL r4");
         if (u_dut.u_core.u_regfile.regs[2] !== 32'h0000_0048)
             fail($sformatf("register shift expected 00000048 got %08x",
                            u_dut.u_core.u_regfile.regs[2]));

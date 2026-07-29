@@ -223,7 +223,7 @@ module arm7tdmis_swp_bus_matrix_tb
         fail("never reached swap instruction");
     endtask
 
-    task automatic wait_for_state(input logic [3:0] target);
+    task automatic wait_for_state(input logic [4:0] target);
         for (int timeout = 0; timeout < 30; timeout++) begin
             @(negedge CLK);
             if (u_dut.u_core.state_q == target)
@@ -232,7 +232,7 @@ module arm7tdmis_swp_bus_matrix_tb
         fail($sformatf("never reached state %0d", target));
     endtask
 
-    task automatic stall_state(input logic [3:0] target);
+    task automatic stall_state(input logic [4:0] target);
         logic [71:0] held_bus;
         logic [31:0] held_rdata;
 
@@ -255,14 +255,14 @@ module arm7tdmis_swp_bus_matrix_tb
     endtask
 
     task automatic pulse_dbgrq_during_read;
-        wait_for_state(4'd3); // S_SWP_RDATA
+        wait_for_state(5'd3); // S_SWP_RDATA
         DBGRQ = 1'b1;
         @(posedge CLK);
         @(negedge CLK);
         DBGRQ = 1'b0;
     endtask
 
-    task automatic cancel_with_reset(input logic [3:0] target);
+    task automatic cancel_with_reset(input logic [4:0] target);
         wait_for_state(target);
         nRESET = 1'b0;
         #1;
@@ -337,17 +337,17 @@ module arm7tdmis_swp_bus_matrix_tb
         setup_case(case_id, mode, byte_access);
 
         unique case (mode)
-            MODE_STALL_READ:  stall_state(4'd3);
-            MODE_STALL_WRITE: stall_state(4'd4);
+            MODE_STALL_READ:  stall_state(5'd3);
+            MODE_STALL_WRITE: stall_state(5'd4);
             MODE_RESET_READ: begin
-                cancel_with_reset(4'd3);
+                cancel_with_reset(5'd3);
                 if (u_mem.mem[128] !== OLD_WORD)
                     fail("read-phase reset changed memory");
                 monitor_active = 1'b0;
                 return;
             end
             MODE_RESET_WRITE: begin
-                cancel_with_reset(4'd4);
+                cancel_with_reset(5'd4);
                 if (u_mem.mem[128] !== OLD_WORD)
                     fail("write-phase reset committed memory");
                 monitor_active = 1'b0;
