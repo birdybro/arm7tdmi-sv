@@ -480,6 +480,7 @@ module arm7tdmis_core_pipelined
     logic [31:0]  block_base_value_q;
     logic [3:0]   block_rn_q;
     logic [4:0]   block_mode_q;
+    logic [1:0]   block_abort_pc_refill_q;
 
     // §18 DP shift-by-reg: TRM Table 7-3 says these take 1S+1I = 2 cycles
     // because reading Rs for the shift amount adds an internal cycle.
@@ -971,7 +972,13 @@ module arm7tdmis_core_pipelined
             // cycle (and Rn writeback when W=1).
             S_BLOCK_DATA: state_next = block_has_more ? S_BLOCK_DATA
                                      : (block_load_q  ? S_BLOCK_WB : S_EXEC);
-            S_BLOCK_WB:   state_next = S_EXEC;
+            // A PC-inclusive LDM occupies the complete n+4 Table 7-13
+            // path even when an Abort suppresses the PC write. Keep the
+            // two discarded refill cycles internal before recognizing
+            // DABT; otherwise the documented 20-cycle longest
+            // instruction collapses to n+2 cycles.
+            S_BLOCK_WB:   state_next = (block_abort_pc_refill_q != 2'd0)
+                                     ? S_BLOCK_WB : S_EXEC;
             // ARM7TDMI-S requires any SWP Data Abort to be signaled on
             // the read. A failed read terminates the locked sequence;
             // the write phase must never be issued.
@@ -1190,14 +1197,27 @@ module arm7tdmis_core_pipelined
         dbg_breakpoint_execute
         && ((!nIRQ && !cpsr.i) || (!nFIQ && !cpsr.f));
 
-    wire irq_pending   = (executing && !nIRQ && !cpsr.i)
+    // IRQ/FIQ are sampled only at an architectural instruction boundary.
+    // S_EXEC is the first cycle of every multicycle instruction, not its
+    // completion: taking an interrupt there would enter the exception mode
+    // while the old load/store/multiply state machine kept running. Wait
+    // until the final substate instead. Busy coprocessor abandonment remains
+    // the explicit exception because the CP protocol permits it.
+    wire ordinary_interrupt_boundary =
+           ((state_q == S_EXEC) && executing && (state_next == S_EXEC))
+        || ((state_q != S_EXEC) && (state_next == S_EXEC));
+    wire irq_pending   = (ordinary_interrupt_boundary
+                          && !nIRQ && !cpsr.i)
                        || cp_wait_irq_pending
                        || ((state_q == S_EXEC) && debug_irq_pending_q);
-    wire fiq_pending   = (executing && !nFIQ && !cpsr.f)
+    wire fiq_pending   = (ordinary_interrupt_boundary
+                          && !nFIQ && !cpsr.f)
                        || cp_wait_fiq_pending
                        || ((state_q == S_EXEC) && debug_fiq_pending_q);
     logic fiq_after_dabt_q;
+    logic [1:0] fiq_after_dabt_delay_q;
     wire  fiq_interlock_fires = fiq_after_dabt_q
+                              && (fiq_after_dabt_delay_q == 2'd0)
                               && (state_q == S_EXEC);
 
     // §17: the prefetch-abort metadata travels with the fetched
@@ -1206,19 +1226,6 @@ module arm7tdmis_core_pipelined
     wire debug_pabt_pending = executing && de_q.breakpoint
                             && dbg_monitor_mode;
     wire pabt_pending = executing && (de_q.pabort || debug_pabt_pending);
-
-    // TRM §2.9.10 fixed priority below Data Abort:
-    // FIQ > IRQ > PABT > UNDEF > SWI. These are selected, one-hot events,
-    // not merely overlapping requests. Data Abort is generated only in a
-    // non-S_EXEC memory substate, so it is mutually exclusive here; the
-    // DABT+FIQ interlock is handled separately at its abort boundary.
-    wire fiq_fires   = fiq_pending || fiq_interlock_fires;
-    wire irq_fires   = irq_pending && !fiq_pending;
-    wire pabt_fires  = pabt_pending && !fiq_pending && !irq_pending;
-    wire undef_fires = undef_pending && !fiq_pending && !irq_pending
-                    && !pabt_pending;
-    wire swi_fires   = swi_pending && !fiq_pending && !irq_pending
-                    && !pabt_pending && !undef_pending;
 
     // §17/§31.6: data abort fires when ABORT is asserted during the active
     // response cycle of an LDR/STR/LDM/STM/SWP/LDC/STC. CP load/store
@@ -1276,6 +1283,24 @@ module arm7tdmis_core_pipelined
     wire dabt_fires = (data_abort_q || data_abort_now)
                    && (state_next == S_EXEC)
                    && (state_q != S_EXEC);
+
+    // TRM §2.9.10 fixed priority:
+    // DABT > FIQ > IRQ > PABT > UNDEF > SWI. Interrupts can now be
+    // recognized on the final boundary of a multicycle memory instruction,
+    // so DABT is no longer structurally exclusive from them. Select the
+    // events explicitly to keep exception entry one-hot and to avoid
+    // spuriously setting CPSR.F on the Abort entry.
+    wire fiq_fires   = ((fiq_pending && !fiq_after_dabt_q)
+                        || fiq_interlock_fires)
+                     && !dabt_fires;
+    wire irq_fires   = irq_pending && !dabt_fires && !fiq_pending;
+    wire pabt_fires  = pabt_pending && !dabt_fires
+                    && !fiq_pending && !irq_pending;
+    wire undef_fires = undef_pending && !dabt_fires
+                    && !fiq_pending && !irq_pending && !pabt_pending;
+    wire swi_fires   = swi_pending && !dabt_fires
+                    && !fiq_pending && !irq_pending
+                    && !pabt_pending && !undef_pending;
     wire external_dabt_cause = external_data_abort_q
                              || external_data_abort_now;
     wire debug_dabt_cause = debug_data_abort_q || debug_data_abort_now;
@@ -1292,15 +1317,32 @@ module arm7tdmis_core_pipelined
     // untouched Data Abort vector.
     always_ff @(posedge CLK) begin
         if (!nRESET) begin
-            fiq_after_dabt_q <= 1'b0;
+            fiq_after_dabt_q       <= 1'b0;
+            fiq_after_dabt_delay_q <= 2'd0;
         end else if (CLKEN) begin
-            if (fiq_interlock_fires)
-                fiq_after_dabt_q <= 1'b0;
-            // Sample at the actual failed data response. Loads and LDMs
-            // can spend later writeback/completion cycles before
-            // dabt_fires, by which time a one-cycle nFIQ pulse is gone.
-            else if (data_abort_now && !nFIQ && !cpsr.f)
-                fiq_after_dabt_q <= 1'b1;
+            if (fiq_interlock_fires) begin
+                fiq_after_dabt_q       <= 1'b0;
+                fiq_after_dabt_delay_q <= 2'd0;
+            end else begin
+                // DABT entry is a complete three-cycle Table 7-16
+                // sequence. Count those cycles after the abort boundary
+                // before starting the two-cycle FIQ entry.
+                if (dabt_fires
+                    && (fiq_after_dabt_q
+                        || (!nFIQ && !cpsr.f)))
+                    fiq_after_dabt_delay_q <= 2'd3;
+                else if (fiq_after_dabt_q
+                         && fiq_after_dabt_delay_q != 2'd0)
+                    fiq_after_dabt_delay_q
+                        <= fiq_after_dabt_delay_q - 2'd1;
+
+                // Sample at the actual failed data response. Loads and
+                // LDMs can spend later writeback/completion cycles before
+                // dabt_fires, by which time a one-cycle nFIQ pulse is gone.
+                if ((data_abort_now || dabt_fires)
+                    && !nFIQ && !cpsr.f)
+                    fiq_after_dabt_q <= 1'b1;
+            end
         end
     end
 
@@ -1814,6 +1856,7 @@ module arm7tdmis_core_pipelined
                 block_base_value_q     <= 32'h0;
                 block_rn_q             <= 4'h0;
                 block_mode_q           <= 5'h0;
+                block_abort_pc_refill_q <= 2'h0;
                 swp_addr_q          <= 32'h0;
                 swp_store_q         <= 32'h0;
                 swp_loaded_q        <= 32'h0;
@@ -1946,6 +1989,7 @@ module arm7tdmis_core_pipelined
                     block_base_value_q     <= rf_ra_data;
                     block_rn_q             <= dec.rn;
                     block_mode_q           <= cpsr.m;
+                    block_abort_pc_refill_q <= 2'd0;
                 end
 
                 if (state_q == S_BLOCK_DATA) begin
@@ -1954,8 +1998,15 @@ module arm7tdmis_core_pipelined
                         block_curr_reg_q   <= lowest_set_idx(block_after_curr);
                         block_curr_addr_q  <= block_curr_addr_q + 32'd4;
                         block_first_beat_q <= 1'b0;
+                    end else if (block_load_q && block_has_pc_q
+                                 && (data_abort_q || data_abort_now)) begin
+                        block_abort_pc_refill_q <= 2'd2;
                     end
                 end
+
+                if (state_q == S_BLOCK_WB
+                    && block_abort_pc_refill_q != 2'd0)
+                    block_abort_pc_refill_q <= block_abort_pc_refill_q - 2'd1;
 
                 // SWP snapshot.
                 if (state_q == S_EXEC && swp_take_cycle) begin
