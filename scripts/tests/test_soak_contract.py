@@ -15,9 +15,70 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import soak_harness  # noqa: E402
+import release_evidence  # noqa: E402
 
 
 class SoakContractTest(unittest.TestCase):
+    @staticmethod
+    def _release_report() -> dict[str, object]:
+        return {
+            "schema": "arm7tdmis-soak-v1",
+            "status": "passed",
+            "git": {"commit": "abc123", "dirty": False},
+            "configuration": {
+                "seed_count": 256,
+                "timeout_seconds": 30.0,
+                "x_assignment": "unique",
+                "x_initialization": "unique",
+                "sanitizers": ["address", "undefined"],
+                "environment": {
+                    "ASAN_OPTIONS": "halt_on_error=1",
+                    "UBSAN_OPTIONS": "halt_on_error=1",
+                },
+            },
+            "tools": {
+                "binary_dependencies": [
+                    "libasan.so.8",
+                    "libubsan.so.1",
+                ]
+            },
+            "completed_seed_count": 256,
+            "seeds": [
+                {
+                    "seed": seed,
+                    "status": "passed",
+                    "exit_code": 0,
+                    "pass_marker_found": True,
+                }
+                for seed in range(1, 257)
+            ],
+            "failures": [],
+        }
+
+    def test_release_validation_rejects_weakened_soak_evidence(self) -> None:
+        report = self._release_report()
+        release_evidence.validate_soak_evidence(
+            report,
+            expected_commit="abc123",
+        )
+
+        for mutation in ("dirty", "duplicate", "unsanitized", "failed"):
+            weakened = json.loads(json.dumps(report))
+            if mutation == "dirty":
+                weakened["git"]["dirty"] = True
+            elif mutation == "duplicate":
+                weakened["seeds"][1]["seed"] = weakened["seeds"][0]["seed"]
+            elif mutation == "unsanitized":
+                weakened["tools"]["binary_dependencies"] = []
+            else:
+                weakened["seeds"][0]["status"] = "failed"
+            with self.subTest(mutation=mutation):
+                with self.assertRaises(ValueError):
+                    release_evidence.validate_soak_evidence(
+                        weakened,
+                        expected_commit="abc123",
+                    )
+
     def test_seed_sequence_is_repeatable_unique_and_nonzero(self) -> None:
         first = soak_harness._seeds(0, 256)
         second = soak_harness._seeds(0, 256)
