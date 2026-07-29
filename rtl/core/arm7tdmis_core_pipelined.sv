@@ -875,7 +875,17 @@ module arm7tdmis_core_pipelined
                                    && !dec.block_load
                                    && dec.block_writeback;
 
-    wire swp_take_cycle = passes_cond && (dec.instr_class == INSTR_SWP);
+    // ARMv4T permits Rd=Rm as the ordinary register/memory exchange form.
+    // Rn aliasing either data register, or any use of r15, is
+    // UNPREDICTABLE. Apply the deterministic precise-Undefined policy
+    // before the locked read address can be issued.
+    wire swp_policy_undef =
+           (dec.instr_class == INSTR_SWP)
+        && ((dec.rn == 4'd15) || (dec.rd == 4'd15) || (dec.rm == 4'd15)
+         || (dec.rn == dec.rd) || (dec.rn == dec.rm));
+    wire swp_take_cycle = passes_cond
+                        && (dec.instr_class == INSTR_SWP)
+                        && !swp_policy_undef;
 
     // §9d: UMULL/SMULL take an extra cycle in S_MULL_HI to write RdHi.
     wire mull_take_cycle = passes_cond && instr_class_is_mull
@@ -1141,7 +1151,8 @@ module arm7tdmis_core_pipelined
     wire swi_pending   = passes_cond && instr_is_swi;
     wire undef_pending = executing
                        && ((condition_pass
-                         && (instr_is_undef || block_policy_undef))
+                         && (instr_is_undef || block_policy_undef
+                          || swp_policy_undef))
                            || cond_is_nv
                            || cp_undef_trap);
     // A halt-mode watchpoint or DBGRQ has priority over an interrupt, but
