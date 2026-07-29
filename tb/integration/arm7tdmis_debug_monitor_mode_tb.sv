@@ -5,7 +5,9 @@
 //   0. an instruction breakpoint must cause a Prefetch Abort;
 //   1. a data watchpoint must cause a Data Abort;
 //   2. a data watchpoint coincident with external ABORT must take the real
-//      Data Abort and leave CP14 DbgAbt clear.
+//      Data Abort and leave CP14 DbgAbt clear;
+//   3. an instruction breakpoint coincident with external ABORT must take
+//      the real Prefetch Abort and likewise leave DbgAbt clear.
 //
 // Monitor mode never enters debug state. External DBGBREAK is unsupported
 // and must be ignored, while comparator RANGE outputs remain observable.
@@ -29,6 +31,7 @@ module arm7tdmis_debug_monitor_mode_scenario #(
     localparam int unsigned BREAKPOINT_SCENARIO = 0;
     localparam int unsigned WATCHPOINT_SCENARIO = 1;
     localparam int unsigned EXTERNAL_ABORT_SCENARIO = 2;
+    localparam int unsigned EXTERNAL_PABORT_SCENARIO = 3;
 
     logic nRESET = 1'b0;
     logic CLKEN = 1'b0;
@@ -94,9 +97,12 @@ module arm7tdmis_debug_monitor_mode_scenario #(
     );
 
     assign inject_external_abort =
-        (SCENARIO == EXTERNAL_ABORT_SCENARIO)
+        (((SCENARIO == EXTERNAL_ABORT_SCENARIO)
+          && u_mem.addr_q == 32'h0000_0100)
+         || ((SCENARIO == EXTERNAL_PABORT_SCENARIO)
+             && u_mem.addr_q == 32'h0000_0028))
         && u_mem.is_active_q
-        && u_mem.addr_q == 32'h0000_0100;
+        && !u_mem.write_q;
 
     logic [37:0] scan_ignored;
 
@@ -181,12 +187,15 @@ module arm7tdmis_debug_monitor_mode_scenario #(
     task automatic program_wp0;
         logic [31:0] watched_address;
         logic [31:0] control_value;
-        watched_address = (SCENARIO == BREAKPOINT_SCENARIO)
+        watched_address = ((SCENARIO == BREAKPOINT_SCENARIO)
+                           || (SCENARIO == EXTERNAL_PABORT_SCENARIO))
                         ? 32'h0000_0028 : 32'h0000_0100;
-        control_value = (SCENARIO == BREAKPOINT_SCENARIO)
+        control_value = ((SCENARIO == BREAKPOINT_SCENARIO)
+                         || (SCENARIO == EXTERNAL_PABORT_SCENARIO))
                       ? 32'h0000_0114 : 32'h0000_011C;
         write_ice(5'h08, watched_address);
-        write_ice(5'h09, (SCENARIO == BREAKPOINT_SCENARIO)
+        write_ice(5'h09, ((SCENARIO == BREAKPOINT_SCENARIO)
+                          || (SCENARIO == EXTERNAL_PABORT_SCENARIO))
                          ? 32'h0000_0003 : 32'h0000_0000);
         write_ice(5'h0A, 32'h0000_0000);
         write_ice(5'h0B, 32'hFFFF_FFFF);
@@ -267,7 +276,8 @@ module arm7tdmis_debug_monitor_mode_scenario #(
         for (int i = 0; i < 320; i++) begin
             @(posedge CLK);
             if (u_dut.u_core.u_regfile.regs[10]
-                == ((SCENARIO == BREAKPOINT_SCENARIO)
+                == (((SCENARIO == BREAKPOINT_SCENARIO)
+                     || (SCENARIO == EXTERNAL_PABORT_SCENARIO))
                     ? 32'h0000_000A : 32'h0000_000D)) begin
                 handler_seen = 1'b1;
                 break;
@@ -290,7 +300,8 @@ module arm7tdmis_debug_monitor_mode_scenario #(
             failed = 1'b1;
         end
 
-        expected_dbgabt = (SCENARIO == EXTERNAL_ABORT_SCENARIO)
+        expected_dbgabt = ((SCENARIO == EXTERNAL_ABORT_SCENARIO)
+                           || (SCENARIO == EXTERNAL_PABORT_SCENARIO))
                         ? 32'h0 : 32'h1;
         if (u_dut.u_core.u_regfile.regs[8] !== expected_dbgabt) begin
             $display("[debug_monitor/%0d] FAIL CP14 DbgAbt expected %08x got %08x",
@@ -299,7 +310,9 @@ module arm7tdmis_debug_monitor_mode_scenario #(
             failed = 1'b1;
         end
 
-        expected_loaded_value = (SCENARIO == BREAKPOINT_SCENARIO)
+        expected_loaded_value = ((SCENARIO == BREAKPOINT_SCENARIO)
+                                 || (SCENARIO
+                                     == EXTERNAL_PABORT_SCENARIO))
                               ? 32'hFEED_BEEF : 32'h0;
         if (u_dut.u_core.u_regfile.regs[1] !== expected_loaded_value) begin
             $display("[debug_monitor/%0d] FAIL LDR result expected %08x got %08x",
@@ -344,8 +357,8 @@ module arm7tdmis_debug_monitor_mode_tb;
         forever #5 CLK = ~CLK;
     end
 
-    logic [2:0] done;
-    logic [2:0] failed;
+    logic [3:0] done;
+    logic [3:0] failed;
 
     arm7tdmis_debug_monitor_mode_scenario #(.SCENARIO(0)) u_breakpoint (
         .CLK, .done(done[0]), .failed(failed[0])
@@ -356,20 +369,23 @@ module arm7tdmis_debug_monitor_mode_tb;
     arm7tdmis_debug_monitor_mode_scenario #(.SCENARIO(2)) u_external_abort (
         .CLK, .done(done[2]), .failed(failed[2])
     );
+    arm7tdmis_debug_monitor_mode_scenario #(.SCENARIO(3)) u_external_pabort (
+        .CLK, .done(done[3]), .failed(failed[3])
+    );
 
     initial begin
         $dumpfile("debug_monitor_mode.fst");
         $dumpvars(0, arm7tdmis_debug_monitor_mode_tb);
         wait (&done);
         if (|failed)
-            $fatal(1, "[debug_monitor_mode] FAIL scenarios=%03b", failed);
+            $fatal(1, "[debug_monitor_mode] FAIL scenarios=%04b", failed);
         $display("[debug_monitor_mode] PASS");
         $finish;
     end
 
     initial begin
         repeat (CYCLE_LIMIT) @(posedge CLK);
-        $fatal(1, "[debug_monitor_mode] TIMEOUT done=%03b failed=%03b",
+        $fatal(1, "[debug_monitor_mode] TIMEOUT done=%04b failed=%04b",
                done, failed);
     end
 endmodule
