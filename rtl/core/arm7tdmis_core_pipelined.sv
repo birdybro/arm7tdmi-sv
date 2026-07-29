@@ -1003,13 +1003,18 @@ module arm7tdmis_core_pipelined
     // Load-value extraction (these reference RDATA during S_DDATA — at
     // which point RDATA IS the load data, not a fetch result. Same as
     // the non-pipelined core.)
-    wire [4:0]  load_byte_shift = {ls_addr_lo_q, 3'b000};
+    wire [1:0]  load_byte_lane  = CFGBIGEND ? ~ls_addr_lo_q
+                                            :  ls_addr_lo_q;
+    wire [4:0]  load_byte_shift = {load_byte_lane, 3'b000};
     wire [7:0]  load_byte_raw   = 8'((RDATA >> load_byte_shift) & 32'h0000_00FF);
     wire [31:0] load_byte_val   = ls_signed_q
                                   ? {{24{load_byte_raw[7]}}, load_byte_raw}
                                   : {24'h0, load_byte_raw};
 
-    wire [15:0] load_hw_raw     = ls_addr_lo_q[1] ? RDATA[31:16] : RDATA[15:0];
+    wire        load_hw_high    = CFGBIGEND ? ~ls_addr_lo_q[1]
+                                            :  ls_addr_lo_q[1];
+    wire [15:0] load_hw_raw     = load_hw_high ? RDATA[31:16]
+                                              : RDATA[15:0];
     wire [31:0] load_hw_val     = ls_signed_q
                                   ? {{16{load_hw_raw[15]}}, load_hw_raw}
                                   : {16'h0, load_hw_raw};
@@ -1029,7 +1034,9 @@ module arm7tdmis_core_pipelined
     wire block_writes_ldm = (state_q == S_BLOCK_DATA) && block_load_q && !data_abort_now;
     wire swp_writes_rd    = (state_q == S_SWP_WB) && !data_abort_q;
 
-    wire [4:0]  swp_byte_shift = {swp_addr_lo_q, 3'b000};
+    wire [1:0]  swp_byte_lane  = CFGBIGEND ? ~swp_addr_lo_q
+                                           :  swp_addr_lo_q;
+    wire [4:0]  swp_byte_shift = {swp_byte_lane, 3'b000};
     wire [31:0] swp_byte_val   = (swp_loaded_q >> swp_byte_shift) & 32'h0000_00FF;
     wire [31:0] swp_load_value = swp_byte_q ? swp_byte_val : swp_loaded_q;
 
@@ -1606,7 +1613,6 @@ module arm7tdmis_core_pipelined
     // ---- Unused-signal drain ----
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused = &{1'b0,
-        CFGBIGEND,
         CPB,                              // §19: busy-wait wiring is later
         spsr_valid,
         arm_is_dataproc_w, thumb_is_dataproc_w,
