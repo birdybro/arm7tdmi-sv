@@ -1,21 +1,14 @@
-// ABORT integration test: validates the §9d 2-cycle commit path
-// end-to-end inside the pipelined core. Program at tb/programs/abort_test.hex:
+// Data-abort integration test. Program at tb/programs/abort_test.hex:
 //
 //   0x00: B 0x20
 //   ...
-//   0x20: MOV r0, #0x10000000   ; 2^28
-//   0x24: MOV r1, #0x10         ; 16
-//   0x28: ABORT r2, r3, r0, r1  ; r2:r3 = r0 * r1 = 2^32
-//   0x2C: MOV r15, #0x2C        ; self-loop
+//   0x20: MOV r0, #0x100
+//   0x24: LDR r1, [r0]          ; injected data abort
+//   0x28: MOV r2, #0xAA         ; flushed
+//   0x10: B 0x40                ; data-abort vector
+//   0x40: MOV r3, #0xAB         ; handler marker
 //
-// Expected:
-//   r0 = 0x10000000
-//   r1 = 0x00000010
-//   r2 = 0x00000000  (low half of 2^32)
-//   r3 = 0x00000001  (high half of 2^32)
-//
-// The high half being non-zero specifically exercises the S_MULL_HI
-// substate cycle and the latched RdHi/result_hi writeback.
+// EXC-001 requires LR_abt = address of the aborted instruction + 8.
 
 `timescale 1ns/1ps
 
@@ -213,6 +206,12 @@ module arm7tdmis_abort_tb
         if (u_dut.u_core.cpsr.m !== 5'b10111) begin
             $display("[abort] FAIL cpsr.m: expected ABORT (10111), got %05b",
                      u_dut.u_core.cpsr.m);
+            errors = errors + 1;
+        end
+
+        if (u_dut.u_core.u_regfile.regs[28] !== 32'h0000002C) begin
+            $display("[abort] FAIL r14_abt: expected 0x2C, got %08x",
+                     u_dut.u_core.u_regfile.regs[28]);
             errors = errors + 1;
         end
 
