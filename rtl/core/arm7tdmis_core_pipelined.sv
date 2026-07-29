@@ -835,23 +835,30 @@ module arm7tdmis_core_pipelined
     wire branch_link_writes = passes_cond && instr_is_branch && dec.branch_link;
     wire branch_writes_pc   = passes_cond && instr_is_branch;
     wire bx_writes_pc       = passes_cond && instr_is_bx;
-    wire swi_fires          = passes_cond && instr_is_swi;
-    wire undef_fires        = executing &&
-                              ((condition_pass && instr_is_undef) || cond_is_nv
-                               || cp_undef_trap);
+    wire swi_pending   = passes_cond && instr_is_swi;
+    wire undef_pending = executing
+                       && ((condition_pass && instr_is_undef) || cond_is_nv
+                           || cp_undef_trap);
+    wire irq_pending   = executing && !nIRQ && !cpsr.i;
+    wire fiq_pending   = executing && !nFIQ && !cpsr.f;
 
-    wire irq_pending = executing && !nIRQ && !cpsr.i;
-    wire fiq_pending = executing && !nFIQ && !cpsr.f;
-    wire fiq_fires   = fiq_pending && !swi_fires && !undef_fires;
-    wire irq_fires   = irq_pending && !fiq_pending
-                    && !swi_fires && !undef_fires;
+    // §17: the prefetch-abort metadata travels with the fetched
+    // instruction. It remains a request even when that instruction also
+    // decodes Undefined; the priority selector below chooses PABT.
+    wire pabt_pending = executing && de_q.pabort;
 
-    // §17: prefetch abort fires when an aborted instruction reaches execute.
-    // The abort bit was sampled at the fetch landing (F-stage latch) and
-    // carried through fd_q/de_q. PABT takes precedence over UNDEF for the
-    // same instruction; the architecturally correct order is PABT before
-    // any decode-based traps.
-    wire pabt_fires = executing && de_q.pabort;
+    // TRM §2.9.10 fixed priority below Data Abort:
+    // FIQ > IRQ > PABT > UNDEF > SWI. These are selected, one-hot events,
+    // not merely overlapping requests. Data Abort is generated only in a
+    // non-S_EXEC memory substate, so it is mutually exclusive here; the
+    // DABT+FIQ interlock is handled separately at its abort boundary.
+    wire fiq_fires   = fiq_pending;
+    wire irq_fires   = irq_pending && !fiq_pending;
+    wire pabt_fires  = pabt_pending && !fiq_pending && !irq_pending;
+    wire undef_fires = undef_pending && !fiq_pending && !irq_pending
+                    && !pabt_pending;
+    wire swi_fires   = swi_pending && !fiq_pending && !irq_pending
+                    && !pabt_pending && !undef_pending;
 
     // §17: data abort fires when ABORT is asserted during the active data
     // cycle of an LDR/STR/LDM/STM/SWP. Latched so the exception can be
@@ -932,22 +939,12 @@ module arm7tdmis_core_pipelined
     logic [31:0] exc_pc_target_addr;
 
     always_comb begin
-        // Default: SWI (most common entry path)
+        // Default: SWI (lowest-priority entry path).
         exc_mode_target    = 5'(MODE_SUPERVISOR);
         exc_spsr_target    = 3'd2;
         exc_pc_target_addr = 32'h0000_0008;
-        // Priority order matters: TRM §2.9 puts UNDEF/SWI ahead of PABT,
-        // PABT ahead of FIQ, FIQ ahead of IRQ. DABT ranks above FIQ as
-        // well (TRM Fig. 2-1). We layer the if/else chain to match.
-        if (undef_fires) begin
-            exc_mode_target    = 5'(MODE_UNDEFINED);
-            exc_spsr_target    = 3'd4;
-            exc_pc_target_addr = 32'h0000_0004;
-        end else if (pabt_fires) begin
-            exc_mode_target    = 5'(MODE_ABORT);
-            exc_spsr_target    = 3'd3;
-            exc_pc_target_addr = 32'h0000_000C;
-        end else if (dabt_fires) begin
+        // TRM §2.9.10: DABT > FIQ > IRQ > PABT > UNDEF > SWI.
+        if (dabt_fires) begin
             exc_mode_target    = 5'(MODE_ABORT);
             exc_spsr_target    = 3'd3;
             exc_pc_target_addr = 32'h0000_0010;
@@ -959,6 +956,14 @@ module arm7tdmis_core_pipelined
             exc_mode_target    = 5'(MODE_IRQ);
             exc_spsr_target    = 3'd1;
             exc_pc_target_addr = 32'h0000_0018;
+        end else if (pabt_fires) begin
+            exc_mode_target    = 5'(MODE_ABORT);
+            exc_spsr_target    = 3'd3;
+            exc_pc_target_addr = 32'h0000_000C;
+        end else if (undef_fires) begin
+            exc_mode_target    = 5'(MODE_UNDEFINED);
+            exc_spsr_target    = 3'd4;
+            exc_pc_target_addr = 32'h0000_0004;
         end
     end
 
