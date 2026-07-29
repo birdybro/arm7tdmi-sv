@@ -18,8 +18,8 @@ is the canonical status and release gate.
 | ARM/Thumb RTL | **Partial** — directed tests cover all Thumb formats and numerous ARM edge fixes; exhaustive encoding/state coverage remains |
 | Exceptions/aborts | **Partial** — directed tests cover priority, ARM/Thumb LR values, DABT+FIQ, SWP, and per-beat LDM/STM abort behavior; full closure remains |
 | Bus/cycle/endian | **Partial** — little/big-endian lanes, fetch history, stalls, and selected burst/abort cases are tested; complete pin-level cycle closure remains |
-| Coprocessor/CP14/CP15 | **Partial** — directed tests cover external ready/busy/data transfers, absent internal CP15, and conformant c0/c1 DCC ownership; monitor-generated `DbgAbt` coupling and full closure remain |
-| EmbeddedICE-RT/JTAG/ETM | **Partial** — halt-mode scan/register/PSR/system-speed paths now have directed coverage; monitor mode, FPGA transport synchronization, ETM, and full interoperability remain |
+| Coprocessor/CP14/CP15 | **Partial** — directed tests cover external ready/busy/data transfers, absent internal CP15, conformant c0/c1 DCC ownership, and monitor-generated c2 `DbgAbt`; remaining CP closure is tracked in §31.6 |
+| EmbeddedICE-RT/JTAG/ETM | **Partial** — halt-mode and monitor-mode paths have directed coverage; exact pin sampling, FPGA transport synchronization, ETM, and debugger interoperability remain |
 | Verification | **Partial** — registered benches fail hard and the smoke regression passes; exhaustive, differential, coverage, formal, and release closure are absent |
 | FPGA/MiSTer | **Missing** — no valid completed SDC, Quartus result, wrapper/package, MiSTer build, or PocketStation integration |
 
@@ -129,8 +129,8 @@ See [docs/PIPELINE.md](docs/PIPELINE.md) for the detailed FSM, bus-overlap reaso
 
 - **EmbeddedICE-RT (partial)** (`rtl/debug/arm7tdmis_ice_rt.sv`): aligned
   breakpoint/watchpoint comparators, halt/restart, debug-speed register and PSR
-  transfer, and staged system-speed access have directed tests. Monitor mode and the
-  remaining §31.7 cases are still missing.
+  transfer, staged system-speed access, monitor-generated PABT/DABT, and external
+  abort precedence have directed tests. The remaining §31.7 cases are still open.
 - **JTAG TAP (partial)** (`rtl/jtag/arm7tdmis_jtag_tap.sv`): all 16 TAP
   transitions, public/default instructions, SCAN_N, and the physical chain-1/2
   wire orders are fail-hard tested. Chain-1 entry causes, debug-speed transfers,
@@ -145,8 +145,7 @@ See [docs/DEBUG.md](docs/DEBUG.md).
 
 - **CP14:** c0 control and independent c1 RX/TX buffers implement W/R ownership,
   rev-4 chain-2 status, CLKEN, DBGEN-gated pins, and producer/consumer races. c2
-  storage/decode exists, but monitor-generated `DbgAbt` and external-abort priority
-  remain open.
+  storage/decode, monitor-generated `DbgAbt`, and external-abort priority are covered.
 - **CP15:** there is no fabricated internal p15. An unclaimed p15 access traps
   Undefined; a system coprocessor can claim it through the external interface.
 - **External coprocessors:** directed tests cover pipeline-follow signals,
@@ -162,7 +161,6 @@ features; the complete backlog is `TASKS.md` §31.
 
 | Gap | Why | Re-enable when |
 |---|---|---|
-| Monitor-mode CP14 Debug Abort Status coupling | c2 storage/decode is present, but monitor-generated abort events and external-ABORT priority are not connected end to end. | Complete CP-009 and DBG-005. |
 | **Quartus place-and-route** | Toolchain not installed on the build box. RTL is written to Cyclone V conventions (ALM logic, MLAB/M10K BRAM inference, DSP for `*`); SDC first pass exists. | `§26` FPGA bring-up. |
 | Correct exception, abort, endian, and bus timing | Release-blocking functional work. | Implement and verify §31.3–§31.5. |
 | MiSTer/PocketStation integration | No wrapper, package, build, or reference boot exists. | Implement and verify §31.9. |

@@ -2,9 +2,10 @@
 
 > **Audit status:** The subsystem remains partial overall. Halt-mode scan transport,
 > debug-speed register/PSR transfer, staged system-speed access, and the bidirectional
-> CP14 DCC have fail-hard directed coverage. Monitor mode, debug-abort coupling,
-> a synchronous FPGA debug-port wrapper, ETM closure, and the remaining release
-> blockers are tracked in `TASKS.md` §31.6–§31.8.
+> CP14 DCC have fail-hard directed coverage. Monitor-mode breakpoint/watchpoint
+> aborts and CP14 Debug Abort Status coupling are also covered end to end. Exact
+> debug-pin sampling, a synchronous FPGA debug-port wrapper, ETM closure, and the
+> remaining release blockers are tracked in `TASKS.md` §31.6–§31.8.
 
 EmbeddedICE-RT + JTAG TAP + CP14 DCC, as implemented in `rtl/debug/arm7tdmis_ice_rt.sv` and `rtl/jtag/arm7tdmis_jtag_tap.sv`. The TRM chapters are 5.13–5.27.
 
@@ -45,7 +46,7 @@ The TAP runs on the system CLK gated by DBGTCKEN (off-chip TCK synchronizer defe
 
 | Addr | Register | Width used | Notes |
 |---|---|---|---|
-| 0x00 | Debug Control | 6 bits | Bit 0 force-DBGACK; bit 1 force-DBGRQ; bit 2 INTDIS |
+| 0x00 | Debug Control | 6 bits | Bit 5 comparator disable; bit 4 monitor mode; bit 3 RAZ; bit 2 INTDIS; bit 1 force-DBGRQ; bit 0 force-DBGACK |
 | 0x01 | Debug Status | 5 bits, read-only | Live state mux (see below) |
 | 0x02 | Vector Catch | 8 bits | One bit per exception vector |
 | 0x04 | DCC Control | 32 bits | Version `0111`, W/R ownership; also CP14 c0 |
@@ -95,19 +96,27 @@ Mask bit = 1 means "this bit always matches" (don't-care); mask bit = 0 means ex
 
 WP1 feeds two signals to WP0:
 
-- **RANGEOUT** (combinational) = `wp1_addr_match && wp1_ctrl_match` — independent of `wp1_data_match` and `wp1_enable`. Used by WP0's RANGE bit to pair with WP1 for power-of-2 address ranges. Always observable on `DBGRNG[1]` (gated only by DBGEN, not ENABLE).
+- **RANGEOUT** (combinational) = the complete address, data, and control
+  comparison, independent of the ENABLE bit. WP1's output is also the RANGE
+  input to WP0. Both outputs remain observable on `DBGRNG[1:0]` when
+  Debug Control bit 5 is clear, even when their ENABLE bits are clear.
 
 - **CHAINOUT** (latched) — Write-enabled by WP1's address+control match; D-input is `wp1_data_match`. Cleared on (a) DBGnTRST, (b) any scan-chain-2 write to WP1's control-value register. The latch resets on programming changes so the debugger doesn't see false matches after reconfiguring (TRM §30.22.3).
 
-WP0 full match:
+An enabled WP0 event is its complete RANGEOUT comparison plus ENABLE. RANGE and
+CHAIN are ordinary compared inputs in the control vector, fed respectively by
+WP1's RANGEOUT and the CHAINOUT latch:
+
 ```
-wp0_full_match = wp0_addr_match && wp0_data_match && wp0_ctrl_match
-              && wp0_enable
-              && (!wp0_chain_bit || chainout_q)
-              && (!wp0_range_bit || rangeout)
+wp0_event = wp0_addr_match && wp0_data_match
+          && masked_match(wp0_ctrl_value,
+                          {wp1_rangeout, chainout_q, DBGEXT[0],
+                           privilege, opcode/data, size, write},
+                          wp0_ctrl_mask)
+          && wp0_enable
 ```
 
-WP1 has no upstream, so its full match is just `addr & data & ctrl & enable`.
+WP1 has zero on its RANGE and CHAIN inputs and uses `DBGEXT[1]`.
 
 ## Vector Catch
 
@@ -125,18 +134,16 @@ Trap fires when `!watch_nopc` (opcode fetch) AND `watch_addr` matches one of the
 ## Debug-state FSM
 
 ```
-            tap_restart_req
-              ◀──────────────
-   ┌───────────┐                ┌───────────┐
-   │ RUNNING   │──halt_entry──▶│  HALTED   │
-   └───────────┘  _req          └───────────┘
-                                      │
-                                      │ tap_inject_we
-                                      ▼
-                              (un-halt window, 8 CLK)
-                                      │
-                                      ▼
-                              back to HALTED
+                       tap_restart_req
+                    ◀────────────────────
+   ┌───────────┐                         ┌───────────┐
+   │ RUNNING   │─────halt_entry_req─────▶│  HALTED   │
+   └───────────┘                         └───────────┘
+        │                                      │
+        │ monitor breakpoint/watchpoint        │ scan-chain-1 instruction
+        ▼                                      ▼
+   generated PABT/DABT                 release until accepted/retired,
+   (never enters HALTED)               then return to HALTED
 ```
 
 `halt_entry_req` = any of (gated by DBGEN):
@@ -147,7 +154,24 @@ Trap fires when `!watch_nopc` (opcode fetch) AND `watch_addr` matches one of the
 `tap_restart_req` is sampled on the edge that enters Run-Test/Idle with
 IR=RESTART, matching TRM §5.13.5.
 
-DBG_MONITOR (data-abort variant where the core takes an exception instead of halting) is stubbed — the wiring would overlap §17 DABT entry, deferred until that integration test lands.
+Debug Control bit 4 selects monitor policy. An enabled instruction breakpoint is
+tagged with its fetched instruction and becomes a Prefetch Abort only if that
+instruction reaches Execute. An enabled data watchpoint becomes a Data Abort on
+the aligned transfer response. Neither path enters HALTED or asserts DBGACK.
+`DbgAbt` is set only when the debug-generated abort wins exception selection;
+a coincident external `ABORT` has priority and leaves `DbgAbt` clear.
+
+The r4p3 monitor-mode restrictions are enforced fail-closed: a comparator
+configured for a data-dependent match or RANGE/CHAIN coupling cannot generate a
+monitor abort. `DBGEXT[0]` and `DBGEXT[1]` remain permitted address/control
+qualifiers, as explicitly listed by TRM §5.9.2. External `DBGBREAK` is ignored
+in monitor mode, and the implementation never combines monitor and halt policy.
+
+`tb/integration/arm7tdmis_debug_monitor_mode_tb.sv` covers breakpoint PABT,
+watchpoint DABT, coincident external instruction/data abort priority, CP14 c2,
+and the absence of halt/DBGACK through public JTAG programming.
+`tb/unit/ice_watchpoint_tb.sv` covers comparator disable, `DBGEXT`, and rejection
+of data-dependent, RANGE, and CHAIN monitor configurations.
 
 ## Output plumbing
 
@@ -167,9 +191,13 @@ nFIQ_eff = nFIQ | ~ifen
 
 Per §5.19.2 IRQ/FIQ are forced disabled internally during debug-state regardless of CPSR.I/F — that's the `DBGACKI` term doing it.
 
-## 2-flop synchronizers (CDC)
+## Current debug-input synchronization
 
-DBGRQ and DBGBREAK pins are asynchronous to CLK on real silicon. Each goes through a standard 2-flop chain inside ICE-RT with async DBGnTRST clear. The 2nd flop output is what the FSM and Debug Status Register see.
+The current FPGA-facing implementation passes DBGRQ and DBGBREAK through
+CLKEN-qualified two-flop chains with asynchronous DBGnTRST clear. That describes
+the RTL; it is not yet a release-level claim that every r4p3 pin's sampling rule
+or an off-chip debugger clock domain is reproduced. Exact pin sampling and the
+published synchronous FPGA transport remain open under `DBG-001` and `JTAG-004`.
 
 ## JTAG TAP
 
@@ -326,9 +354,9 @@ The internal CP14 register transfers use exact opcode-field matches:
   TX buffer; `MRC p14,0,Rd,c1,c0,0` returns and consumes the independent
   host-to-processor RX buffer.
 - c2 is the one-bit Debug Abort Status register. Its storage, exact CP14
-  decode, sticky set, software clear, and set-over-clear behavior exist.
-  The monitor-mode event source is not yet connected at top level, so the
-  external-ABORT precedence portion remains open under `CP-009`.
+  decode, sticky set, software clear, and set-over-clear behavior are covered.
+  Monitor-generated PABT/DABT events set it end to end; a coincident external
+  abort wins and does not set it.
 
 The JTAG view uses EmbeddedICE addresses 0x04 for control and 0x05 for data.
 A chain-2 read of 0x05 returns the TX word and consumes W; a write to 0x05
@@ -347,7 +375,9 @@ state.
 directions, c0 through both interfaces, rev-4 response status, pin transitions,
 CLKEN, and DBGEN gating with pending data. `tb/unit/dcc_tb.sv` verifies
 independent storage, both simultaneous producer/consumer races, reset, and the
-implemented c2 storage semantics.
+implemented c2 storage semantics. `tb/integration/arm7tdmis_cp14_decode_tb.sv`
+verifies architectural c2 read/write decode, while the monitor-mode integration
+test verifies its real event source and external-abort priority.
 
 ## Forbidden pin clarifications (TRM §30.0)
 

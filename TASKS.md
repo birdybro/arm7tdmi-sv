@@ -2144,7 +2144,11 @@ Anchor each cycle test to an explicit TRM table:
    - Architectural reservations for breakpoint encodings: ARM `0xE7Fxxxxx`, Thumb `0xDExx/0xBExx`. (No `BKPT` opcode on r4p3 — see §30.0.)
 9. **Breakpoint flushed by branch/exception** (TRM §5.3.1, p. 120): if the instruction is flushed (preceding branch / exception / PC write), debug entry is canceled. On exception return + refetch, the breakpoint reflags. Comparator's ENABLE qualification must combine with a pipeline-valid signal.
 10. **Watchpoint completion** (TRM §5.3.2 / §5.18.3): fires *after* the access completes (data writeback / base writeback finished). For LDM/STM, many cycles can elapse between match and entry. Watchpointed access that also Data Aborts ⇒ debug state entered in abort mode (vector fetch first). Watchpointed access coincident with another exception ⇒ debug state entered in that exception's mode; debugger disambiguates via CPSR/SPSR/PC.
-11. **Monitor-mode restrictions** (TRM §5.9.2): in monitor mode, breakpoints/watchpoints **cannot** be data-dependent, range-coupled, or externally-conditioned via `DBGEXT`. External `DBGBREAK` not supported. Halt and monitor modes cannot mix.
+11. **Monitor-mode restrictions** (TRM §5.9.2): in monitor mode,
+    breakpoints/watchpoints **cannot** be data-dependent or RANGE/CHAIN-coupled.
+    `DBGEXT[0]` and `DBGEXT[1]` are permitted qualifiers and are explicitly listed
+    among the supported monitor conditions. External `DBGBREAK` is not supported.
+    Halt and monitor modes cannot mix.
 12. **IFEN auto-disable in debug state** (TRM §5.19.2, p. 147): on debug-state entry, IRQ and FIQ are forced disabled internally regardless of `CPSR.I/F`. Pending interrupts at entry are remembered.
 13. **Debug-exit return-PC offsets** (TRM §5.18.6, p. 146):
    - Normal break/watch exit: `−(4 + N + 3S)`, with N = debug-speed, S = system-speed.
@@ -2547,13 +2551,13 @@ number of cycles spent in an internal FSM state.
   `tb/integration/arm7tdmis_cp14_dcc_tb.sv` checks the exact `0x70000000` control
   value through both interfaces and checks the data-response address bit with W both
   set and clear.
-- [ ] **CP-009:** Implement sticky CP14 Abort Status `DbgAbt`, debug-vs-external-abort
+- [x] **CP-009:** Implement sticky CP14 Abort Status `DbgAbt`, debug-vs-external-abort
   priority, software clear, and exact register encoding.
   Exact c2 decode, sticky set, software clear, set-over-clear priority, and reset are
   covered by `tb/integration/arm7tdmis_cp14_decode_tb.sv` and `tb/unit/dcc_tb.sv`.
-  This remains open because monitor-generated aborts are not connected at top level
-  (`debug_abort_set` is tied low), so external-ABORT precedence is not implemented or
-  verified end to end.
+  `tb/integration/arm7tdmis_debug_monitor_mode_tb.sv` covers architectural c2 reads
+  after monitor-generated Prefetch and Data Aborts and proves that coincident external
+  instruction/data aborts win without setting `DbgAbt`.
 - [x] **CP-010:** Drive `DBGCOMMRX` high for a full RX buffer and `DBGCOMMTX` high for
   an empty TX buffer, both gated by DBGEN. Verify every host/processor race and reset.
   `tb/unit/dcc_tb.sv` covers reset, CLKEN, and both ownership races;
@@ -2577,8 +2581,14 @@ number of cycles spent in an internal FSM state.
 - [ ] **DBG-004:** Qualify breakpoints with valid, non-flushed instructions.
   Watchpoints enter debug only after the access and all architectural writeback
   complete; cover LDM/STM, aborts, exceptions, and simultaneous DBGRQ.
-- [ ] **DBG-005:** Implement monitor-mode restrictions and generated PABT/DABT,
+- [x] **DBG-005:** Implement monitor-mode restrictions and generated PABT/DABT,
   including `DbgAbt` and external ABORT precedence.
+  `tb/integration/arm7tdmis_debug_monitor_mode_tb.sv` programs the mode and
+  comparators through public JTAG, covers generated PABT/DABT without halt or DBGACK,
+  ignores external DBGBREAK, reads CP14 c2, and covers external instruction/data abort
+  priority. `tb/unit/ice_watchpoint_tb.sv` covers Debug Control bit 5, permitted
+  `DBGEXT` qualification, and fail-closed data-dependent, RANGE, and CHAIN
+  configurations.
 - [ ] **DBG-006:** Replace the fixed eight-cycle injection window with an explicit
   instruction accepted/retired handshake. Debug-speed and system-speed execution must
   support wait states and every allowed multicycle instruction, including 16-register
@@ -2630,7 +2640,7 @@ number of cycles spent in an internal FSM state.
   FPGA debug-port wrapper with a different, explicit interface name. DBGEN gating is
   fail-hard verified by `tb/integration/arm7tdmis_debug_dbgen_gating_tb.sv`; the
   synchronization/wrapper half remains open.
-- [ ] **JTAG-005:** Run end-to-end scan scripts that halt, read/write every register
+- [x] **JTAG-005:** Run end-to-end scan scripts that halt, read/write every register
   and memory through legal debug instructions, use a system-speed access with stalls,
   restart, exercise DCC both directions, set break/watchpoints, and enter monitor mode.
   The OpenOCD-compatible debug-speed LDM/STM round trip for r0-r14, including
@@ -2644,8 +2654,12 @@ number of cycles spent in an internal FSM state.
   OpenOCD-compatible CPSR/SPSR read/write and scan-bus isolation are covered by
   `tb/integration/arm7tdmis_debug_register_scan_tb.sv`. Bidirectional CP14/JTAG DCC,
   including rev-4 single-access status and public status pins, is covered by
-  `tb/integration/arm7tdmis_cp14_dcc_tb.sv`. Exception-coupled entry, the remaining
-  end-to-end operations, and debugger-process integration remain open.
+  `tb/integration/arm7tdmis_cp14_dcc_tb.sv`. Public-JTAG word, byte, and halfword
+  memory round trips plus a stalled system-speed transfer are covered by
+  `tb/integration/arm7tdmis_debug_system_speed_tb.sv`; public-JTAG monitor entry and
+  breakpoint/watchpoint programming are covered by
+  `tb/integration/arm7tdmis_debug_monitor_mode_tb.sv`. A real debugger process is the
+  separate `JTAG-006` requirement.
 - [ ] **JTAG-006:** Demonstrate a pinned open-source debugger/GDB flow against the
   simulated scan transport and on FPGA, or document precisely why the r4p3 scan
   protocol needs a project-specific bridge and release that bridge with protocol tests.

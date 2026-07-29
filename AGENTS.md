@@ -14,10 +14,11 @@ historical baseline table in §31.1 forward as current state. Substantial fixes 
 landed since that baseline, including fail-hard benches, architectural/abort/bus
 corrections, external-coprocessor protocols, removal of the fabricated internal CP15,
 conformant CP14 c0/c1 DCC ownership, and halt-mode scan execution. Known open
-categories still include monitor-mode/debug-abort coupling, a published synchronous
-FPGA debug transport, ETM-facing closure, differential/formal/coverage closure,
-synthesis/timing evidence, and MiSTer/PocketStation packaging. Consult each §31
-checkbox and its attached evidence before making a narrower claim.
+categories still include exact debug-pin sampling, a published synchronous FPGA
+debug transport, ETM-facing closure, differential/formal/coverage closure,
+synthesis/timing evidence, and MiSTer/PocketStation packaging. Monitor-mode
+PABT/DABT and CP14 Debug Abort Status coupling have end-to-end directed evidence.
+Consult each §31 checkbox and its attached evidence before making a narrower claim.
 
 Do not mark a feature complete because its module/decoder exists or because `make`
 returns zero. Use the VERIFIED definition and evidence gates in `TASKS.md` §31.
