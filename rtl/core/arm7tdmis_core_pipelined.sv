@@ -1553,7 +1553,7 @@ module arm7tdmis_core_pipelined
     //
     //   CPnMREQ : active LOW when this cycle is a memory access (TRANS=N|S)
     //   CPSEQ   : active HIGH when this cycle is sequential (TRANS=S)
-    //   CPnTRANS: active LOW when the access is a data access (not opcode)
+    //   CPnTRANS: LOW in User mode, HIGH in privileged modes
     //   CPnOPC  : active LOW when the access is an opcode fetch
     //   CPTBIT  : current CPSR.T (state of the executing instruction stream)
     //   CPnI    : active LOW when the executing instruction is a CP op
@@ -1565,10 +1565,10 @@ module arm7tdmis_core_pipelined
 
     assign CPnMREQ = !trans_is_active;
     assign CPSEQ   =  trans_is_seq;
-    assign CPnTRANS = !PROT[PROT_BIT_DATA];   // PROT[0]=0 opcode → CPnTRANS=1
+    assign CPnTRANS = is_priv;
     assign CPnOPC   =  PROT[PROT_BIT_DATA];   // mirror — opcode fetch → CPnOPC=0
     assign CPTBIT   = cpsr.t;
-    assign CPnI     = !(executing && instr_is_cp);
+    assign CPnI     = !(passes_cond && instr_is_cp);
 
     // =====================================================================
     // §24: ETM-facing pipeline-state outputs
