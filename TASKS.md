@@ -2852,9 +2852,17 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   `CPU_CE`. The integration regression completes the first response while CE
   is low, then randomizes both CE and memory waits while checking full-payload
   stability, exact handshake accounting, and architectural readback.
-- [ ] **MIST-003:** Define reset and CDC ownership. Synchronize asynchronous board/
+- [x] **MIST-003:** Define reset and CDC ownership. Synchronize asynchronous board/
   framework signals at the wrapper, keep architecturally synchronous nIRQ/nFIQ clear
   inside the CPU contract, and test reset/interrupt arrival at every phase.
+  `docs/INTEGRATION.md` assigns every boundary to `CLK` or an explicitly
+  named `_ASYNC` input. The wrapper uses marked two-flop synchronizers for
+  active-high IRQ/FIQ and all debug event/policy inputs, then converts only
+  the synchronized interrupt levels to raw active-low pins.
+  `tb/integration/arm7tdmis_mister_cdc_reset_tb.sv` injects IRQ/FIQ during
+  normal execution, an unready request, and a response buffered with CE low;
+  it also asynchronously resets a live request and requires a clean vector-0
+  restart.
 - [ ] **MIST-004:** Parameterize little/big endian and optional debug/coprocessor
   features without changing architectural behavior or leaving floating ports. Compile
   and regress every supported parameter combination.

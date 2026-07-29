@@ -131,6 +131,12 @@ test checks request stability and exact handshake count, accepts a response
 while CE is stopped, verifies code/data and N/S metadata, and performs
 word/byte/halfword writes plus readback.
 
+`make -C scripts integ-mister_cdc_reset` delivers asynchronous IRQ/FIQ levels
+during normal execution, a held request, and a buffered response, then checks
+the architectural handlers. It also asserts reset in the middle of an
+outstanding request, requires immediate cancellation, and proves a clean
+reset-vector restart.
+
 The following are intentionally not claimed by this version of the wrapper:
 
 - save-state export/import or quiescent snapshot;

@@ -85,17 +85,41 @@ module arm7tdmi_mister
     // Board/framework event synchronization
     // ------------------------------------------------------------------
 
+    (* ASYNC_REG = "TRUE",
+       altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
     logic irq_meta_q;
+    (* ASYNC_REG = "TRUE",
+       altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
     logic irq_sync_q;
+    (* ASYNC_REG = "TRUE",
+       altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
     logic fiq_meta_q;
+    (* ASYNC_REG = "TRUE",
+       altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
     logic fiq_sync_q;
+    (* ASYNC_REG = "TRUE",
+       altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
     logic debug_enable_meta_q;
+    (* ASYNC_REG = "TRUE",
+       altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
     logic debug_enable_sync_q;
+    (* ASYNC_REG = "TRUE",
+       altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
     logic dbgrq_meta_q;
+    (* ASYNC_REG = "TRUE",
+       altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
     logic dbgrq_sync_q;
+    (* ASYNC_REG = "TRUE",
+       altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
     logic dbgbreak_meta_q;
+    (* ASYNC_REG = "TRUE",
+       altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
     logic dbgbreak_sync_q;
+    (* ASYNC_REG = "TRUE",
+       altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
     logic [1:0] dbgext_meta_q;
+    (* ASYNC_REG = "TRUE",
+       altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
     logic [1:0] dbgext_sync_q;
 
     always_ff @(posedge CLK or negedge RESET_N) begin
