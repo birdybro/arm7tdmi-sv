@@ -251,7 +251,6 @@ module arm7tdmis_core_pipelined
     logic [31:0] fetch_pc_q;
     logic [31:0] inflight_pc_q;
     logic        inflight_valid_q;
-    logic        load_pc_refill_first_q;
     logic        block_pc_refill_first_q;
     fd_t         fd_q;
 
@@ -291,7 +290,6 @@ module arm7tdmis_core_pipelined
     wire issue_fetch   = !dbg_inject_active
                        && !flush && (state_next == S_EXEC)
                        && !cp_ls_data_state
-                       && !block_pc_internal_phase
                        && !cp_wait_debug_pending;
     wire latch_into_fd = !dbg_inject_active
                        && !flush && !e_busy && inflight_valid_q;
@@ -465,7 +463,6 @@ module arm7tdmis_core_pipelined
     logic         ls_load_q;
     logic [1:0]   ls_addr_lo_q;
     logic [31:0]  memory_instr_pc_q;
-    logic         memory_instr_thumb_q;
 
     logic [15:0]  block_remaining_q;
     logic [31:0]  block_curr_addr_q;
@@ -1372,25 +1369,6 @@ module arm7tdmis_core_pipelined
                             ? (de_q.pc + (de_q.thumb ? 32'd2 : 32'd4))
                             : (de_q.pc + 32'd4);
 
-    // Table 7-16 cycle 1 retains the source state and advertises pc+2i.
-    // "pc" is the faulting instruction for synchronous/PABT entry, the
-    // first unexecuted instruction for IRQ/FIQ, and the instruction after
-    // the faulting transfer for DABT.  A busy coprocessor request retains
-    // its own PC after Decode has advanced.  The DABT->FIQ interlock starts
-    // from the unexecuted DABT vector instruction at 0x10.
-    wire [31:0] exception_cycle1_source_pc =
-        fiq_interlock_fires      ? 32'h0000_0010
-      : dabt_fires               ? memory_instr_pc_q
-      : cp_wait_interrupt_fires  ? cp_instr_pc_q
-                                  : de_q.pc;
-    wire [31:0] exception_cycle1_addr =
-        fiq_interlock_fires
-        ? 32'h0000_0018
-        : exception_cycle1_source_pc
-          + (dabt_fires
-             ? (cpsr.t ? 32'd6 : 32'd12)
-             : (cpsr.t ? 32'd4 : 32'd8));
-
     always_ff @(posedge CLK) begin
         if (!nRESET) begin
             debug_irq_pending_q <= 1'b0;
@@ -1811,23 +1789,19 @@ module arm7tdmis_core_pipelined
 
     assign flush           = writes_pc_exec || ddata_writes_pc || block_writes_pc;
 
-    // §18 branch fast-path: branches/BX/DP-to-PC trigger their flush during
-    // an S_EXEC cycle, where the bus is otherwise wasted on a prefetch that
-    // will be discarded. Instead, drive ADDR = flush_target_pc with TRANS=S
-    // on that same cycle and capture it as the inflight prefetch — closes a
-    // 1-cycle bubble and brings these to TRM 2S+1N=3 cycles total. Excluded:
-    // exception entry (any_exc_fires) keeps the existing timing because the
-    // TRM entry sequence saves PC/SPSR + drives the vector, with cycle
-    // counts that don't trivially align with a single-cycle fast-flush.
-    // Also excluded: ddata_writes_pc (LDR Rd=PC, TRM 2S+2N+1I, the loaded
-    // value isn't bus-stable in time) and block_writes_pc (LDM with PC).
-    wire early_flush_fetch = writes_pc_exec && !any_exc_fires;
-    wire early_flush_t = pc_exec_target_t;
+    // Tables 7-3/7-5/7-6/7-11/7-16: the cycle that commits a direct PC
+    // redirect advertises the target as N and captures it as the first
+    // refill request. LDM-to-PC is the exception: its last data response
+    // still advertises pc+3i/I, so S_BLOCK_WB issues target/N one cycle
+    // later.
+    wire early_flush_fetch = writes_pc_exec || ddata_writes_pc;
+    wire early_flush_t = ddata_writes_pc ? cpsr.t : pc_exec_target_t;
     // A data-processing exception return restores CPSR at the same edge
     // that captures this fast-path address. Classify that target fetch
     // using the restored mode, rather than the still-live handler mode.
     // Branches, BX, and ordinary DP writes retain the current privilege.
-    wire early_flush_priv = dp_pc_restores_state
+    wire early_flush_priv = any_exc_fires ? 1'b1
+                          : dp_pc_restores_state
                           ? mode_is_privileged(spsr_value.m)
                           : mode_is_privileged(cpsr.m);
     wire block_pc_target_t = (block_ldm_pc_restore && spsr_valid)
@@ -1840,19 +1814,12 @@ module arm7tdmis_core_pipelined
                            : block_writes_pc ? block_pc_target
                                              : pc_target_exec;
 
-    // LDR/LDM-to-PC each have one address-only N phase at source pc+3i
-    // after the loaded target invalidates the pipeline (Tables 7-11/7-13).
-    // Retain the redirect across that phase; the following S_EXEC cycle
-    // can then issue the first target opcode as S.
+    // LDM-to-PC defers target/N until S_BLOCK_WB. LDR-to-PC can issue
+    // target/N on its S_LOAD_WB redirect edge and needs no retained phase.
     always_ff @(posedge CLK) begin
         if (!nRESET || dbg_pc_write) begin
-            load_pc_refill_first_q  <= 1'b0;
             block_pc_refill_first_q <= 1'b0;
         end else if (CLKEN) begin
-            if (ddata_writes_pc)
-                load_pc_refill_first_q <= 1'b1;
-            else if (load_pc_refill_first_q && issue_fetch)
-                load_pc_refill_first_q <= 1'b0;
             if (block_writes_pc)
                 block_pc_refill_first_q <= 1'b1;
             else if (block_pc_refill_first_q && issue_fetch)
@@ -1899,7 +1866,6 @@ module arm7tdmis_core_pipelined
                 ls_load_q           <= 1'b0;
                 ls_addr_lo_q        <= 2'h0;
                 memory_instr_pc_q   <= 32'h0;
-                memory_instr_thumb_q <= 1'b0;
                 block_remaining_q   <= 16'h0;
                 block_curr_addr_q   <= 32'h0;
                 block_curr_reg_q    <= 4'h0;
@@ -2021,7 +1987,6 @@ module arm7tdmis_core_pipelined
                         || swp_take_cycle || external_cp_is_ldc
                         || external_cp_is_stc)) begin
                     memory_instr_pc_q <= de_q.pc;
-                    memory_instr_thumb_q <= de_q.thumb;
                 end
 
                 // LDM/STM snapshot + iteration start. The first beat's
@@ -2177,112 +2142,6 @@ module arm7tdmis_core_pipelined
     // Helper: fetch size based on T-bit. Used in many places below.
     wire [1:0] fetch_size_w = cpsr.t ? 2'(SIZE_HALFWORD) : 2'(SIZE_WORD);
 
-    // The address phase for an instruction's pc+2i prefetch is emitted one
-    // cycle before that instruction reaches Execute. Decode the instruction
-    // that will execute after the next enabled edge so taken PC writes can
-    // advertise the Table 7-3/7-5/7-6/7-11/7-13 source N (or I for a
-    // register-controlled shift). On the final cycle of a multicycle
-    // instruction, de_q already holds that successor; in ordinary S_EXEC,
-    // fd_q is the successor that will advance into de_q.
-    wire source_uses_fd = (state_q == S_EXEC);
-    instr_class_e source_class_w;
-    cond_e        source_cond_w;
-    logic [3:0]   source_rd_w;
-    logic         source_is_test_op_w;
-    logic         source_shifter_use_rs_w;
-    logic         source_ls_load_w;
-    logic         source_block_load_w;
-    logic         source_block_has_pc_w;
-    assign source_class_w = source_uses_fd
-                          ? dec_w.instr_class : de_q.dec.instr_class;
-    assign source_cond_w = source_uses_fd ? dec_w.cond : de_q.dec.cond;
-    assign source_rd_w = source_uses_fd ? dec_w.rd : de_q.dec.rd;
-    assign source_is_test_op_w = source_uses_fd
-                               ? dec_w.is_test_op : de_q.dec.is_test_op;
-    assign source_shifter_use_rs_w = source_uses_fd
-                                   ? dec_w.shifter_use_rs
-                                   : de_q.dec.shifter_use_rs;
-    assign source_ls_load_w = source_uses_fd
-                            ? dec_w.ls_load : de_q.dec.ls_load;
-    assign source_block_load_w = source_uses_fd
-                               ? dec_w.block_load : de_q.dec.block_load;
-    assign source_block_has_pc_w = source_uses_fd
-                                 ? dec_w.block_reg_list[15]
-                                 : de_q.dec.block_reg_list[15];
-    wire source_valid_w = issue_fetch
-                        && (source_uses_fd ? fd_q.valid : de_q.valid);
-    wire source_unimplemented_w = source_uses_fd
-                                ? dec_is_unimplemented_w
-                                : dec_is_unimplemented_q;
-
-    // A condition check in Decode must see flags committed by the current
-    // instruction on the intervening edge. This is observable when, for
-    // example, CMP is immediately followed by a conditional branch. Mirror
-    // the PSR block's flag-write priority for the look-ahead evaluator.
-    wire source_restore_mode_valid =
-           (spsr_value.m == 5'(MODE_USER))
-        || (spsr_value.m == 5'(MODE_FIQ))
-        || (spsr_value.m == 5'(MODE_IRQ))
-        || (spsr_value.m == 5'(MODE_SUPERVISOR))
-        || (spsr_value.m == 5'(MODE_ABORT))
-        || (spsr_value.m == 5'(MODE_UNDEFINED))
-        || (spsr_value.m == 5'(MODE_SYSTEM));
-    logic source_n_w;
-    logic source_z_w;
-    logic source_c_w;
-    logic source_v_w;
-    always_comb begin
-        {source_n_w, source_z_w, source_c_w, source_v_w} =
-            {cpsr.n, cpsr.z, cpsr.c, cpsr.v};
-        if (cpsr_write_en && cpsr_write_mask[3])
-            {source_n_w, source_z_w, source_c_w, source_v_w} =
-                cpsr_write_data[31:28];
-        if (cpsr_restore_now && spsr_valid && source_restore_mode_valid)
-            {source_n_w, source_z_w, source_c_w, source_v_w} =
-                {spsr_value.n, spsr_value.z, spsr_value.c, spsr_value.v};
-        if (exc_enter_en)
-            {source_n_w, source_z_w, source_c_w, source_v_w} =
-                {exc_new_cpsr.n, exc_new_cpsr.z,
-                 exc_new_cpsr.c, exc_new_cpsr.v};
-    end
-
-    logic source_condition_pass_w;
-    logic source_cond_is_nv_w;
-    arm7tdmis_condition u_source_cond (
-        .cond           (source_cond_w),
-        .n_flag         (source_n_w),
-        .z_flag         (source_z_w),
-        .c_flag         (source_c_w),
-        .v_flag         (source_v_w),
-        .condition_pass (source_condition_pass_w),
-        .cond_is_nv     (source_cond_is_nv_w)
-    );
-
-    wire source_is_dp_pc = (source_class_w == INSTR_DP)
-                         && !source_is_test_op_w
-                         && (source_rd_w == 4'd15);
-    wire source_is_branch_pc =
-           (source_class_w == INSTR_BRANCH)
-        || (source_class_w == INSTR_BX);
-    wire source_is_load_pc =
-           ((source_class_w == INSTR_LDR_STR)
-            || (source_class_w == INSTR_LDRH_STRH))
-        && source_ls_load_w
-        && (source_rd_w == 4'd15);
-    wire source_is_block_pc =
-           (source_class_w == INSTR_LDM_STM)
-        && source_block_load_w
-        && source_block_has_pc_w;
-    wire source_redirect_w = source_valid_w
-                           && source_condition_pass_w
-                           && !source_cond_is_nv_w
-                           && !source_unimplemented_w
-                           && (source_is_dp_pc || source_is_branch_pc
-                               || source_is_load_pc || source_is_block_pc);
-    wire source_redirect_shift_w = source_redirect_w
-                                 && source_is_dp_pc
-                                 && source_shifter_use_rs_w;
-
     // §3.3 / BUS-005: classify a fetch from the address-class phase that
     // actually preceded it. A sequential transfer either continues an
     // active same-control word/halfword burst at +4/+2, or commits a merged
@@ -2315,11 +2174,11 @@ module arm7tdmis_core_pipelined
     wire [1:0] fetch_trans_w = (fetch_continues_burst
                               || fetch_commits_merged_is)
                              ? 2'(TRANS_S) : 2'(TRANS_N);
-    wire [1:0] source_fetch_trans_w = source_redirect_shift_w
-                                    ? 2'(TRANS_I)
-                                    : source_redirect_w
-                                      ? 2'(TRANS_N)
-                                      : fetch_trans_w;
+    // The incoming pc+2i opcode response was requested by the preceding
+    // instruction's ordinary fetch burst. Redirect classification begins
+    // only when the redirect executes; no Decode-stage look-ahead may
+    // retroactively relabel that already-issued prefetch.
+    wire [1:0] source_fetch_trans_w = fetch_trans_w;
 
     // Capture only enabled address-class phases. A redirect without an
     // overlapped target fetch invalidates the old advertised address even
@@ -2540,17 +2399,14 @@ module arm7tdmis_core_pipelined
             end
             S_BLOCK_WB: begin
                 if (block_pc_internal_phase) begin
-                    // Table 7-13 PC destination, n+2: keep the source
-                    // instruction width/mode and advertise pc+3i as an
-                    // address-only data-class N cycle. The target fetch is
-                    // intentionally deferred to the next S_EXEC cycle.
-                    ADDR  = memory_instr_pc_q
-                          + (memory_instr_thumb_q ? 32'd6 : 32'd12);
+                    // Table 7-13 PC destination, n+2: the preceding last
+                    // data-response cycle advertised source pc+3i/I.
+                    // This writeback cycle starts the refill at target/N.
+                    ADDR  = fetch_pc_q;
                     TRANS = 2'(TRANS_N);
                     WRITE = WRITE_READ;
-                    SIZE  = memory_instr_thumb_q
-                          ? 2'(SIZE_HALFWORD) : 2'(SIZE_WORD);
-                    PROT  = {mode_is_privileged(block_mode_q), 1'b1};
+                    SIZE  = fetch_size_w;
+                    PROT  = {is_priv, 1'b0};
                 end else begin
                     // §17: ordinary LDM Rn writeback cycle. The actual
                     // writeback happens via the regfile mux below; overlap
@@ -2571,15 +2427,14 @@ module arm7tdmis_core_pipelined
             end
             S_LOAD_WB: begin
                 if (ddata_writes_pc) begin
-                    // Table 7-11 destination=pc, cycle 3: advertise the
-                    // source pc+12 as an address-only data-class N cycle.
-                    // Its response is discarded while the redirected
-                    // opcode stream starts on the following cycle.
-                    ADDR  = memory_instr_pc_q + 32'd12;
+                    // Table 7-11 destination=pc, cycle 3: pc+12/I was
+                    // advertised with the load response. Start the
+                    // redirected opcode stream at target/N now.
+                    ADDR  = flush_target_pc;
                     TRANS = 2'(TRANS_N);
                     WRITE = WRITE_READ;
-                    SIZE  = 2'(SIZE_WORD);
-                    PROT  = {is_priv, 1'b1};
+                    SIZE  = fetch_size_w;
+                    PROT  = {is_priv, 1'b0};
                 end else begin
                     // Ordinary LDR writeback I cycle. Bus drives the next
                     // instruction fetch started during S_DDATA.
@@ -2669,60 +2524,26 @@ module arm7tdmis_core_pipelined
             default: ;
         endcase
 
-        // §18 branch fast-path: when a branch/BX/DP-to-PC fires its flush
-        // in a prefetch-driving substate (S_EXEC or S_DP_SHIFT), override
-        // the wasted prefetch with the architecturally specified S fetch
-        // of the target. The preceding discarded source prefetch was
-        // classified N (I for shift(Rs)) by source_fetch_trans_w.
-        // Memory captures at this posedge → RDATA next cycle, saving the
-        // 1-cycle bubble that would otherwise re-issue from fetch_pc_q.
-        // Excluded for any_exc_fires and for ddata/block PC writes — their
-        // bus sequences are different (see comment at flush definition).
+        // Direct redirects advertise target/N in their commit cycle. The
+        // following target+i and target+2i phases are ordinary S burst
+        // continuations. LDM-to-PC is deferred to S_BLOCK_WB above.
         if (early_flush_fetch) begin
             ADDR  = flush_target_pc;
-            TRANS = 2'(TRANS_S);
+            TRANS = 2'(TRANS_N);
             SIZE  = early_flush_t ? 2'(SIZE_HALFWORD) : 2'(SIZE_WORD);
             PROT  = {early_flush_priv, 1'b0};
             WRITE = WRITE_READ;
         end
 
-        // Table 7-13 PC destination, n+3: after the source pc+3i N phase
-        // above, begin the redirected opcode stream with an explicit S.
-        // F captures this transfer normally; bus history then produces an
-        // S continuation for target+i.
-        if (block_pc_refill_first_q && !block_pc_internal_phase
-            && issue_fetch) begin
-            ADDR  = fetch_pc_q;
-            TRANS = 2'(TRANS_S);
-            SIZE  = fetch_size_w;
-            PROT  = {is_priv, 1'b0};
-            WRITE = WRITE_READ;
-            LOCK  = LOCK_FREE;
-        end
-
-        // Table 7-11 destination=pc, cycle 4: the discarded source pc+12
-        // phase is followed by an explicit S fetch of the loaded target.
-        if (load_pc_refill_first_q && issue_fetch) begin
-            ADDR  = fetch_pc_q;
-            TRANS = 2'(TRANS_S);
-            SIZE  = fetch_size_w;
-            PROT  = {is_priv, 1'b0};
-            WRITE = WRITE_READ;
-            LOCK  = LOCK_FREE;
-        end
-
         // TRM Table 7-16 exception entry is a special three-cycle bus
-        // sequence.  Cycle 1 remains in the old state and advertises
-        // pc+2i as N even though its returned opcode is discarded.
-        // Cycle 2 is the architecturally specified merged S fetch of Xn;
-        // recording that phase in bus history naturally makes Xn+4 S in
-        // cycle 3.  This explicit exception rule is the one allowed
-        // discontinuity from ordinary address-history burst inference.
+        // sequence. Cycle 1 returns the discarded old-state pc+2i opcode
+        // while already advertising vector/N with new-state address
+        // controls. Cycles 2/3 advertise vector+4/vector+8 as S.
         if (any_exc_fires) begin
-            ADDR  = exception_cycle1_addr;
+            ADDR  = exc_pc_target_addr;
             WRITE = WRITE_READ;
-            SIZE  = fetch_size_w;
-            PROT  = {is_priv, 1'b0};
+            SIZE  = 2'(SIZE_WORD);
+            PROT  = 2'(PROT_OPC_PRIV);
             LOCK  = LOCK_FREE;
             TRANS = 2'(TRANS_N);
         end else if (exception_vector_first_q && issue_fetch) begin
