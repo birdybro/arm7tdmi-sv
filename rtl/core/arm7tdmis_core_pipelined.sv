@@ -176,6 +176,7 @@ module arm7tdmis_core_pipelined
     logic [3:0]  cp_ls_rn_q;
     logic        cp_ls_writeback_q;
     logic        cp_ls_first_q;
+    logic        cp_ls_response_q;
 
     // =====================================================================
     // F stage
@@ -208,6 +209,10 @@ module arm7tdmis_core_pipelined
     // normal S_EXEC cycle following it restarts instruction prefetch.
     wire cp_ls_data_state = ((state_q == S_CP_MCR_DATA) && cp_wait_is_stc_q)
                           || ((state_q == S_CP_MRC_DATA) && cp_wait_is_ldc_q);
+    wire cp_ls_cleanup_state = (state_q == S_CP_MRC_WB)
+                             && (cp_wait_is_ldc_q || cp_wait_is_stc_q);
+    wire cp_mrc_wb_state = (state_q == S_CP_MRC_WB)
+                         && !cp_ls_cleanup_state;
     wire issue_fetch   = !flush && (state_next == S_EXEC)
                        && !cp_ls_data_state;
     wire latch_into_fd = !flush && !e_busy && inflight_valid_q;
@@ -815,11 +820,11 @@ module arm7tdmis_core_pipelined
                                      : cp_wait_is_ldc_q ? S_CP_MRC_DATA
                                                        : S_EXEC;
             S_CP_MCR_DATA: state_next = cp_wait_is_stc_q
-                                      ? (cp_ls_final ? S_EXEC
+                                      ? (cp_ls_final ? S_CP_MRC_WB
                                                      : S_CP_MCR_DATA)
                                       : S_EXEC;
             S_CP_MRC_DATA: state_next = cp_wait_is_ldc_q
-                                      ? (cp_ls_final ? S_EXEC
+                                      ? (cp_ls_final ? S_CP_MRC_WB
                                                      : S_CP_MRC_DATA)
                                       : S_CP_MRC_WB;
             S_CP_MRC_WB:   state_next = S_EXEC;
@@ -975,13 +980,19 @@ module arm7tdmis_core_pipelined
     wire swi_fires   = swi_pending && !fiq_pending && !irq_pending
                     && !pabt_pending && !undef_pending;
 
-    // §17: data abort fires when ABORT is asserted during the active data
-    // cycle of an LDR/STR/LDM/STM/SWP. Latched so the exception can be
-    // raised at the boundary back to S_EXEC.
+    // §17/§31.6: data abort fires when ABORT is asserted during the active
+    // response cycle of an LDR/STR/LDM/STM/SWP/LDC/STC. CP load/store
+    // address phases are pipelined, so cp_ls_response_q distinguishes a
+    // returned data response from the accepted instruction's preceding N
+    // opcode cycle. Latched so the exception can be raised only after a
+    // variable-length transfer reaches its coprocessor-selected final word.
     wire data_abort_now = CLKEN && ABORT && ((state_q == S_DDATA)
                                            || (state_q == S_BLOCK_DATA)
                                            || (state_q == S_SWP_RDATA)
-                                           || (state_q == S_SWP_WDATA));
+                                           || (state_q == S_SWP_WDATA)
+                                           || (cp_ls_response_q
+                                               && (cp_ls_data_state
+                                                   || cp_ls_cleanup_state)));
 
     logic data_abort_q;
     always_ff @(posedge CLK) begin
@@ -1232,7 +1243,7 @@ module arm7tdmis_core_pipelined
             rf_write_addr = cp_ls_rn_q;
             rf_write_data = cp_ls_writeback_value_q;
             rf_write_en   = 1'b1;
-        end else if (state_q == S_CP_MRC_WB) begin
+        end else if (cp_mrc_wb_state) begin
             rf_write_addr = cp_mrc_rd_q;
             rf_write_data = cp_mrc_data_q;
             // Rd=r15 is the MRC flags form. It updates CPSR.NZCV below
@@ -1311,7 +1322,7 @@ module arm7tdmis_core_pipelined
 
     wire        flags_from_mul       = mul_writes_flags;
     wire        flags_from_dp_shift  = (state_q == S_DP_SHIFT) && dp_shift_flags_we_q;
-    wire        flags_from_cp_mrc    = (state_q == S_CP_MRC_WB)
+    wire        flags_from_cp_mrc    = cp_mrc_wb_state
                                      && (cp_mrc_rd_q == 4'd15);
     wire        flags_from_cp14_mrc  = cp14_mrc_fires && (dec.rd == 4'd15);
     wire [3:0]  flags_value          = flags_from_mul
@@ -1427,8 +1438,13 @@ module arm7tdmis_core_pipelined
                 cp_ls_rn_q               <= 4'h0;
                 cp_ls_writeback_q        <= 1'b0;
                 cp_ls_first_q            <= 1'b0;
+                cp_ls_response_q         <= 1'b0;
         end else if (CLKEN) begin
                 state_q <= state_next;
+                // Each LDC/STC address phase returns one enabled cycle
+                // later. This stays asserted across back-to-back words
+                // and into the terminal response/cleanup cycle.
+                cp_ls_response_q <= cp_ls_data_state;
 
                 // Snapshot an external CP request before the normal
                 // pipeline advances at the end of S_EXEC. Busy requests
@@ -1480,7 +1496,8 @@ module arm7tdmis_core_pipelined
                 // substate for exact Data Abort LR generation.
                 if (state_q == S_EXEC
                     && (ls_take_data_cycle || block_take_cycle
-                        || swp_take_cycle)) begin
+                        || swp_take_cycle || external_cp_is_ldc
+                        || external_cp_is_stc)) begin
                     memory_instr_pc_q <= de_q.pc;
                 end
 
@@ -1926,13 +1943,24 @@ module arm7tdmis_core_pipelined
                 end
             end
             S_CP_MRC_WB: begin
-                // Write the latched CP word to Rd while completing the
-                // merged following fetch.
-                ADDR  = fetch_pc_q;
-                WRITE = WRITE_READ;
-                SIZE  = 2'(SIZE_WORD);
-                PROT  = {is_priv, 1'b1};
-                TRANS = 2'(TRANS_S);
+                if (cp_ls_cleanup_state) begin
+                    // The final LDC/STC response is visible here. Start
+                    // the next opcode fetch only if it did not abort.
+                    ADDR  = fetch_pc_q;
+                    WRITE = WRITE_READ;
+                    SIZE  = fetch_size_w;
+                    PROT  = {is_priv, 1'b0};
+                    TRANS = (flush || !issue_fetch)
+                          ? 2'(TRANS_I) : fetch_trans_w;
+                end else begin
+                    // Write the latched MRC word to Rd while completing
+                    // the merged following fetch.
+                    ADDR  = fetch_pc_q;
+                    WRITE = WRITE_READ;
+                    SIZE  = 2'(SIZE_WORD);
+                    PROT  = {is_priv, 1'b1};
+                    TRANS = 2'(TRANS_S);
+                end
             end
             default: ;
         endcase
