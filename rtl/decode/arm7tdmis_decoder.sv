@@ -132,6 +132,36 @@ module arm7tdmis_decoder
             default: c = INSTR_UNDEF;
         endcase
 
+        // ARMv4T assigns several single-transfer register combinations
+        // UNPREDICTABLE behavior.  This implementation gives every
+        // statically detectable case one deterministic outcome: a precise
+        // Undefined-instruction trap before any data cycle is issued.
+        //
+        // Post-indexed transfers always write the base; pre-indexed
+        // transfers write it only when W=1.  Rm is an operand only in the
+        // register-offset form (I=1 for mode 2, I=0 for mode 3).
+        if (c == INSTR_LDR_STR) begin
+            if (((!instr[24] || instr[21])
+              && ((instr[19:16] == instr[15:12])
+               || (instr[19:16] == 4'hF)))
+             || (instr[25]
+              && ((instr[3:0] == 4'hF)
+               || ((!instr[24] || instr[21])
+                && (instr[19:16] == instr[3:0]))))
+             || (instr[22] && (instr[15:12] == 4'hF)))
+                c = INSTR_UNDEF;
+        end else if (c == INSTR_LDRH_STRH) begin
+            if ((instr[15:12] == 4'hF)
+             || ((!instr[24] || instr[21])
+              && ((instr[19:16] == instr[15:12])
+               || (instr[19:16] == 4'hF)))
+             || (!instr[22]
+              && ((instr[3:0] == 4'hF)
+               || ((!instr[24] || instr[21])
+                && (instr[19:16] == instr[3:0])))))
+                c = INSTR_UNDEF;
+        end
+
         // ARMv4 defines cond=1111 as UNPREDICTABLE. ARMv5+ reuses it for
         // unconditional extensions, none of which exist on ARM7TDMI-S.
         // The selected deterministic policy is a precise Undefined trap.
@@ -219,7 +249,9 @@ module arm7tdmis_decoder
                 dec.shifter_amount = instr[4] ? 8'h00
                                               : {3'h0, instr[11:7]};
             // ROR #0 (imm-shift) is encoded as RRX.
-            dec.shifter_is_rrx  = (instr[27:25] == 3'b000) && (instr[4] == 1'b0)
+            dec.shifter_is_rrx  = ((instr[27:25] == 3'b000)
+                                || (instr[27:25] == 3'b011))
+                                && (instr[4] == 1'b0)
                                 && (instr[6:5] == 2'b11) && (instr[11:7] == 5'b00000);
             dec.shifter_use_rs  = (instr[27:25] == 3'b000) && (instr[4] == 1'b1)
                                 && (instr[7] == 1'b0);

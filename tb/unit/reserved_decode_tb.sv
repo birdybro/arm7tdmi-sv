@@ -159,6 +159,14 @@ module reserved_decode_tb
                     word[11:4] = 8'h00;
             end
             INSTR_BX: word[19:8] = 12'hFFF;
+            INSTR_LDR_STR, INSTR_LDRH_STRH: begin
+                // Avoid the transfer aliases covered by the separate
+                // ISA-016 policy test: distinct, non-PC Rn/Rd/Rm values
+                // keep this test focused on the architectural decode map.
+                word[19:16] = 4'd1;
+                word[15:12] = 4'd2;
+                word[3:0]   = 4'd3;
+            end
             default: ;
         endcase
 
