@@ -90,17 +90,26 @@ module arm7tdmis_debug_inject_matrix_tb
     int unsigned errors = 0;
     int unsigned accept_count;
     int unsigned retire_count;
+    int unsigned trace_valid_count;
+    int unsigned trace_executed_count;
     logic [37:0] ignored_scan;
 
     always_ff @(posedge CLK) begin
         if (!nRESET) begin
             accept_count <= 0;
             retire_count <= 0;
+            trace_valid_count <= 0;
+            trace_executed_count <= 0;
         end else begin
             if (u_dut.dbg_inject_accept)
                 accept_count <= accept_count + 1;
             if (u_dut.dbg_inject_retire)
                 retire_count <= retire_count + 1;
+            if (DBGINSTRVALID) begin
+                trace_valid_count <= trace_valid_count + 1;
+                if (!DBGnEXEC)
+                    trace_executed_count <= trace_executed_count + 1;
+            end
         end
     end
 
@@ -199,12 +208,23 @@ module arm7tdmis_debug_inject_matrix_tb
     );
         int unsigned accept_before;
         int unsigned retire_before;
+        int unsigned trace_valid_before;
+        int unsigned trace_executed_before;
 
         accept_before = accept_count;
         retire_before = retire_count;
+        trace_valid_before = trace_valid_count;
+        trace_executed_before = trace_executed_count;
         scan_instruction(instruction);
         wait_for_refreeze(description);
         check_one_handshake(accept_before, retire_before, description);
+        if (trace_valid_count != (trace_valid_before + 1)
+            || trace_executed_count != (trace_executed_before + 1))
+            fail($sformatf(
+                "%s ETM pulses valid/executed expected %0d/%0d got %0d/%0d",
+                description, trace_valid_before + 1,
+                trace_executed_before + 1, trace_valid_count,
+                trace_executed_count));
     endtask
 
     task automatic inject_memory_stalled(
@@ -213,6 +233,8 @@ module arm7tdmis_debug_inject_matrix_tb
     );
         int unsigned accept_before;
         int unsigned retire_before;
+        int unsigned trace_valid_before;
+        int unsigned trace_executed_before;
         logic [31:0] held_addr, held_wdata;
         logic held_write, held_lock;
         logic [1:0] held_size, held_prot, held_trans;
@@ -220,6 +242,8 @@ module arm7tdmis_debug_inject_matrix_tb
 
         accept_before = accept_count;
         retire_before = retire_count;
+        trace_valid_before = trace_valid_count;
+        trace_executed_before = trace_executed_count;
         scan_instruction(instruction);
 
         // Stop before the active transfer's response edge. The address
@@ -260,6 +284,13 @@ module arm7tdmis_debug_inject_matrix_tb
 
         wait_for_refreeze(description);
         check_one_handshake(accept_before, retire_before, description);
+        if (trace_valid_count != (trace_valid_before + 1)
+            || trace_executed_count != (trace_executed_before + 1))
+            fail($sformatf(
+                "%s stalled ETM pulses valid/executed expected %0d/%0d got %0d/%0d",
+                description, trace_valid_before + 1,
+                trace_executed_before + 1, trace_valid_count,
+                trace_executed_count));
     endtask
 
     task automatic inject_internal_stalled(
@@ -269,10 +300,14 @@ module arm7tdmis_debug_inject_matrix_tb
     );
         int unsigned accept_before;
         int unsigned retire_before;
+        int unsigned trace_valid_before;
+        int unsigned trace_executed_before;
         bit state_seen;
 
         accept_before = accept_count;
         retire_before = retire_count;
+        trace_valid_before = trace_valid_count;
+        trace_executed_before = trace_executed_count;
         scan_instruction(instruction);
         state_seen = 1'b0;
         for (int i = 0; i < 100; i++) begin
@@ -301,6 +336,13 @@ module arm7tdmis_debug_inject_matrix_tb
         end
         wait_for_refreeze(description);
         check_one_handshake(accept_before, retire_before, description);
+        if (trace_valid_count != (trace_valid_before + 1)
+            || trace_executed_count != (trace_executed_before + 1))
+            fail($sformatf(
+                "%s internal-stall ETM pulses valid/executed expected %0d/%0d got %0d/%0d",
+                description, trace_valid_before + 1,
+                trace_executed_before + 1, trace_valid_count,
+                trace_executed_count));
     endtask
 
     function automatic logic [31:0] expected_dp_result(
