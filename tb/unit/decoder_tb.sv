@@ -153,15 +153,15 @@ module decoder_tb
         check_class("MLA r4,r1,r2,r3", INSTR_MUL);
         check_eq1("  mul_accumulate", dec.mul_accumulate, 1'b1);
 
-        // ---- UMULL r0, r1, r3, r2 → 0xE0C10293 ----
-        // cond=AL, 0000 1100 (bit23=1, U=1 unsigned, A=0, S=0)
+        // ---- UMULL r0, r1, r3, r2 → 0xE0810293 ----
+        // cond=AL, 0000 1000 (bit23=1, U=0 unsigned, A=0, S=0)
         // RdHi=1, RdLo=0, Rs=2, 1001, Rm=3
-        instr = 32'hE0C10293;
+        instr = 32'hE0810293;
         check_class("UMULL", INSTR_MULL);
         check_eq1("  mul_signed (UMULL)", dec.mul_signed, 1'b0);
 
-        // ---- SMLAL → 0xE0A10293 (bit23=1, U=0 signed, A=1, S=0 → 0000 1010) ----
-        instr = 32'hE0A10293;
+        // ---- SMLAL → 0xE0E10293 (bit23=1, U=1 signed, A=1, S=0 → 0000 1110) ----
+        instr = 32'hE0E10293;
         check_class("SMLAL", INSTR_MULL);
         check_eq1("  mul_signed (SMLAL)", dec.mul_signed, 1'b1);
         check_eq1("  mul_accumulate", dec.mul_accumulate, 1'b1);
