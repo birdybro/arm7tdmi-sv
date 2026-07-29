@@ -2863,9 +2863,15 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   normal execution, an unready request, and a response buffered with CE low;
   it also asynchronously resets a live request and requires a clean vector-0
   restart.
-- [ ] **MIST-004:** Parameterize little/big endian and optional debug/coprocessor
+- [x] **MIST-004:** Parameterize little/big endian and optional debug/coprocessor
   features without changing architectural behavior or leaving floating ports. Compile
   and regress every supported parameter combination.
+  `BIG_ENDIAN`, `ENABLE_DEBUG`, and `ENABLE_COPROCESSOR` are synthesis
+  parameters with deterministic internal tie-offs. One elaboration of
+  `tb/integration/arm7tdmis_mister_profiles_tb.sv` instantiates and executes
+  all eight combinations. It checks both external byte-lane maps, a complete
+  IDCODE scan versus disabled-debug isolation, and claimed versus
+  forced-absent external CDP behavior for each relevant profile.
 - [ ] **MIST-005:** Add complete `.qip`/file-list/QSF integration fragments and an
   example top that can be consumed without private include paths, hierarchical peeks,
   or hand-edited generated files.

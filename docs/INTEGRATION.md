@@ -137,6 +137,13 @@ the architectural handlers. It also asserts reset in the middle of an
 outstanding request, requires immediate cancellation, and proves a clean
 reset-vector restart.
 
+`make -C scripts integ-mister_profiles` elaborates all eight combinations of
+`BIG_ENDIAN`, `ENABLE_DEBUG`, and `ENABLE_COPROCESSOR` concurrently. Every
+profile executes the same program. The test distinguishes both byte-lane
+maps, proves disabled/live coprocessor claiming, and shifts the default
+IDCODE through every debug-enabled instance while requiring complete
+isolation from every trimmed instance.
+
 The following are intentionally not claimed by this version of the wrapper:
 
 - save-state export/import or quiescent snapshot;
