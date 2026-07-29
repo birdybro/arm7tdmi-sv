@@ -96,8 +96,11 @@ module ice_rt_tb
         .dcc_rx_full        (tb_dcc_rx_full),
         .tap_inject_we      (1'b0),
         .tap_inject_instr   (32'h0),
+        .core_inject_accept (1'b0),
+        .core_inject_retire (1'b0),
         .dbg_inject_we      (tb_inject_we),
-        .dbg_inject_instr   (tb_inject_instr)
+        .dbg_inject_instr   (tb_inject_instr),
+        .dbg_inject_active  (tb_inject_active)
     );
     logic [31:0] tb_dcc_rdata;
     logic [31:0] tb_dcc_control;
@@ -106,6 +109,7 @@ module ice_rt_tb
     logic        tb_dcc_rx_full;
     logic        tb_inject_we;
     logic [31:0] tb_inject_instr;
+    logic        tb_inject_active;
 
     int errors = 0;
 
@@ -228,6 +232,7 @@ module ice_rt_tb
                      core_halt, tb_dcc_rdata,
                      tb_dcc_control, tb_dbgabt_rdata, tb_dcc_tx_empty,
                      tb_dcc_rx_full, tb_inject_we, tb_inject_instr,
+                     tb_inject_active,
                      scan_raddr};
     /* verilator lint_on UNUSEDSIGNAL */
 

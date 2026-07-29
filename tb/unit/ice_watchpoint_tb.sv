@@ -70,6 +70,7 @@ module ice_watchpoint_tb;
     logic dcc_rx_full;
     logic dbg_inject_we;
     logic [31:0] dbg_inject_instr;
+    logic dbg_inject_active;
 
     arm7tdmis_ice_rt dut (
         .CLK,
@@ -103,8 +104,11 @@ module ice_watchpoint_tb;
         .dcc_rx_full,
         .tap_inject_we      (1'b0),
         .tap_inject_instr   (32'h0),
+        .core_inject_accept (1'b0),
+        .core_inject_retire (1'b0),
         .dbg_inject_we,
         .dbg_inject_instr,
+        .dbg_inject_active,
         .dbg_break_internal,
         .breakpoint_fetch,
         .dbg_ack,
@@ -374,6 +378,7 @@ module ice_watchpoint_tb;
         breakpoint_fetch,
         core_dcc_control, core_dcc_rdata, core_dbgabt_rdata,
         dcc_tx_empty, dcc_rx_full, dbg_inject_we, dbg_inject_instr,
+        dbg_inject_active,
         WP0_ADDR_MASK, WP0_DATA_VAL, WP0_DATA_MASK, WP0_CTRL_MASK,
         WP1_ADDR_MASK, WP1_DATA_VAL, WP1_DATA_MASK, WP1_CTRL_MASK};
     /* verilator lint_on UNUSEDSIGNAL */

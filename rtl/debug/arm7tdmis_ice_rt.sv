@@ -72,8 +72,11 @@ module arm7tdmis_ice_rt
     // injected instruction.
     input  logic        tap_inject_we,
     input  logic [31:0] tap_inject_instr,
+    input  logic        core_inject_accept,
+    input  logic        core_inject_retire,
     output logic        dbg_inject_we,
     output logic [31:0] dbg_inject_instr,
+    output logic        dbg_inject_active,
 
     // Outputs
     output logic        dbg_break_internal,
@@ -522,38 +525,32 @@ module arm7tdmis_ice_rt
     // back into the core's next-state decision.
     assign halt_request = (dbg_state_q == DBG_RUNNING) && dbgrqi;
 
-    // §22 scan-chain-1 inject runtime: when the TAP signals tap_inject_we
-    // (Update-DR with IR=INTEST and chain selector = 1), buffer the
-    // 32-bit instruction and open an "un-halt window" 8 CLK cycles wide.
-    // While the window is open, core_halt drops so the core processes
-    // the injected instruction through F → D → E. The first cycle of the
-    // window pulses dbg_inject_we to the core, which overrides fd_q with
-    // dbg_inject_instr. Eight cycles is sized for the worst single-
-    // instruction completion (LDM-type or SWP — the bus-overlap refactor
-    // keeps these within ~6 cycles).
-    //
-    // A more elegant version would observe state_q in the core to detect
-    // retirement; this scaffold uses a fixed window for FSM simplicity
-    // and so the debugger holds the contract "don't issue the next inject
-    // until the previous one would have finished" (TRM §5.16 expects the
-    // debugger to track timing anyway).
-    localparam int unsigned INJECT_WINDOW = 8;
-    logic [3:0]  inject_phase_q;
+    // §5.16 debug-speed scan-chain-1 execution. A scan update is held
+    // pending until the core accepts it, then the core remains released
+    // for as many enabled cycles as the instruction actually requires.
+    // Retirement—not a guessed cycle count—returns it to debug halt.
+    logic         inject_active_q;
+    logic         inject_accepted_q;
     logic [31:0] inject_instr_q;
     always_ff @(posedge CLK or negedge DBGnTRST) begin
         if (!DBGnTRST) begin
-            inject_phase_q <= 4'h0;
-            inject_instr_q <= 32'h0;
-        end else if (tap_inject_we) begin
-            // TAP write fires on its own DBGTCKEN cadence; latch the
-            // instruction and arm the un-halt window.
-            inject_instr_q <= tap_inject_instr;
-            inject_phase_q <= 4'(INJECT_WINDOW);
-        end else if (CLKEN && inject_phase_q != 4'h0) begin
-            inject_phase_q <= inject_phase_q - 4'd1;
+            inject_active_q   <= 1'b0;
+            inject_accepted_q <= 1'b0;
+            inject_instr_q    <= 32'h0;
+        end else if (tap_inject_we && in_debug_halt
+                     && !inject_active_q) begin
+            inject_instr_q    <= tap_inject_instr;
+            inject_active_q   <= 1'b1;
+            inject_accepted_q <= 1'b0;
+        end else if (CLKEN && inject_active_q) begin
+            if (core_inject_retire) begin
+                inject_active_q   <= 1'b0;
+                inject_accepted_q <= 1'b0;
+            end else if (core_inject_accept) begin
+                inject_accepted_q <= 1'b1;
+            end
         end
     end
-    wire injecting = (inject_phase_q != 4'h0);
 
     // A breakpoint instruction must be stopped before its Execute edge.
     // The ICE FSM itself still advances on raw CLKEN and enters HALTED on
@@ -563,12 +560,13 @@ module arm7tdmis_ice_rt
                          && !breakpoint_resume_q;
 
     // Core un-halts while injecting.
-    assign core_halt = (in_debug_halt || breakpoint_stop) && !injecting;
+    assign core_halt = (in_debug_halt || breakpoint_stop)
+                     && !inject_active_q;
 
-    // Pulse dbg_inject_we to the core on the first cycle of the window
-    // (when inject_phase_q just got loaded to INJECT_WINDOW).
-    assign dbg_inject_we    = (inject_phase_q == 4'(INJECT_WINDOW));
+    // Hold the request until an enabled core edge accepts it.
+    assign dbg_inject_we     = inject_active_q && !inject_accepted_q;
     assign dbg_inject_instr = inject_instr_q;
+    assign dbg_inject_active = inject_active_q;
 
     // §30.22.6: DBGACK_pin = ICE_control[0] OR DBGACKI. DBGACKI is HIGH
     // while the debug-state FSM is in HALTED. Index 0x00 is the Debug

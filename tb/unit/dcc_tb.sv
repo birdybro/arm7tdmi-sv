@@ -40,6 +40,7 @@ module dcc_tb;
     logic [1:0] DBGRNG;
     logic dbg_inject_we;
     logic [31:0] dbg_inject_instr;
+    logic dbg_inject_active;
 
     arm7tdmis_ice_rt dut (
         .CLK,
@@ -73,8 +74,11 @@ module dcc_tb;
         .dcc_rx_full,
         .tap_inject_we      (1'b0),
         .tap_inject_instr   (32'h0),
+        .core_inject_accept (1'b0),
+        .core_inject_retire (1'b0),
         .dbg_inject_we,
         .dbg_inject_instr,
+        .dbg_inject_active,
         .dbg_break_internal,
         .breakpoint_fetch,
         .dbg_ack,
@@ -276,6 +280,7 @@ module dcc_tb;
     wire _unused = &{1'b0, dbg_break_internal, breakpoint_fetch,
                      dbg_ack, ifen, halt_request,
                      core_halt, DBGRNG, dbg_inject_we, dbg_inject_instr,
+                     dbg_inject_active,
                      scan_raddr};
     /* verilator lint_on UNUSEDSIGNAL */
 

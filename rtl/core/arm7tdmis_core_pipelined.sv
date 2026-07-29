@@ -95,6 +95,9 @@ module arm7tdmis_core_pipelined
     // run debugger-supplied instructions one at a time.
     input  logic        dbg_inject_we,
     input  logic [31:0] dbg_inject_instr,
+    input  logic        dbg_inject_active,
+    output logic        dbg_inject_accept,
+    output logic        dbg_inject_retire,
 
     // §5.3 debug-state boundary. dbg_halt_req is the synchronized final
     // running request; dbg_halt_boundary is HIGH on an edge that legally
@@ -121,6 +124,7 @@ module arm7tdmis_core_pipelined
                                //      `abort` because Verilator warns on the
                                //      C++ reserved word.
         logic        breakpoint;
+        logic        injected;
         logic        valid;
     } fd_t;
 
@@ -131,6 +135,7 @@ module arm7tdmis_core_pipelined
         logic        thumb;    // T-bit when fetched
         logic        pabort;   // §17: carried from fd_q
         logic        breakpoint;
+        logic        injected;
         logic        valid;
     } de_t;
 
@@ -253,10 +258,12 @@ module arm7tdmis_core_pipelined
     wire cp_mrc_wb_state = (state_q == S_CP_MRC_WB)
                          && !cp_ls_cleanup_state;
     wire cp_wait_debug_pending = (state_q == S_CP_WAIT) && dbg_halt_req;
-    wire issue_fetch   = !flush && (state_next == S_EXEC)
+    wire issue_fetch   = !dbg_inject_active
+                       && !flush && (state_next == S_EXEC)
                        && !cp_ls_data_state
                        && !cp_wait_debug_pending;
-    wire latch_into_fd = !flush && !e_busy && inflight_valid_q;
+    wire latch_into_fd = !dbg_inject_active
+                       && !flush && !e_busy && inflight_valid_q;
 
     // D-stage advance — same shape; takes the decoded view of fd_q.
     de_t          de_q;
@@ -302,7 +309,8 @@ module arm7tdmis_core_pipelined
             inflight_pc_q    <= 32'h0;
             inflight_valid_q <= 1'b0;
             fd_q             <= '{instr:32'h0, pc:32'h0, thumb:1'b0,
-                              pabort:1'b0, breakpoint:1'b0, valid:1'b0};
+                              pabort:1'b0, breakpoint:1'b0, injected:1'b0,
+                              valid:1'b0};
         end else if (CLKEN) begin
             if (flush) begin
                 if (early_flush_fetch) begin
@@ -336,6 +344,7 @@ module arm7tdmis_core_pipelined
                 fd_q.thumb  <= cpsr.t;
                 fd_q.pabort <= 1'b0;
                 fd_q.breakpoint <= 1'b0;
+                fd_q.injected <= 1'b1;
                 fd_q.valid  <= 1'b1;
             end else begin
                 if (issue_fetch) begin
@@ -356,6 +365,7 @@ module arm7tdmis_core_pipelined
                     fd_q.breakpoint <= breakpoint_response_valid_q
                                      ? breakpoint_response_tag_q
                                      : dbg_breakpoint_fetch;
+                    fd_q.injected <= 1'b0;
                     fd_q.valid <= 1'b1;
                 end else if (d_advance) begin
                     fd_q.valid <= 1'b0;
@@ -368,9 +378,14 @@ module arm7tdmis_core_pipelined
     always_ff @(posedge CLK) begin
         if (!nRESET) begin
             de_q <= '{dec:'0, instr:32'h0, pc:32'h0, thumb:1'b0,
-                      pabort:1'b0, breakpoint:1'b0, valid:1'b0};
+                      pabort:1'b0, breakpoint:1'b0, injected:1'b0,
+                      valid:1'b0};
         end else if (CLKEN) begin
-            if (flush) begin
+            if (dbg_inject_we) begin
+                // Discard the normal instruction that occupied Execute at
+                // debug entry. Only the scanned instruction may retire.
+                de_q.valid <= 1'b0;
+            end else if (flush) begin
                 de_q.valid <= 1'b0;
             end else if (!e_busy) begin
                 if (fd_q.valid) begin
@@ -380,6 +395,7 @@ module arm7tdmis_core_pipelined
                     de_q.thumb <= fd_q.thumb;
                     de_q.pabort <= fd_q.pabort;
                     de_q.breakpoint <= fd_q.breakpoint;
+                    de_q.injected <= fd_q.injected;
                     de_q.valid <= 1'b1;
                 end else begin
                     de_q.valid <= 1'b0;
@@ -906,9 +922,31 @@ module arm7tdmis_core_pipelined
     // =====================================================================
 
     // `executing` predicate — only valid de_q during S_EXEC writes back.
-    wire executing = (state_q == S_EXEC) && de_q.valid;
+    wire executing = (state_q == S_EXEC) && de_q.valid && !dbg_inject_we;
     assign dbg_breakpoint_execute = executing && de_q.breakpoint;
     wire passes_cond = executing && condition_pass && !dec_is_unimplemented_q;
+
+    // Explicit scan-chain instruction handshake. Acceptance is the edge
+    // that replaces F and invalidates the pre-debug E instruction. The
+    // started latch spans all multicycle substates until the final
+    // architectural completion edge returns state_next to S_EXEC.
+    logic dbg_inject_started_q;
+    wire dbg_inject_starts = executing && de_q.injected;
+    assign dbg_inject_accept = CLKEN && dbg_inject_we;
+    assign dbg_inject_retire = CLKEN && dbg_inject_active
+                             && (dbg_inject_started_q || dbg_inject_starts)
+                             && (state_next == S_EXEC);
+
+    always_ff @(posedge CLK) begin
+        if (!nRESET) begin
+            dbg_inject_started_q <= 1'b0;
+        end else if (CLKEN) begin
+            if (dbg_inject_we || dbg_inject_retire)
+                dbg_inject_started_q <= 1'b0;
+            else if (dbg_inject_starts)
+                dbg_inject_started_q <= 1'b1;
+        end
+    end
 
     // We need the unimplemented bit latched alongside de_q.dec. Use a
     // small companion register driven from dec_is_unimplemented_w at the

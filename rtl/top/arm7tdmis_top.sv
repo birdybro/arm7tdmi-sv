@@ -128,6 +128,9 @@ module arm7tdmis_top
         .core_dbgabt_rdata (core_dbgabt_rdata),
         .dbg_inject_we    (dbg_inject_we),
         .dbg_inject_instr (dbg_inject_instr),
+        .dbg_inject_active(dbg_inject_active),
+        .dbg_inject_accept(dbg_inject_accept),
+        .dbg_inject_retire(dbg_inject_retire),
         .dbg_halt_req     (ice_halt_request),
         .dbg_halted       (ice_core_halt),
         .dbg_breakpoint_fetch(ice_breakpoint_fetch),
@@ -161,6 +164,9 @@ module arm7tdmis_top
     logic        dcc_rx_full;
     logic        dbg_inject_we;
     logic [31:0] dbg_inject_instr;
+    logic        dbg_inject_active;
+    logic        dbg_inject_accept;
+    logic        dbg_inject_retire;
     logic        ice_data_write_q;
     logic [31:0] ice_watch_data;
 
@@ -220,8 +226,11 @@ module arm7tdmis_top
         .dcc_rx_full        (dcc_rx_full),
         .tap_inject_we      (tap_inject_we),
         .tap_inject_instr   (tap_inject_instr),
+        .core_inject_accept (dbg_inject_accept),
+        .core_inject_retire (dbg_inject_retire),
         .dbg_inject_we      (dbg_inject_we),
-        .dbg_inject_instr   (dbg_inject_instr)
+        .dbg_inject_instr   (dbg_inject_instr),
+        .dbg_inject_active  (dbg_inject_active)
     );
 
     assign DBGRNG = ice_dbgrng;
