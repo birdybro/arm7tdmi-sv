@@ -5,15 +5,17 @@
 //   * the second discarded branch-shadow halfword looks Undefined in Thumb,
 //   * and the destination instruction is SWI or returns Prefetch Abort.
 //
-// Exercise ARM->Thumb and Thumb->Thumb BX paths against both destination
-// outcomes.  The deliberately Undefined 0xDE00 shadow halfwords must never
-// become architecturally visible; the destination exception must win.
+// Exercise ARM->Thumb and Thumb->Thumb through both BX and the applicable
+// ALU-to-PC form, crossed with both destination outcomes. The deliberately
+// Undefined 0xDE00 shadow halfwords must never become architecturally
+// visible; the destination exception must win.
 
 `timescale 1ns/1ps
 
 /* verilator lint_off DECLFILENAME */
 module arm7tdmis_erratum2_exception_priority_scenario #(
     parameter bit SOURCE_THUMB = 1'b0,
+    parameter bit ALU_PC_WRITE = 1'b0,
     parameter bit TARGET_ABORT = 1'b0
 ) (
     output logic done,
@@ -58,14 +60,24 @@ module arm7tdmis_erratum2_exception_priority_scenario #(
 
         if (!SOURCE_THUMB) begin
             u_fixture.u_mem.mem[16] = 32'hE3A0_00A1; // 0x40 MOV r0,#0xA1
-            u_fixture.u_mem.mem[17] = 32'hE12F_FF10; // 0x44 BX r0
-            // Both possible discarded ARM words contain Thumb UDF halfwords.
-            u_fixture.u_mem.mem[18] = 32'hDE00_DE00;
-            u_fixture.u_mem.mem[19] = 32'hDE00_DE00;
+            if (!ALU_PC_WRITE) begin
+                u_fixture.u_mem.mem[17] = 32'hE12F_FF10; // 0x44 BX r0
+                // Both discarded ARM words contain Thumb UDF halfwords.
+                u_fixture.u_mem.mem[18] = 32'hDE00_DE00;
+                u_fixture.u_mem.mem[19] = 32'hDE00_DE00;
+            end else begin
+                u_fixture.u_mem.mem[17] = 32'hE3A0_1033; // SPSR: SVC, T=1
+                u_fixture.u_mem.mem[18] = 32'hE161_F001; // MSR SPSR_c,r1
+                u_fixture.u_mem.mem[19] = 32'hE1B0_F000; // MOVS pc,r0
+                u_fixture.u_mem.mem[20] = 32'hDE00_DE00;
+                u_fixture.u_mem.mem[21] = 32'hDE00_DE00;
+            end
         end else begin
             u_fixture.u_mem.mem[16] = 32'hE3A0_0081; // 0x40 MOV r0,#0x81
             u_fixture.u_mem.mem[17] = 32'hE12F_FF10; // 0x44 BX r0
-            u_fixture.u_mem.mem[32] = 32'h4708_21A1; // 0x80 MOVS r1,#0xA1; BX r1
+            u_fixture.u_mem.mem[32] = ALU_PC_WRITE
+                ? 32'h468F_21A1 // 0x80 MOVS r1,#0xA1; MOV pc,r1
+                : 32'h4708_21A1; // 0x80 MOVS r1,#0xA1; BX r1
             u_fixture.u_mem.mem[33] = 32'hDE00_DE00; // second Thumb shadow is UDF
         end
 
@@ -76,7 +88,7 @@ module arm7tdmis_erratum2_exception_priority_scenario #(
         u_fixture.u_mem.mem[52] = 32'hEAFF_FFFE; // 0xD0 PABT handler loop
     end
 
-    bit saw_source_bx;
+    bit saw_source_pc_write;
     bit saw_target_fetch;
     bit saw_expected;
     bit saw_wrong_exception;
@@ -84,7 +96,7 @@ module arm7tdmis_erratum2_exception_priority_scenario #(
 
     always_ff @(posedge CLK) begin
         if (!nRESET) begin
-            saw_source_bx       <= 1'b0;
+            saw_source_pc_write <= 1'b0;
             saw_target_fetch    <= 1'b0;
             saw_expected        <= 1'b0;
             saw_wrong_exception <= 1'b0;
@@ -92,10 +104,12 @@ module arm7tdmis_erratum2_exception_priority_scenario #(
         end else begin
             if ((u_fixture.u_dut.u_core.state_q == 5'd0)
                 && u_fixture.u_dut.u_core.de_q.valid
-                && (u_fixture.u_dut.u_core.de_q.dec.instr_class == INSTR_BX)
                 && (u_fixture.u_dut.u_core.de_q.pc
-                    == (SOURCE_THUMB ? 32'h0000_0082 : 32'h0000_0044)))
-                saw_source_bx <= 1'b1;
+                    == (SOURCE_THUMB ? 32'h0000_0082
+                       : ALU_PC_WRITE ? 32'h0000_004C
+                                      : 32'h0000_0044))
+                && u_fixture.u_dut.u_core.writes_pc_exec)
+                saw_source_pc_write <= 1'b1;
 
             if (u_fixture.u_mem.is_active_q
                 && !u_fixture.u_mem.write_q
@@ -127,7 +141,10 @@ module arm7tdmis_erratum2_exception_priority_scenario #(
         done   = 1'b0;
         failed = 1'b0;
         errors = 0;
-        source_name = SOURCE_THUMB ? "Thumb-to-Thumb" : "ARM-to-Thumb";
+        source_name = {
+            SOURCE_THUMB ? "Thumb-to-Thumb/" : "ARM-to-Thumb/",
+            ALU_PC_WRITE ? "ALU-PC" : "BX"
+        };
         target_name = TARGET_ABORT ? "PABT" : "SWI";
 
         wait (nRESET);
@@ -138,8 +155,8 @@ module arm7tdmis_erratum2_exception_priority_scenario #(
         end
         repeat (4) @(posedge CLK);
 
-        if (!saw_source_bx) begin
-            $display("[erratum2/%s/%s] FAIL source BX did not execute",
+        if (!saw_source_pc_write) begin
+            $display("[erratum2/%s/%s] FAIL source PC write did not execute",
                      source_name, target_name);
             errors++;
         end
@@ -167,33 +184,61 @@ endmodule
 /* verilator lint_on DECLFILENAME */
 
 module arm7tdmis_erratum2_exception_priority_tb;
-    logic [3:0] done;
-    logic [3:0] failed;
+    logic [7:0] done;
+    logic [7:0] failed;
 
     arm7tdmis_erratum2_exception_priority_scenario #(
         .SOURCE_THUMB (1'b0),
+        .ALU_PC_WRITE (1'b0),
         .TARGET_ABORT (1'b0)
-    ) u_arm_swi (.done(done[0]), .failed(failed[0]));
+    ) u_arm_bx_swi (.done(done[0]), .failed(failed[0]));
 
     arm7tdmis_erratum2_exception_priority_scenario #(
         .SOURCE_THUMB (1'b0),
+        .ALU_PC_WRITE (1'b0),
         .TARGET_ABORT (1'b1)
-    ) u_arm_pabt (.done(done[1]), .failed(failed[1]));
+    ) u_arm_bx_pabt (.done(done[1]), .failed(failed[1]));
 
     arm7tdmis_erratum2_exception_priority_scenario #(
         .SOURCE_THUMB (1'b1),
+        .ALU_PC_WRITE (1'b0),
         .TARGET_ABORT (1'b0)
-    ) u_thumb_swi (.done(done[2]), .failed(failed[2]));
+    ) u_thumb_bx_swi (.done(done[2]), .failed(failed[2]));
 
     arm7tdmis_erratum2_exception_priority_scenario #(
         .SOURCE_THUMB (1'b1),
+        .ALU_PC_WRITE (1'b0),
         .TARGET_ABORT (1'b1)
-    ) u_thumb_pabt (.done(done[3]), .failed(failed[3]));
+    ) u_thumb_bx_pabt (.done(done[3]), .failed(failed[3]));
+
+    arm7tdmis_erratum2_exception_priority_scenario #(
+        .SOURCE_THUMB (1'b0),
+        .ALU_PC_WRITE (1'b1),
+        .TARGET_ABORT (1'b0)
+    ) u_arm_alu_swi (.done(done[4]), .failed(failed[4]));
+
+    arm7tdmis_erratum2_exception_priority_scenario #(
+        .SOURCE_THUMB (1'b0),
+        .ALU_PC_WRITE (1'b1),
+        .TARGET_ABORT (1'b1)
+    ) u_arm_alu_pabt (.done(done[5]), .failed(failed[5]));
+
+    arm7tdmis_erratum2_exception_priority_scenario #(
+        .SOURCE_THUMB (1'b1),
+        .ALU_PC_WRITE (1'b1),
+        .TARGET_ABORT (1'b0)
+    ) u_thumb_alu_swi (.done(done[6]), .failed(failed[6]));
+
+    arm7tdmis_erratum2_exception_priority_scenario #(
+        .SOURCE_THUMB (1'b1),
+        .ALU_PC_WRITE (1'b1),
+        .TARGET_ABORT (1'b1)
+    ) u_thumb_alu_pabt (.done(done[7]), .failed(failed[7]));
 
     initial begin
         wait (&done);
         if (|failed)
-            $fatal(1, "[erratum2_exception_priority] FAIL scenarios=%04b",
+            $fatal(1, "[erratum2_exception_priority] FAIL scenarios=%08b",
                    failed);
         $display("[erratum2_exception_priority] PASS");
         $finish;
