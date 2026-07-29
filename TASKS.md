@@ -2601,7 +2601,7 @@ number of cycles spent in an internal FSM state.
   from privileged `PROT[1]` during both an active stalled transfer and debug halt.
   `tb/unit/ice_watchpoint_tb.sv` poisons the next address/control phase while checking
   the prior transfer's read/write data, and repeats the check across CLKEN stalls.
-- [ ] **DBG-003:** Implement exact WP0/WP1 value/mask, XNOR, size, read/write,
+- [x] **DBG-003:** Implement exact WP0/WP1 value/mask, XNOR, size, read/write,
   opcode/data, privilege, EXTERN, CHAIN latch, RANGE, and ENABLE semantics. Figure
   5-13 contains no T comparator field; TBIT is Debug Status bit 4, not a watchpoint
   qualifier. `DBGRNG` remains independent of ENABLE but is disabled by DBGEN.
@@ -2609,8 +2609,9 @@ number of cycles spent in an internal FSM state.
   XNOR masks, data-phase alignment, CLKEN, ENABLE independence, DBGEN/control-disable,
   and CHAIN/RANGE coupling. `tb/integration/arm7tdmis_debug_software_breakpoint_tb.sv`
   programs the §5.21.2 sequence through public JTAG and covers ARM plus both Thumb
-  bus lanes and adjacent-halfword false positives in both endiannesses. Explicit
-  post-match asynchronous CHAINOUT reset evidence remains before closure.
+  bus lanes and adjacent-halfword false positives in both endiannesses. The unit
+  regression also implements the TRM's first-256-except-first-32 RANGE recipe and
+  sets CHAINOUT before proving that `DBGnTRST` clears it without a clock edge.
 - [x] **DBG-004:** Qualify breakpoints with valid, non-flushed instructions.
   Watchpoints enter debug only after the access and all architectural writeback
   complete; cover LDM/STM, aborts, exceptions, and simultaneous DBGRQ.

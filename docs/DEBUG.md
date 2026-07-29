@@ -120,6 +120,10 @@ WP1 feeds two signals to WP0:
 
 - **CHAINOUT** (latched) — Write-enabled by WP1's address+control match; D-input is `wp1_data_match`. Cleared on (a) DBGnTRST, (b) any scan-chain-2 write to WP1's control-value register. The latch resets on programming changes so the debugger doesn't see false matches after reconfiguring (TRM §30.22.3).
 
+`tb/unit/ice_watchpoint_tb.sv` covers both clear paths, including assertion
+of `DBGnTRST` between clock edges, and reproduces the TRM reference range
+that includes bytes `0x20-0xFF` while excluding `0x00-0x1F`.
+
 An enabled WP0 event is its complete RANGEOUT comparison plus ENABLE. RANGE and
 CHAIN are ordinary compared inputs in the control vector, fed respectively by
 WP1's RANGEOUT and the CHAINOUT latch:

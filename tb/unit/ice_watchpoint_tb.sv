@@ -7,6 +7,8 @@
 //   * address-phase metadata aligned with following-cycle RDATA/WDATA;
 //   * DBGRNG independent of ENABLE, but dependent on data and DBGEN;
 //   * WP1 CHAINOUT latch and WP1 RANGEOUT feeding WP0;
+//   * the TRM's first-256-bytes-except-first-32 RANGE recipe;
+//   * asynchronous DBGnTRST clearing a previously-set CHAINOUT;
 //   * CLKEN hold behavior and suppression after the data phase.
 
 `timescale 1ns/1ps
@@ -452,6 +454,43 @@ module ice_watchpoint_tb;
                    9'b1_00_1_11_10_1, 8'b10_0_0_0_00_0);
         expect_monitor_transfer(2'b01, 2'b01, 1'b0,
                                 "monitor rejects CHAIN coupling");
+
+        // TRM §5.26.1 reference range: break in the first 256 bytes
+        // except the first 32. Disabled WP1 emits RANGEOUT for 0x00-0x1F;
+        // enabled WP0 matches 0x00-0xFF only while that input is LOW.
+        write_reg(5'h00, 32'h0000_0000);
+        program_wp(1'b1, 32'h0, 32'h0000_001F,
+                   32'h0, 32'hFFFF_FFFF,
+                   9'h000, 8'hFF);
+        program_wp(1'b0, 32'h0, 32'h0000_00FF,
+                   32'h0, 32'hFFFF_FFFF,
+                   9'h100, 8'h7F);
+        expect_transfer(32'h0000_0010, 32'h0, 1'b1, 1'b0, 2'b00,
+                        1'b1, 2'b00, 2'b10, 1'b0,
+                        "RANGE excludes first 32 bytes");
+        expect_transfer(32'h0000_0040, 32'h0, 1'b1, 1'b0, 2'b00,
+                        1'b1, 2'b00, 2'b01, 1'b1,
+                        "RANGE includes remainder of first 256 bytes");
+        expect_transfer(32'h0000_0140, 32'h0, 1'b1, 1'b0, 2'b00,
+                        1'b1, 2'b00, 2'b00, 1'b0,
+                        "RANGE excludes addresses above first 256 bytes");
+
+        // Set CHAINOUT, then assert DBGnTRST between clock edges. The
+        // latch must clear immediately, without waiting for CLK or CLKEN.
+        program_wp(1'b1, QUAL_ADDR, 32'h0, QUAL_DATA, 32'h0,
+                   9'b0_00_0_11_00_0, 8'b111_0_0_00_0);
+        expect_transfer(QUAL_ADDR, QUAL_DATA, 1'b1, 1'b0, 2'b00,
+                        1'b1, 2'b00, 2'b10, 1'b0,
+                        "CHAIN reset qualifier");
+        check(dut.chainout_q === 1'b1,
+              "CHAINOUT did not set before asynchronous reset");
+        @(negedge CLK);
+        #1;
+        DBGnTRST = 1'b0;
+        #1;
+        check(dut.chainout_q === 1'b0,
+              "DBGnTRST did not asynchronously clear CHAINOUT");
+        DBGnTRST = 1'b1;
 
         if (errors != 0)
             $fatal(1, "ice_watchpoint_tb: FAIL (%0d errors)", errors);
