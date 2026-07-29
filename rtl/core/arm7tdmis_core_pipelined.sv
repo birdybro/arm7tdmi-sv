@@ -228,15 +228,14 @@ module arm7tdmis_core_pipelined
                     // Capture the target as the inflight prefetch this
                     // cycle (ADDR=flush_target_pc, TRANS=N driven below).
                     // Memory latches it at this posedge → RDATA next cycle.
-                    // The next prefetch increment must use the *new* T-bit
-                    // for BX-to-Thumb (otherwise we'd skip the second
-                    // halfword) — BX sets T from rf_rb_data[0]. Other
-                    // early-flush sources don't change T this cycle.
+                    // Both the captured transfer size and the next
+                    // prefetch increment use the destination state. This
+                    // differs from live CPSR.T for BX and for an
+                    // exception-returning data-processing PC write.
                     inflight_pc_q    <= flush_target_pc;
                     inflight_valid_q <= 1'b1;
                     fetch_pc_q       <= flush_target_pc
-                                     + ((bx_writes_pc ? rf_rb_data[0] : cpsr.t)
-                                        ? 32'd2 : 32'd4);
+                                     + (early_flush_t ? 32'd2 : 32'd4);
                 end else begin
                     fetch_pc_q       <= flush_target_pc;
                     inflight_valid_q <= 1'b0;
@@ -981,7 +980,9 @@ module arm7tdmis_core_pipelined
                               ? rf_ra_data
                               : de_q.pc + (de_q.thumb ? 32'd4 : 32'd8);
     wire [31:0] branch_pc_target = branch_base + dec.branch_offset;
-    wire [31:0] bx_pc_target     = rf_rb_data & 32'hFFFFFFFE;
+    wire [31:0] bx_pc_target     = rf_rb_data[0]
+                                  ? (rf_rb_data & 32'hFFFF_FFFE)
+                                  : (rf_rb_data & 32'hFFFF_FFFC);
 
     wire [31:0] pc_target_exec = any_exc_fires   ? exc_pc_target_addr :
                                  instr_is_branch ? branch_pc_target :
@@ -1179,6 +1180,9 @@ module arm7tdmis_core_pipelined
     // Also excluded: ddata_writes_pc (LDR Rd=PC, TRM 2S+2N+1I, the loaded
     // value isn't bus-stable in time) and block_writes_pc (LDM with PC).
     wire early_flush_fetch = writes_pc_exec && !any_exc_fires;
+    wire early_flush_t = bx_writes_pc ? rf_rb_data[0]
+                       : ((dp_writes_pc && dec.s_bit && spsr_valid)
+                          ? spsr_value.t : cpsr.t);
     assign flush_target_pc = ddata_writes_pc ? load_value_q
                            : block_writes_pc ? RDATA
                                              : pc_target_exec;
@@ -1552,7 +1556,7 @@ module arm7tdmis_core_pipelined
         if (early_flush_fetch) begin
             ADDR  = flush_target_pc;
             TRANS = 2'(TRANS_N);
-            SIZE  = fetch_size_w;
+            SIZE  = early_flush_t ? 2'(SIZE_HALFWORD) : 2'(SIZE_WORD);
             PROT  = {is_priv, 1'b0};
             WRITE = WRITE_READ;
         end
