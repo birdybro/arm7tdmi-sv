@@ -7,7 +7,7 @@
 //   * final-zero long-accumulate flags (not the pre-accumulate product);
 //   * legal ARMv4 source/destination overlap (Rd=Rs, Rd=Rn, and long
 //     destinations overlapping Rm/Rs);
-//   * INT32_MIN and INT32_MAX signed products; and
+//   * INT32_MIN/INT32_MAX signed products and UINT32_MAX squared; and
 //   * architectural m=1/2/3/4 early-termination timing.
 //
 // ARMv4 described short Rd=Rm as UNPREDICTABLE. The r4p3-compatible project
@@ -242,6 +242,10 @@ module arm7tdmis_multiply_matrix_tb
         run_case("UMULL", mull_opcode(1, 0, 0, 2, 3, 1, 0),
                  32'hFFFF_FFFF, 2, 0, 0, 0, 0,
                  2, 32'hFFFF_FFFE, 1, 3, 1, 4'b0101, 3);
+        run_case("UMULL UINT32_MAX squared",
+                 mull_opcode(1, 0, 0, 2, 3, 1, 0),
+                 32'hFFFF_FFFF, 32'hFFFF_FFFF, 0, 0, 0, 0,
+                 2, 1, 1, 3, 32'hFFFF_FFFE, 4'b0101, 3);
         run_case("UMULLS", mull_opcode(1, 0, 1, 2, 3, 1, 0),
                  32'hFFFF_FFFF, 32'hFFFF_FFFF, 0, 0, 0, 0,
                  2, 1, 1, 3, 32'hFFFF_FFFE, 4'b1001, 3);
@@ -297,8 +301,8 @@ module arm7tdmis_multiply_matrix_tb
         if (errors != 0)
             $fatal(1, "[multiply_matrix] FAIL (%0d errors, %0d cases)",
                    errors, cases_run);
-        if (cases_run != 21)
-            $fatal(1, "[multiply_matrix] FAIL expected 21 cases, ran %0d",
+        if (cases_run != 22)
+            $fatal(1, "[multiply_matrix] FAIL expected 22 cases, ran %0d",
                    cases_run);
         $display("[multiply_matrix] PASS (%0d cases)", cases_run);
         $finish;
