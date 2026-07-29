@@ -3,14 +3,64 @@
 
 from __future__ import annotations
 
+import json
 import pathlib
+import sys
+import tempfile
 import unittest
+from unittest import mock
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+import soak_harness  # noqa: E402
 
 
 class SoakContractTest(unittest.TestCase):
+    def test_seed_sequence_is_repeatable_unique_and_nonzero(self) -> None:
+        first = soak_harness._seeds(0, 256)
+        second = soak_harness._seeds(0, 256)
+        self.assertEqual(first, second)
+        self.assertEqual(len(first), 256)
+        self.assertEqual(len(set(first)), 256)
+        self.assertNotIn(0, first)
+
+    def test_minimizer_preserves_failure_while_clearing_seed_bits(self) -> None:
+        with mock.patch.object(
+            soak_harness, "_still_fails", return_value=True
+        ) as still_fails:
+            minimized = soak_harness.minimize(
+                pathlib.Path("/unused/simulator"),
+                0xFFFF,
+                1.0,
+            )
+        self.assertEqual(minimized, 1)
+        self.assertEqual(still_fails.call_count, 15)
+
+    def test_failure_artifacts_support_external_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            binary = root / "simulator"
+            binary.write_bytes(b"simulator")
+            artifacts = soak_harness._failure_artifacts(
+                binary=binary,
+                failing_seed=0xFFFF,
+                minimized_seed=1,
+                timeout_seconds=2.0,
+                output="synthetic failure\n",
+                directory=root / "failures",
+            )
+            reproducer = pathlib.Path(artifacts["reproducer"])
+            self.assertTrue(reproducer.is_file())
+            self.assertTrue(pathlib.Path(artifacts["log"]).is_file())
+            self.assertEqual(
+                json.loads(
+                    reproducer.read_text(encoding="utf-8")
+                )["minimized_seed"],
+                1,
+            )
+
     def test_harness_is_deterministic_fail_hard_and_reproducible(self) -> None:
         harness_path = REPO_ROOT / "scripts/soak_harness.py"
         self.assertTrue(harness_path.is_file())
