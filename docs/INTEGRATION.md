@@ -13,10 +13,12 @@ to the rising edge of `CLK`. `CPU_CE` is a clock enable, not a clock. The
 wrapper and core never generate or gate a clock.
 
 `RESET_N` asserts asynchronously. Hold it low for at least two `CLK` cycles.
-The raw core contains a two-flop reset-release synchronizer, so architectural
-execution remains reset for two rising edges after deassertion. Reset clears
-the memory request/response slots, event synchronizers, debug transport, TAP,
-and core; `MEM_VALID` and all debug response-valid signals are low.
+The wrapper and raw core contain parallel two-flop reset-release
+synchronizers. Wrapper-owned memory slots, event synchronizers, debug
+transport, and the TAP therefore remain reset through the first rising edge
+after an arbitrarily timed deassertion and release together with the raw
+architectural domain on the second. Reset assertion still cancels them
+immediately. `MEM_VALID` and all debug response-valid signals are low.
 
 ## Memory request
 

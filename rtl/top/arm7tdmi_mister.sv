@@ -97,6 +97,16 @@ module arm7tdmi_mister
     localparam int unsigned STATE_WORDS = 37;
 `endif
 
+    // Async assertion / synchronous release for every wrapper-owned and
+    // debug reset domain. The raw core retains its own parallel release
+    // synchronizer so both domains become active on the same CLK edge.
+    logic wrapper_reset_n;
+    arm7tdmis_reset_sync u_wrapper_reset_sync (
+        .CLK,
+        .nRESET      (RESET_N),
+        .core_nreset (wrapper_reset_n)
+    );
+
     // ------------------------------------------------------------------
     // Board/framework event synchronization
     // ------------------------------------------------------------------
@@ -126,8 +136,8 @@ module arm7tdmi_mister
     (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     logic [1:0] dbgext_sync_q;
 
-    always_ff @(posedge CLK or negedge RESET_N) begin
-        if (!RESET_N) begin
+    always_ff @(posedge CLK or negedge wrapper_reset_n) begin
+        if (!wrapper_reset_n) begin
             irq_meta_q          <= 1'b0;
             irq_sync_q          <= 1'b0;
             fiq_meta_q          <= 1'b0;
@@ -205,8 +215,8 @@ module arm7tdmi_mister
                             && (STATE_INDEX < 6'(STATE_WORDS));
     assign STATE_READY = state_halted_q;
 
-    always_ff @(posedge CLK or negedge RESET_N) begin
-        if (!RESET_N)
+    always_ff @(posedge CLK or negedge wrapper_reset_n) begin
+        if (!wrapper_reset_n)
             state_halted_q <= 1'b0;
         else if (state_capture)
             state_halted_q <= 1'b1;
@@ -224,8 +234,8 @@ module arm7tdmi_mister
     wire [31:0] core_rdata = response_valid_q
                            ? response_data_q : MEM_RDATA;
 
-    always_ff @(posedge CLK or negedge RESET_N) begin
-        if (!RESET_N) begin
+    always_ff @(posedge CLK or negedge wrapper_reset_n) begin
+        if (!wrapper_reset_n) begin
             request_valid_q      <= 1'b0;
             request_addr_q       <= 32'h0000_0000;
             request_write_q      <= 1'b0;
@@ -326,7 +336,7 @@ module arm7tdmi_mister
 
     arm7tdmis_sync_debug_port u_debug_transport (
         .CLK,
-        .nRESET        (RESET_N),
+        .nRESET        (wrapper_reset_n),
         .PORT_ENABLE   (debug_enabled),
         .STEP_VALID    (DBG_STEP_VALID),
         .STEP_READY    (DBG_STEP_READY),
@@ -385,7 +395,7 @@ module arm7tdmi_mister
         .DBGTMS         (raw_dbgtms),
         .DBGTDI         (raw_dbgtdi),
         .DBGTDO         (raw_dbgtdo),
-        .DBGnTRST       (RESET_N),
+        .DBGnTRST       (wrapper_reset_n),
         .DBGnTDOEN      (raw_dbgntdoen),
         .DMORE          (raw_dmore)
 `ifdef ARM7TDMIS_SAVE_STATE

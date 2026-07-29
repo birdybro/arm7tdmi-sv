@@ -3195,11 +3195,14 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   `docs/INTEGRATION.md` assigns every boundary to `CLK` or an explicitly
   named `_ASYNC` input. The wrapper uses marked two-flop synchronizers for
   active-high IRQ/FIQ and all debug event/policy inputs, then converts only
-  the synchronized interrupt levels to raw active-low pins.
+  the synchronized interrupt levels to raw active-low pins. A parallel,
+  preserved two-flop reset synchronizer asynchronously asserts but
+  synchronously releases every wrapper/debug reset domain on the same edge as
+  the raw core's architectural reset synchronizer.
   `tb/integration/arm7tdmis_mister_cdc_reset_tb.sv` injects IRQ/FIQ during
   normal execution, an unready request, and a response buffered with CE low;
-  it also asynchronously resets a live request and requires a clean vector-0
-  restart.
+  it deasserts reset between clocks and checks both release stages, then
+  asynchronously resets a live request and requires a clean vector-0 restart.
 - [x] **MIST-004:** Parameterize little/big endian and optional debug/coprocessor
   features without changing architectural behavior or leaving floating ports. Compile
   and regress every supported parameter combination.

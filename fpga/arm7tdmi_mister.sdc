@@ -5,8 +5,9 @@
 create_clock -name CLK -period 40.000 [get_ports {CLK}]
 derive_clock_uncertainty
 
-# RESET_N asynchronously asserts all state. The framework must deassert it only
-# after the clock is stable and hold it low for at least two CLK rising edges.
+# RESET_N asynchronously asserts the two marked release synchronizers. Their
+# second stages synchronously release all wrapper/core reset domains. The
+# framework must hold RESET_N low for at least two CLK rising edges.
 set_false_path -from [get_ports {RESET_N}]
 
 # These level inputs terminate only at marked first-stage synchronizer flops.

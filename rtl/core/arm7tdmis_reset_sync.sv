@@ -21,7 +21,10 @@ module arm7tdmis_reset_sync (
     output logic core_nreset
 );
 
-    logic q1, q2;
+    (* altera_attribute = "-name PRESERVE_REGISTER ON; -name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
+    logic q1;
+    (* altera_attribute = "-name PRESERVE_REGISTER ON; -name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
+    logic q2;
 
     always_ff @(posedge CLK or negedge nRESET) begin
         if (!nRESET) begin
