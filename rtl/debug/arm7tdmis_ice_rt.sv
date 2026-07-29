@@ -82,6 +82,10 @@ module arm7tdmis_ice_rt
                                               //      Per TRM §30.22.6 derived
                                               //      from INTDIS (ctrl[2]) and
                                               //      DBGACKI (debug FSM signal).
+    output logic        halt_request,         // §5.3: synchronized request to
+                                              //      finish/terminate the
+                                              //      current instruction before
+                                              //      the core is frozen.
     output logic        core_halt,            // §22: HIGH freezes the core
                                               //      pipeline (debug state).
     output logic [1:0]  DBGRNG,
@@ -405,6 +409,14 @@ module arm7tdmis_ice_rt
     end
 
     wire in_debug_halt = (dbg_state_q == DBG_HALTED);
+
+    // This is asserted for the final running DBGRQI cycle, before
+    // dbg_state_q enters HALTED. Only a debug request has the special
+    // §5.3.3 rule that terminates a coprocessor busy-wait immediately.
+    // Keeping breakpoint/watchpoint matches on the normal registered
+    // halt path also avoids feeding watched bus outputs combinationally
+    // back into the core's next-state decision.
+    assign halt_request = (dbg_state_q == DBG_RUNNING) && dbgrqi;
 
     // §22 scan-chain-1 inject runtime: when the TAP signals tap_inject_we
     // (Update-DR with IR=INTEST and chain selector = 1), buffer the

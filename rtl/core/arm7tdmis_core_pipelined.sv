@@ -94,7 +94,12 @@ module arm7tdmis_core_pipelined
     // the normal RDATA latch path). Used while in debug-halt state to
     // run debugger-supplied instructions one at a time.
     input  logic        dbg_inject_we,
-    input  logic [31:0] dbg_inject_instr
+    input  logic [31:0] dbg_inject_instr,
+
+    // §5.3 debug-state boundary. dbg_halt_req is the synchronized final
+    // running cycle; dbg_halted is the subsequent frozen state.
+    input  logic        dbg_halt_req,
+    input  logic        dbg_halted
 );
 
     // =====================================================================
@@ -213,8 +218,10 @@ module arm7tdmis_core_pipelined
                              && (cp_wait_is_ldc_q || cp_wait_is_stc_q);
     wire cp_mrc_wb_state = (state_q == S_CP_MRC_WB)
                          && !cp_ls_cleanup_state;
+    wire cp_wait_debug_pending = (state_q == S_CP_WAIT) && dbg_halt_req;
     wire issue_fetch   = !flush && (state_next == S_EXEC)
-                       && !cp_ls_data_state;
+                       && !cp_ls_data_state
+                       && !cp_wait_debug_pending;
     wire latch_into_fd = !flush && !e_busy && inflight_valid_q;
 
     // D-stage advance — same shape; takes the decoded view of fd_q.
@@ -774,6 +781,8 @@ module arm7tdmis_core_pipelined
                              && !nIRQ && !cpsr.i;
     wire cp_wait_interrupt_pending = cp_wait_fiq_pending
                                    || cp_wait_irq_pending;
+    wire cp_wait_abandon_pending = cp_wait_interrupt_pending
+                                 || cp_wait_debug_pending;
 
     // E-stage substate transitions. Single-cycle "execute" loops back to
     // S_EXEC; multi-cycle ops take the appropriate substate detour.
@@ -824,7 +833,7 @@ module arm7tdmis_core_pipelined
                                        : S_MUL_BUSY;
             S_MULL_ACC:   state_next = S_MUL_BUSY;
             S_DP_SHIFT:   state_next = S_EXEC;
-            S_CP_WAIT:    state_next = cp_wait_interrupt_pending ? S_EXEC
+            S_CP_WAIT:    state_next = cp_wait_abandon_pending ? S_EXEC
                                      : !cp_wait_ready ? S_CP_WAIT
                                      : cp_wait_is_mcr_q ? S_CP_MCR_DATA
                                      : cp_wait_is_mrc_q ? S_CP_MRC_DATA
@@ -1998,6 +2007,20 @@ module arm7tdmis_core_pipelined
             WRITE = WRITE_READ;
         end
 
+        // Debug halt isolates the core from the system. TRM §5.3.4
+        // requires internal cycles throughout halt mode; using benign
+        // read/opcode controls also keeps all address-timed outputs
+        // deterministic for FPGA integrations.
+        if (dbg_halted) begin
+            ADDR  = fetch_pc_q;
+            WRITE = WRITE_READ;
+            SIZE  = fetch_size_w;
+            PROT  = {is_priv, 1'b0};
+            LOCK  = LOCK_FREE;
+            TRANS = 2'(TRANS_I);
+            WDATA = 32'h0000_0000;
+        end
+
         // Reset is an idle bus cycle regardless of stale pre-reset state
         // or CLKEN. The first real request is generated after release.
         if (!nRESET) begin
@@ -2011,7 +2034,7 @@ module arm7tdmis_core_pipelined
         end
     end
 
-    assign DMORE = nRESET && block_active && block_has_more;
+    assign DMORE = nRESET && !dbg_halted && block_active && block_has_more;
 
     // =====================================================================
     // §19: Coprocessor pipeline-following signals
@@ -2036,9 +2059,9 @@ module arm7tdmis_core_pipelined
     assign CPnTRANS = is_priv;
     assign CPnOPC   =  PROT[PROT_BIT_DATA];   // mirror — opcode fetch → CPnOPC=0
     assign CPTBIT   = cpsr.t;
-    assign CPnI     = !((passes_cond && instr_is_cp)
+    assign CPnI     = dbg_halted || !((passes_cond && instr_is_cp)
                       || ((state_q == S_CP_WAIT)
-                          && !cp_wait_interrupt_pending));
+                          && !cp_wait_abandon_pending));
 
     // =====================================================================
     // §24: ETM-facing pipeline-state outputs
@@ -2051,8 +2074,8 @@ module arm7tdmis_core_pipelined
     //                (condition failed). See TRM Table 7-23 — even
     //                cond-fail instructions consume cycles but signal
     //                DBGnEXEC HIGH so ETM can distinguish.
-    assign DBGINSTRVALID = executing;
-    assign DBGnEXEC      = !passes_cond;
+    assign DBGINSTRVALID = CLKEN && executing;
+    assign DBGnEXEC      = !(CLKEN && passes_cond);
 
 
     // ---- TB / debug observability ----

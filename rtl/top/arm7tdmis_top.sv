@@ -127,7 +127,9 @@ module arm7tdmis_top
         .core_dbgabt_wdata (core_dbgabt_wdata),
         .core_dbgabt_rdata (core_dbgabt_rdata),
         .dbg_inject_we    (dbg_inject_we),
-        .dbg_inject_instr (dbg_inject_instr)
+        .dbg_inject_instr (dbg_inject_instr),
+        .dbg_halt_req     (ice_halt_request),
+        .dbg_halted       (ice_core_halt)
     );
 
     // ---- EmbeddedICE-RT (§22 scaffold) ----
@@ -138,6 +140,7 @@ module arm7tdmis_top
 
     logic ice_dbg_ack;
     logic ice_ifen;
+    logic ice_halt_request;
     logic ice_core_halt;
     logic tap_restart_req;
     logic        core_dcc_we;
@@ -172,6 +175,7 @@ module arm7tdmis_top
         .dbg_break_internal (ice_dbg_break),
         .dbg_ack            (ice_dbg_ack),
         .ifen               (ice_ifen),
+        .halt_request       (ice_halt_request),
         .core_halt          (ice_core_halt),
         .DBGRNG             (ice_dbgrng),
         .scan_we            (ice_scan_we),

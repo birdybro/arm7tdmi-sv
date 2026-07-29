@@ -34,6 +34,7 @@ module dcc_tb;
     logic dbg_break_internal;
     logic dbg_ack;
     logic ifen;
+    logic halt_request;
     logic core_halt;
     logic [1:0] DBGRNG;
     logic dbg_inject_we;
@@ -73,6 +74,7 @@ module dcc_tb;
         .dbg_break_internal,
         .dbg_ack,
         .ifen,
+        .halt_request,
         .core_halt,
         .DBGRNG,
         .scan_we,
@@ -266,8 +268,9 @@ module dcc_tb;
     end
 
     /* verilator lint_off UNUSEDSIGNAL */
-    wire _unused = &{1'b0, dbg_break_internal, dbg_ack, ifen, core_halt,
-                     DBGRNG, dbg_inject_we, dbg_inject_instr, scan_raddr};
+    wire _unused = &{1'b0, dbg_break_internal, dbg_ack, ifen, halt_request,
+                     core_halt, DBGRNG, dbg_inject_we, dbg_inject_instr,
+                     scan_raddr};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule

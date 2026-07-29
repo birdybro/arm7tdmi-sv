@@ -34,6 +34,7 @@ module ice_rt_tb
     logic        dbg_rq_in;
     logic        dbg_break_in;
     logic        tap_restart_req;
+    logic        halt_request;
     logic        core_halt;
 
     logic        dbg_break_internal;
@@ -68,6 +69,7 @@ module ice_rt_tb
         .dbg_break_internal (dbg_break_internal),
         .dbg_ack            (dbg_ack),
         .ifen               (ifen),
+        .halt_request       (halt_request),
         .DBGRNG             (DBGRNG),
         .scan_we            (scan_we),
         .scan_re            (scan_re),
@@ -207,7 +209,8 @@ module ice_rt_tb
     end
 
     /* verilator lint_off UNUSEDSIGNAL */
-    wire _unused = &{1'b0, DBGRNG[1], dbg_ack, ifen, core_halt, tb_dcc_rdata,
+    wire _unused = &{1'b0, DBGRNG[1], dbg_ack, ifen, halt_request,
+                     core_halt, tb_dcc_rdata,
                      tb_dcc_control, tb_dbgabt_rdata, tb_dcc_tx_empty,
                      tb_dcc_rx_full, tb_inject_we, tb_inject_instr,
                      scan_raddr};
