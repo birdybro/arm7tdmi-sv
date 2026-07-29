@@ -371,17 +371,30 @@ module jtag_tap_tb
         check(ice_inject_break == inject_break,
               "chain 1 physical ordering corrupted DBGBREAK");
 
-        // Reserved chains scan out zeros regardless of shifted input and
-        // cannot trigger either architectural update path.
-        select_chain(4'd3, scan_capture);
-        load_ir(4'(IR_INTEST), ir_capture);
-        serial_in = 38'h3_FFFF_FFFFF;
-        count_before = inject_we_count + scan_we_count + scan_re_count;
-        scan_dr(8, serial_in, serial_out);
-        check(serial_out[7:0] == 8'h00,
-              "reserved scan chain did not scan out zeros");
-        check(inject_we_count + scan_we_count + scan_re_count == count_before,
-              "reserved scan chain caused an architectural side effect");
+        // Chain 0 and every selector other than the two implemented chains
+        // are reserved. Exercise the complete four-bit selector space at
+        // the maximum public chain width: all bits must read zero and no
+        // update may reach either architectural target.
+        for (int chain = 0; chain < 16; chain++) begin
+            if ((chain != 1) && (chain != 2)) begin
+                select_chain(4'(chain), scan_capture);
+                check(scan_capture == 4'b1000,
+                      $sformatf("SCAN_N capture changed for chain %0d",
+                                chain));
+                load_ir(4'(IR_INTEST), ir_capture);
+                serial_in = '1;
+                count_before = inject_we_count + scan_we_count
+                             + scan_re_count;
+                scan_dr(SCAN_CHAIN2_WIDTH, serial_in, serial_out);
+                check(serial_out == 38'h0,
+                      $sformatf("reserved chain %0d did not scan zeros",
+                                chain));
+                check(inject_we_count + scan_we_count + scan_re_count
+                      == count_before,
+                      $sformatf("reserved chain %0d caused a side effect",
+                                chain));
+            end
+        end
 
         // Physical chain-2 path is TDI -> R/W -> ADDR[4:0] -> DATA[0:31]
         // -> TDO. Load DATA[31:0], ADDR[0:4], then R/W in serial time.
