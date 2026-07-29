@@ -21,7 +21,7 @@ is the canonical status and release gate.
 | Coprocessor/CP14/CP15 | **Partial** — directed tests cover external ready/busy/data transfers, absent internal CP15, conformant c0/c1 DCC ownership, and monitor-generated c2 `DbgAbt`; remaining CP closure is tracked in §31.6 |
 | EmbeddedICE-RT/JTAG/ETM | **Partial** — halt-mode and monitor-mode paths have directed coverage; exact pin sampling, FPGA transport synchronization, ETM, and debugger interoperability remain |
 | Verification | **Partial** — registered benches fail hard and the smoke regression passes; exhaustive, differential, coverage, formal, and release closure are absent |
-| FPGA/MiSTer | **Missing** — no valid completed SDC, Quartus result, wrapper/package, MiSTer build, or PocketStation integration |
+| FPGA/MiSTer | **Partial** — the canonical request/response wrapper and same-clock debug transport are tested; packaging, save states, framework build, timing, hardware, and PocketStation integration remain |
 
 ---
 
@@ -164,7 +164,7 @@ features; the complete backlog is `TASKS.md` §31.
 |---|---|---|
 | **Quartus place-and-route** | Toolchain not installed on the build box. RTL is written to Cyclone V conventions (ALM logic, MLAB/M10K BRAM inference, DSP for `*`); SDC first pass exists. | `§26` FPGA bring-up. |
 | Correct exception, abort, endian, and bus timing | Release-blocking functional work. | Implement and verify §31.3–§31.5. |
-| MiSTer/PocketStation integration | No wrapper, package, build, or reference boot exists. | Implement and verify §31.9. |
+| MiSTer/PocketStation integration | The canonical wrapper exists, but packaging, save states, framework/hardware builds, and a reference boot do not. | Complete §31.9. |
 | Formal/differential/coverage closure | Required sign-off evidence is absent. | Implement and verify §31.10. |
 
 ARMv4T features that don't exist in r4p3 are also not implemented (and explicitly forbidden in TASKS.md §30.0): `BKPT`, `BLX`, `CLZ`, the Q flag, the `MAS[1:0]` bus pins (it's `SIZE[1:0]` here), `DBGRESTART`, separate `DBGINSTR` (only `DBGINSTRVALID` is real). Software breakpoints work via EmbeddedICE-RT pattern matching.
@@ -188,6 +188,7 @@ rtl/
   jtag/        arm7tdmis_jtag_tap.sv        (IEEE 1149.1 TAP + scan chains)
                arm7tdmis_sync_debug_port.sv (same-CLK FPGA debug transport)
   top/         arm7tdmis_top.sv             (pin-level integration)
+               arm7tdmi_mister.sv           (canonical FPGA memory wrapper)
                arm7tdmis_chip.sv            (chip wrapper with DFT pins)
 
 tb/
@@ -282,6 +283,7 @@ evidence.
 - [`docs/PIPELINE.md`](docs/PIPELINE.md) — 3-stage F/D/E pipeline, 12-state E substate FSM, bus-cycle overlap, `issue_fetch` gate, `de_q` staleness latch protocol, branch fast-path flush.
 - [`docs/DEBUG.md`](docs/DEBUG.md) — EmbeddedICE-RT (r4p3 register map, WP comparators, CHAIN/RANGE, debug-state FSM), JTAG TAP (16 states, IDCODE, scan chains 1+2), scan-chain-1 instruction-injection runtime, CP14 DCC data flow.
 - [`docs/COPROCESSOR.md`](docs/COPROCESSOR.md) — bare-core ownership, exact CP14 decode, external CPA/CPB and pipeline-following contract, transfers, abandonment, and corrected r4p3 errata 14/15 policy.
+- [`docs/INTEGRATION.md`](docs/INTEGRATION.md) — canonical FPGA request/response wrapper, CPU-CE bridge, byte lanes, CDC/reset ownership, and optional interfaces.
 - [`docs/MULTIPLY.md`](docs/MULTIPLY.md) — MUL/MLA/UMULL/UMLAL/SMULL/SMLAL, m-parameter cycle shaping, UMLAL/SMLAL 2-cycle accumulator read across S_EXEC + S_MULL_ACC.
 - [`docs/EXCEPTIONS.md`](docs/EXCEPTIONS.md) — all 7 exception types, priority encoder, banked r14, SPSR save, `data_abort_now` vs `data_abort_q` for single-vs-multi-beat memory ops, LDM DABT restart, the two exception-return patterns.
 

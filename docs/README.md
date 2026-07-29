@@ -14,6 +14,9 @@ because they agree with each other.
   decode, raw pipeline-following pins, CPA/CPB claim/busy/completion behavior,
   register and variable-length memory transfers, abandonment, and the frozen
   corrected policy for r4p3 errata 14 and 15.
+- **[INTEGRATION.md](INTEGRATION.md)** — versioned canonical FPGA wrapper,
+  valid/ready memory timing, CPU clock-enable bridge, byte lanes, reset/CDC
+  ownership, and optional debug/coprocessor parameters.
 - **[VERIFICATION.md](VERIFICATION.md)** — fail-hard regression ordering,
   intentional-failure sentinel, reproducibility metadata, and the
   `arm7tdmis-regression-v1` machine-readable result schema.

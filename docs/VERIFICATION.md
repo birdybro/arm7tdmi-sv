@@ -3,7 +3,7 @@
 `make -C scripts regress` is the release-facing directed regression entry point.
 It always removes the Verilator build directory first, then runs:
 
-1. RTL lint and testbench lint.
+1. Raw-core RTL, canonical MiSTer-wrapper, and testbench lint.
 2. The harness unit test and intentional-failure sentinel.
 3. Every unit test in the `UNIT_TESTS` manifest.
 4. Every directed test in the `INTEG_TESTS` manifest.

@@ -2836,12 +2836,22 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
 
 ## 31.9 P0 — MiSTer and PocketStation integration
 
-- [ ] **MIST-001:** Add a synthesizable `arm7tdmi_mister` wrapper with documented
+- [x] **MIST-001:** Add a synthesizable `arm7tdmi_mister` wrapper with documented
   request/ready-or-done memory transactions, address, read/write data, byte enables,
   code/data, privilege, lock, sequential/more hints, and abort/error response.
-- [ ] **MIST-002:** Bridge raw ARM `CLKEN` semantics without gated/generated clocks.
+  `rtl/top/arm7tdmi_mister.sv` is the canonical single-outstanding
+  valid/ready wrapper and `docs/INTEGRATION.md` is its versioned port/timing
+  contract. `make -C scripts lint-mister` elaborates it as a release-facing
+  top; `tb/integration/arm7tdmis_mister_wrapper_tb.sv` exercises every
+  metadata field and byte-lane class through a real program.
+- [x] **MIST-002:** Bridge raw ARM `CLKEN` semantics without gated/generated clocks.
   A request remains stable until completion, slow memory inserts arbitrary waits, and
   each request completes exactly once.
+  The wrapper uses only `CLK` and clock enables, has one request slot plus one
+  response holding register, and accepts `MEM_READY` independently of
+  `CPU_CE`. The integration regression completes the first response while CE
+  is low, then randomizes both CE and memory waits while checking full-payload
+  stability, exact handshake accounting, and architectural readback.
 - [ ] **MIST-003:** Define reset and CDC ownership. Synchronize asynchronous board/
   framework signals at the wrapper, keep architecturally synchronous nIRQ/nFIQ clear
   inside the CPU contract, and test reset/interrupt arrival at every phase.

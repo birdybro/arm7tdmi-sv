@@ -27,4 +27,5 @@
 ../rtl/debug/arm7tdmis_ice_rt.sv
 
 ../rtl/top/arm7tdmis_top.sv
+../rtl/top/arm7tdmi_mister.sv
 ../rtl/top/arm7tdmis_chip.sv

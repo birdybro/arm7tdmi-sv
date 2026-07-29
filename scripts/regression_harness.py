@@ -110,7 +110,7 @@ def collect_metadata(
         "variant": variant,
         "seed": seed,
         "manifest": {
-            "lint": ["rtl", "testbench"],
+            "lint": ["raw-core", "mister-wrapper", "testbench"],
             "harness": ["unit", "expected-failure"],
             "unit": list(unit_tests),
             "integration": list(integration_tests),
@@ -206,6 +206,7 @@ def _phases(
 ) -> Iterable[tuple[str, tuple[str, ...]]]:
     yield _make_phase("clean", "clean")
     yield _make_phase("lint-rtl", "lint")
+    yield _make_phase("lint-mister-wrapper", "lint-mister")
     yield _make_phase("lint-testbench", "lint-tb")
     yield _make_phase("harness-unit", "harness-unit")
     yield _make_phase("harness-expected-failure", "harness-self-test")

@@ -41,7 +41,7 @@ INTEG_COMMON_SRCS := \
 	../tb/integration/arm7tdmis_assertions.sv \
 	../tb/integration/arm7tdmis_test_fixture.sv
 
-.PHONY: all lint lint-tb sim run wave clean help regress regress-quick \
+.PHONY: all lint lint-mister lint-tb sim run wave clean help regress regress-quick \
         harness-unit harness-self-test \
         $(addprefix unit-, $(UNIT_TESTS)) unit \
         $(addprefix integ-, $(INTEG_TESTS)) integ
@@ -50,6 +50,10 @@ all: lint
 
 lint:
 	$(VERILATOR) --lint-only $(VFLAGS_LINT) --top-module $(TOP_RTL) -f $(SIM_F)
+
+lint-mister:
+	$(VERILATOR) --lint-only $(VFLAGS_LINT) \
+	    --top-module arm7tdmi_mister -f $(SIM_F)
 
 lint-tb:
 	$(VERILATOR) --lint-only $(VFLAGS_LINT) --top-module $(TOP_TB) -f $(SIM_F) -f $(TB_F)
@@ -137,6 +141,7 @@ clean:
 help:
 	@echo "Targets:"
 	@echo "  lint         Verilator --lint-only on RTL only (default)"
+	@echo "  lint-mister  Verilator --lint-only on the canonical FPGA wrapper"
 	@echo "  lint-tb      Verilator --lint-only including the integration TB"
 	@echo "  sim          build the integration testbench binary"
 	@echo "  run          build and run; emits cycle.csv + waves.fst"
