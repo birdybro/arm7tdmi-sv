@@ -13,7 +13,8 @@ module arm7tdmis_test_fixture
     parameter int    MEMORY_WORDS = 4096,
     parameter string INIT_HEX     = "",
     parameter string TEST_NAME    = "integration",
-    parameter string FST_FILE     = "integration.fst"
+    parameter string FST_FILE     = "integration.fst",
+    parameter bit    ABORT_DURING_INACTIVE = 1'b0
 ) (
     input  logic CFGBIGEND,
     input  logic CLKEN,
@@ -46,6 +47,8 @@ module arm7tdmis_test_fixture
     logic [31:0] WDATA;
     logic [31:0] RDATA;
     logic        ABORT;
+    logic        mem_abort;
+    logic        inactive_q;
 
     logic CPnMREQ;
     logic CPSEQ;
@@ -123,9 +126,22 @@ module arm7tdmis_test_fixture
         .TRANS        (TRANS),
         .WDATA        (WDATA),
         .RDATA        (RDATA),
-        .ABORT        (ABORT),
+        .ABORT        (mem_abort),
         .inject_abort (inject_abort)
     );
+
+    // BUS-007 verification hook.  ABORT is deliberately asserted only when
+    // both the previous and current address classes are I/C, so it cannot
+    // be mistaken for a response to a neighboring active transfer.
+    wire inactive_now = !(TRANS inside {TRANS_N, TRANS_S});
+    always_ff @(posedge CLK) begin
+        if (!nRESET)
+            inactive_q <= 1'b0;
+        else if (CLKEN)
+            inactive_q <= inactive_now;
+    end
+    assign ABORT = mem_abort
+                 | (ABORT_DURING_INACTIVE && inactive_q && inactive_now);
 
     arm7tdmis_assertions u_assert (
         .CLK    (CLK),
