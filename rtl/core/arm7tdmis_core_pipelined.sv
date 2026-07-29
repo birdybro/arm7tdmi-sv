@@ -676,17 +676,22 @@ module arm7tdmis_core_pipelined
                                        ? (rf_ra_data + block_reg_count_x4)
                                        : (rf_ra_data - block_reg_count_x4);
 
-    // §17 restart: Rn writeback fires in the dedicated S_BLOCK_WB cycle
-    // (after all beats complete) and only if no abort fired during the
-    // transfer. data_abort_q clears when state_q==S_EXEC (so the next
-    // LDM gets a fresh signal); during S_BLOCK_WB the latched bit
-    // reflects "any beat aborted."
+    // Normal LDM Rn writeback fires in the dedicated S_BLOCK_WB cycle.
+    // For an aborted LDM the final data cycle's register port is free
+    // (all writes from the aborting beat onward are suppressed), so the
+    // requested modified base is restored there before S_BLOCK_WB uses
+    // the port to save LR_abt.
     wire block_does_writeback = (state_q == S_BLOCK_WB)
                              && block_writeback_q
                              && !data_abort_q;
 
     wire [15:0] block_after_curr = block_remaining_q & ~(16'h1 << block_curr_reg_q);
     wire        block_has_more   = (block_after_curr != 16'h0);
+    wire block_ldm_abort_writeback = (state_q == S_BLOCK_DATA)
+                                   && !block_has_more
+                                   && block_load_q
+                                   && block_writeback_q
+                                   && (data_abort_q || data_abort_now);
 
     // §18: STM Rn-writeback path. TRM Table 7-15 gives STM n+1 cycles
     // (1S+(n-1)S+1N, no I cycle), vs LDM's n+2. To match, STM commits
@@ -915,7 +920,8 @@ module arm7tdmis_core_pipelined
     //   - LDM ^ with PC in list, at the cycle r15 loads
     wire block_ldm_pc_restore = (state_q == S_BLOCK_DATA) && block_load_q
                              && (block_curr_reg_q == 4'd15)
-                             && block_user_mode_q;
+                             && block_user_mode_q
+                             && !data_abort_q && !data_abort_now;
     assign cpsr_restore_now = (dp_writes_pc && dec.s_bit) || block_ldm_pc_restore;
     assign bx_set_t_en      = bx_writes_pc;
     assign bx_set_t_value   = rf_rb_data[0];
@@ -1041,7 +1047,8 @@ module arm7tdmis_core_pipelined
     // §18: LDR/LDRB writeback fires in S_LOAD_WB (TRM 1S+1N+1I), not
     // S_DDATA. Suppressed on data abort.
     wire ddata_writes_rd  = (state_q == S_LOAD_WB) && !data_abort_q;
-    wire block_writes_ldm = (state_q == S_BLOCK_DATA) && block_load_q && !data_abort_now;
+    wire block_writes_ldm = (state_q == S_BLOCK_DATA) && block_load_q
+                          && !data_abort_q && !data_abort_now;
     wire swp_writes_rd    = (state_q == S_SWP_WB) && !data_abort_q;
 
     wire [1:0]  swp_byte_lane  = CFGBIGEND ? ~swp_addr_lo_q
@@ -1059,6 +1066,10 @@ module arm7tdmis_core_pipelined
         end else if (block_writes_ldm) begin
             rf_write_addr = block_curr_reg_q;
             rf_write_data = RDATA;
+            rf_write_en   = 1'b1;
+        end else if (block_ldm_abort_writeback) begin
+            rf_write_addr = block_rn_q;
+            rf_write_data = block_writeback_addr_q;
             rf_write_en   = 1'b1;
         end else if (swp_writes_rd) begin
             rf_write_addr = swp_rd_q;
@@ -1161,7 +1172,8 @@ module arm7tdmis_core_pipelined
 
     wire ddata_writes_pc = (state_q == S_LOAD_WB) && (ls_rd_q == 4'd15) && !data_abort_q;
     wire block_writes_pc = (state_q == S_BLOCK_DATA) && block_load_q
-                        && (block_curr_reg_q == 4'd15);
+                        && (block_curr_reg_q == 4'd15)
+                        && !data_abort_q && !data_abort_now;
 
     assign flush           = writes_pc_exec || ddata_writes_pc || block_writes_pc;
 
