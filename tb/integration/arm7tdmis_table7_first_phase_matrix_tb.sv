@@ -1,16 +1,20 @@
-// BUS-003/BUS-005: Table 7 source-prefetch classification matrix.
+// BUS-002/BUS-003/BUS-005: first Execute phase from TRM Tables 7-3--7-23.
 //
-// The address-class phase immediately before an ARM instruction reaches
-// Execute advertises pc+8.  Its TRANS value is instruction-dependent:
-// ordinary DP/PSR and every condition-failed instruction use S, register
-// controlled shifts and multiply families use I, while control flow,
-// memory operations, SWP, and traps use N.  Each row starts from reset and
-// approaches the test instruction through the same sequential NOP stream,
-// preventing accidental history differences from masking classification.
+// Section 7.1 is easy to misread: Data is the response in the numbered
+// instruction cycle, while TRANS predicts the following bus cycle and the
+// address-class outputs are already one bus cycle ahead.  Consequently the
+// raw pins during an instruction's first Execute cycle contain the next
+// row's address-class values and the current row's TRANS.  Examples:
+//   * ordinary DP: pc+3i/S opcode
+//   * shift(Rs):   pc+3i/I data (first half of a merged I-S)
+//   * LDR/STR:     data-address/N data
+//   * branch:      target/N opcode
+// This reset-isolated matrix checks that first raw phase without conflating
+// it with the pc+2i opcode response that is simultaneously on RDATA.
 
 `timescale 1ns/1ps
 
-module arm7tdmis_source_cycle_matrix_tb
+module arm7tdmis_table7_first_phase_matrix_tb
     import arm7tdmis_bus_pkg::*;
     import arm7tdmis_instr_pkg::*;
     import arm7tdmis_types_pkg::*;
@@ -84,11 +88,40 @@ module arm7tdmis_source_cycle_matrix_tb
         endcase
     endfunction
 
+    function automatic logic [31:0] expected_addr(input int row);
+        unique case (row)
+            3: return TEST_PC + 32'd8; // MLA holds pc+2i for its extra I
+            5, 6, 7, 8, 9, 10, 11: return 32'h0000_0100;
+            12: return 32'h0000_0050;  // B destination
+            13: return 32'h0000_0008;  // SWI vector
+            14: return TEST_PC + 32'd8; // Undef recognition I cycle
+            default: return TEST_PC + 32'd12;
+        endcase
+    endfunction
+
     function automatic logic [1:0] expected_trans(input int row);
         unique case (row)
             0, 15, 16: return 2'(TRANS_S);
-            1, 2, 3, 4: return 2'(TRANS_I);
+            1, 2, 3, 4, 14: return 2'(TRANS_I);
             default: return 2'(TRANS_N);
+        endcase
+    endfunction
+
+    function automatic logic [1:0] expected_prot(input int row);
+        unique case (row)
+            0, 12, 13, 14, 15, 16: return 2'(PROT_OPC_PRIV);
+            default: return 2'(PROT_DAT_PRIV);
+        endcase
+    endfunction
+
+    function automatic logic expected_lock(input int row);
+        return row == 11 ? LOCK_LOCKED : LOCK_FREE;
+    endfunction
+
+    function automatic logic expected_write(input int row);
+        unique case (row)
+            6, 8, 10: return WRITE_WRITE;
+            default: return WRITE_READ;
         endcase
     endfunction
 
@@ -133,7 +166,7 @@ module arm7tdmis_source_cycle_matrix_tb
     endfunction
 
     task automatic fail(input int row, input string reason);
-        $fatal(1, "[source_cycle_matrix] FAIL row %0d %s: %s",
+        $fatal(1, "[table7_first_phase_matrix] FAIL row %0d %s: %s",
                row, row_name(row), reason);
     endtask
 
@@ -159,12 +192,6 @@ module arm7tdmis_source_cycle_matrix_tb
     localparam int DATA_ADDRESS_WORD = 32'h0000_0100 >> 2;
 
     task automatic run_row(input int row);
-        logic [31:0] previous_addr;
-        logic        previous_write;
-        logic [1:0]  previous_size;
-        logic [1:0]  previous_prot;
-        logic        previous_lock;
-        logic [1:0]  previous_trans;
         int unsigned wait_cycles;
 
         @(negedge CLK);
@@ -174,22 +201,10 @@ module arm7tdmis_source_cycle_matrix_tb
         @(negedge CLK);
         nRESET = 1'b1;
 
-        previous_addr  = 32'h0;
-        previous_write = WRITE_READ;
-        previous_size  = 2'(SIZE_WORD);
-        previous_prot  = 2'(PROT_OPC_PRIV);
-        previous_lock  = LOCK_FREE;
-        previous_trans = 2'(TRANS_I);
         wait_cycles = 0;
         while (!(u_dut.u_core.state_q == 4'd0
                  && u_dut.u_core.de_q.valid
                  && u_dut.u_core.de_q.pc == TEST_PC)) begin
-            previous_addr  = ADDR;
-            previous_write = WRITE;
-            previous_size  = SIZE;
-            previous_prot  = PROT;
-            previous_lock  = LOCK;
-            previous_trans = TRANS;
             @(negedge CLK);
             wait_cycles++;
             if (wait_cycles > 100)
@@ -204,30 +219,31 @@ module arm7tdmis_source_cycle_matrix_tb
         if (row != 15 && !u_dut.u_core.condition_pass)
             fail(row, "executed row unexpectedly failed its condition");
 
-        if (previous_addr !== TEST_PC + 32'd8
-            || previous_write !== WRITE_READ
-            || previous_size !== 2'(SIZE_WORD)
-            || previous_prot !== 2'(PROT_OPC_PRIV)
-            || previous_lock !== LOCK_FREE
-            || previous_trans !== expected_trans(row))
+        if (ADDR !== expected_addr(row)
+            || WRITE !== expected_write(row)
+            || SIZE !== 2'(SIZE_WORD)
+            || PROT !== expected_prot(row)
+            || LOCK !== expected_lock(row)
+            || TRANS !== expected_trans(row))
             fail(row, $sformatf(
-                "source A/W/S/P/L/T=%08x/%0b/%02b/%02b/%0b/%02b expected %08x/0/10/10/0/%02b",
-                previous_addr, previous_write, previous_size,
-                previous_prot, previous_lock, previous_trans,
-                TEST_PC + 32'd8, expected_trans(row)));
+                "first phase A/W/S/P/L/T=%08x/%0b/%02b/%02b/%0b/%02b expected %08x/%0b/10/%02b/%0b/%02b",
+                ADDR, WRITE, SIZE, PROT, LOCK, TRANS,
+                expected_addr(row), expected_write(row),
+                expected_prot(row), expected_lock(row),
+                expected_trans(row)));
     endtask
 
     initial begin
         for (int row = 0; row < ROW_COUNT; row++)
             run_row(row);
-        $display("[source_cycle_matrix] PASS (%0d reset-isolated rows)",
+        $display("[table7_first_phase_matrix] PASS (%0d reset-isolated rows)",
                  ROW_COUNT);
         $finish;
     end
 
     initial begin
         #150000;
-        $fatal(1, "[source_cycle_matrix] TIMEOUT");
+        $fatal(1, "[table7_first_phase_matrix] TIMEOUT");
     end
 
     /* verilator lint_off UNUSEDSIGNAL */
