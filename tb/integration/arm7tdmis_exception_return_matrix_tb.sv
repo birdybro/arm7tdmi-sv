@@ -7,13 +7,13 @@
 // implementation path, and the conventional stack-based LDM ... {pc}^ form.
 //
 // In addition to the final PC/CPSR, each row checks the selected physical
-// SPSR/LR/SP banks, the first redirected opcode bus tuple (including the
-// restored privilege and instruction width), exact PC alignment, LDM data
-// beats/writeback, all otherwise-unmodified physical registers and SPSRs,
-// and suppression of the sequential instruction after the return. The raw
-// return values deliberately set discarded address bits; masking those bits
-// is this project's ISA-016 policy for otherwise-UNPREDICTABLE software, not
-// an additional architectural promise.
+// SPSR/LR/SP banks, every source/redirect bus tuple from Tables 7-6 and 7-13
+// (including restored privilege and instruction width), exact PC alignment,
+// LDM data beats/writeback, all otherwise-unmodified physical registers and
+// SPSRs, and suppression of the sequential instruction after the return.
+// The raw return values deliberately set discarded address bits; masking
+// those bits is this project's ISA-016 policy for otherwise-UNPREDICTABLE
+// software, not an additional architectural promise.
 
 `timescale 1ns/1ps
 
@@ -296,9 +296,71 @@ module arm7tdmis_exception_return_matrix_tb
                                         : 2'(SIZE_HALFWORD))
             || PROT !== 2'(PROT_OPC_USR)
             || LOCK !== LOCK_FREE
-            || TRANS !== 2'(TRANS_N))
+            || TRANS !== 2'(TRANS_S))
             fail(mode_idx, state_idx, form_idx, $sformatf(
                 "first target bus A/W/S/P/L/T=%08x/%0b/%02b/%02b/%0b/%02b",
+                ADDR, WRITE, SIZE, PROT, LOCK, TRANS));
+    endtask
+
+    task automatic check_source_bus(
+        input int mode_idx,
+        input int state_idx,
+        input int form_idx,
+        input logic [31:0] observed_addr,
+        input logic observed_write,
+        input logic [1:0] observed_size,
+        input logic [1:0] observed_prot,
+        input logic observed_lock,
+        input logic [1:0] observed_trans
+    );
+        logic [1:0] expected_trans;
+        expected_trans = (form_idx inside {1, 4})
+                       ? 2'(TRANS_I) : 2'(TRANS_N);
+        if (observed_addr !== (TEST_PC + 32'd8)
+            || observed_write !== WRITE_READ
+            || observed_size !== 2'(SIZE_WORD)
+            || observed_prot !== 2'(PROT_OPC_PRIV)
+            || observed_lock !== LOCK_FREE
+            || observed_trans !== expected_trans)
+            fail(mode_idx, state_idx, form_idx, $sformatf(
+                "source bus A/W/S/P/L/T=%08x/%0b/%02b/%02b/%0b/%02b expected %08x/0/10/10/0/%02b",
+                observed_addr, observed_write, observed_size,
+                observed_prot, observed_lock, observed_trans,
+                TEST_PC + 32'd8, expected_trans));
+    endtask
+
+    task automatic check_shift_internal_bus(
+        input int mode_idx,
+        input int state_idx,
+        input int form_idx
+    );
+        if (ADDR !== (TEST_PC + 32'd12)
+            || WRITE !== WRITE_READ
+            || SIZE !== 2'(SIZE_WORD)
+            || PROT !== 2'(PROT_DAT_PRIV)
+            || LOCK !== LOCK_FREE
+            || TRANS !== 2'(TRANS_N))
+            fail(mode_idx, state_idx, form_idx, $sformatf(
+                "register-shift cycle 2 A/W/S/P/L/T=%08x/%0b/%02b/%02b/%0b/%02b",
+                ADDR, WRITE, SIZE, PROT, LOCK, TRANS));
+    endtask
+
+    task automatic check_following_target_bus(
+        input int mode_idx,
+        input int state_idx,
+        input int form_idx
+    );
+        logic [31:0] step;
+        step = state_idx == 0 ? 32'd4 : 32'd2;
+        if (ADDR !== (target_pc(state_idx) + step)
+            || WRITE !== WRITE_READ
+            || SIZE !== (state_idx == 0 ? 2'(SIZE_WORD)
+                                        : 2'(SIZE_HALFWORD))
+            || PROT !== 2'(PROT_OPC_USR)
+            || LOCK !== LOCK_FREE
+            || TRANS !== 2'(TRANS_S))
+            fail(mode_idx, state_idx, form_idx, $sformatf(
+                "following target bus A/W/S/P/L/T=%08x/%0b/%02b/%02b/%0b/%02b",
                 ADDR, WRITE, SIZE, PROT, LOCK, TRANS));
     endtask
 
@@ -372,8 +434,16 @@ module arm7tdmis_exception_return_matrix_tb
         logic [31:0] desired_spsr;
         logic        redirect_seen;
         logic        await_target_fetch;
+        logic        await_target_follow;
         logic        target_fetch_seen;
+        logic        target_follow_seen;
         logic        target_exec_seen;
+        logic [31:0] prev_addr;
+        logic        prev_write;
+        logic [1:0]  prev_size;
+        logic [1:0]  prev_prot;
+        logic        prev_lock;
+        logic [1:0]  prev_trans;
         int          redirect_count;
         int          data_cycles;
         int          wait_cycles;
@@ -389,6 +459,12 @@ module arm7tdmis_exception_return_matrix_tb
         while (!(u_dut.u_core.state_q == 4'd0
                  && u_dut.u_core.de_q.valid
                  && u_dut.u_core.de_q.pc == TEST_PC)) begin
+            prev_addr  = ADDR;
+            prev_write = WRITE;
+            prev_size  = SIZE;
+            prev_prot  = PROT;
+            prev_lock  = LOCK;
+            prev_trans = TRANS;
             @(negedge CLK);
             wait_cycles++;
             if (wait_cycles > 100)
@@ -431,15 +507,31 @@ module arm7tdmis_exception_return_matrix_tb
             fail(mode_idx, state_idx, form_idx,
                  "return opcode did not decode as intended");
 
+        check_source_bus(mode_idx, state_idx, form_idx,
+                         prev_addr, prev_write, prev_size, prev_prot,
+                         prev_lock, prev_trans);
+        if (form_idx inside {1, 4})
+            check_shift_internal_bus(mode_idx, state_idx, form_idx);
+
         snapshot_state();
         redirect_seen      = 1'b0;
         await_target_fetch = 1'b0;
+        await_target_follow = 1'b0;
         target_fetch_seen  = 1'b0;
+        target_follow_seen = 1'b0;
         target_exec_seen   = 1'b0;
         redirect_count     = 0;
         data_cycles        = 0;
 
         for (int step = 0; step < 100; step++) begin
+            if (await_target_follow
+                && (TRANS inside {TRANS_N, TRANS_S})
+                && !PROT[PROT_BIT_DATA]) begin
+                check_following_target_bus(mode_idx, state_idx, form_idx);
+                target_follow_seen  = 1'b1;
+                await_target_follow = 1'b0;
+            end
+
             if ((TRANS == 2'(TRANS_N) || TRANS == 2'(TRANS_S))
                 && PROT[PROT_BIT_DATA]) begin
                 if (form_idx != 5)
@@ -489,7 +581,8 @@ module arm7tdmis_exception_return_matrix_tb
 
                 if (u_dut.u_core.early_flush_fetch) begin
                     check_target_bus(mode_idx, state_idx, form_idx);
-                    target_fetch_seen = 1'b1;
+                    target_fetch_seen   = 1'b1;
+                    await_target_follow = 1'b1;
                 end else begin
                     await_target_fetch = 1'b1;
                 end
@@ -498,8 +591,9 @@ module arm7tdmis_exception_return_matrix_tb
                              || TRANS == 2'(TRANS_S))
                          && !PROT[PROT_BIT_DATA]) begin
                 check_target_bus(mode_idx, state_idx, form_idx);
-                target_fetch_seen  = 1'b1;
-                await_target_fetch = 1'b0;
+                target_fetch_seen    = 1'b1;
+                await_target_fetch   = 1'b0;
+                await_target_follow  = 1'b1;
             end
 
             if (u_dut.u_core.state_q == 4'd0
@@ -521,6 +615,9 @@ module arm7tdmis_exception_return_matrix_tb
         if (!target_fetch_seen)
             fail(mode_idx, state_idx, form_idx,
                  "first target opcode fetch was not observed");
+        if (!target_follow_seen)
+            fail(mode_idx, state_idx, form_idx,
+                 "following target opcode fetch was not observed");
         if (!target_exec_seen)
             fail(mode_idx, state_idx, form_idx,
                  "return target never reached Execute");
