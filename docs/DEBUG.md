@@ -341,6 +341,14 @@ plus maximum 16-register STMIB and LDMIB transfers in
 stalled mid-transfer; the maximum LDM includes r15 and then resumes at that
 sixteenth loaded word.
 
+The remaining §5.16.1 breadth is fail-hard checked by
+`tb/integration/arm7tdmis_debug_inject_matrix_tb.sv`: all 16
+data-processing opcodes, register-controlled shift, every scalar
+load/store width and signed-load form, SWP/SWPB, and CPSR/SPSR MRS/MSR.
+Each of its 38 injected instructions must produce exactly one accept and
+one retire. All external-memory families are stalled before their response
+edge, while a queued normal instruction remains frozen throughout.
+
 Debug-speed `LDMIA`/`STMIA` without writeback follows the ARM7TDMI scan-data
 protocol used by OpenOCD: scan the block instruction, two pipeline NOPs, then
 one word for each selected register in ascending register order. The transfer

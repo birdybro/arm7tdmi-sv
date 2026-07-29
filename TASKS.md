@@ -2642,7 +2642,7 @@ number of cycles spent in an internal FSM state.
   priority. `tb/unit/ice_watchpoint_tb.sv` covers Debug Control bit 5, permitted
   `DBGEXT` qualification, and fail-closed data-dependent, RANGE, and CHAIN
   configurations.
-- [ ] **DBG-006:** Replace the fixed eight-cycle injection window with an explicit
+- [x] **DBG-006:** Replace the fixed eight-cycle injection window with an explicit
   instruction accepted/retired handshake. Debug-speed and system-speed execution must
   support wait states and every allowed multicycle instruction, including 16-register
   LDM/STM, without fetching or retiring an extra normal instruction. Halt only at a
@@ -2655,8 +2655,15 @@ number of cycles spent in an internal FSM state.
   OpenOCD's MRS/MSR/STR PSR transfer is covered in
   `tb/integration/arm7tdmis_debug_register_scan_tb.sv`. The maximum block
   transfers cover all 16 external beats, architectural r0-r14 effects, r15
-  store/load, and restart from the loaded r15 value. The full allowed-instruction
-  class matrix remains open.
+  store/load, and restart from the loaded r15 value.
+  `tb/integration/arm7tdmis_debug_inject_matrix_tb.sv` completes the §5.16.1
+  debug-speed class matrix with all 16 data-processing opcodes, the
+  register-controlled-shift extra cycle, every scalar load/store width and
+  signedness, SWP/SWPB, and CPSR/SPSR MRS/MSR. Its 38 ordinary injected words
+  each require exactly one accept and retire; every memory family is stalled
+  before its response edge and the pending normal instruction stays frozen.
+  The system-speed test covers the four permitted at-speed classes—single
+  load/store and LDM/STM—including stalls and byte/halfword/word accesses.
 - [ ] **DBG-007:** Implement debug entry/exit PC formulas, temporary DBGACK behavior,
   pending interrupt preservation, interrupt masking during at-speed execution, and
   the DBGRQ/PC-modify errata policy. Scan-loaded r15 now replaces all stale
