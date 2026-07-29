@@ -14,6 +14,8 @@ FILELIST = FPGA_DIR / "arm7tdmi_mister.f"
 QIP = FPGA_DIR / "arm7tdmi_mister.qip"
 QSF = FPGA_DIR / "arm7tdmi_mister.qsf"
 SDC = FPGA_DIR / "arm7tdmi_mister.sdc"
+CONFORMANCE_QSF = FPGA_DIR / "arm7tdmis_conformance.qsf"
+CONFORMANCE_SDC = FPGA_DIR / "arm7tdmis_conformance.sdc"
 EXAMPLE = FPGA_DIR / "example" / "arm7tdmi_mister_example_top.sv"
 
 
@@ -51,7 +53,15 @@ def _qip_sources() -> set[pathlib.Path]:
 
 class FpgaPackageTest(unittest.TestCase):
     def test_required_public_files_exist(self) -> None:
-        for path in (FILELIST, QIP, QSF, SDC, EXAMPLE):
+        for path in (
+            FILELIST,
+            QIP,
+            QSF,
+            SDC,
+            CONFORMANCE_QSF,
+            CONFORMANCE_SDC,
+            EXAMPLE,
+        ):
             with self.subTest(path=path.relative_to(REPO_ROOT)):
                 self.assertTrue(path.is_file(), f"missing public package file: {path}")
 
@@ -74,6 +84,14 @@ class FpgaPackageTest(unittest.TestCase):
         self.assertIn("arm7tdmi_mister.sdc", text)
         self.assertIn("example/arm7tdmi_mister_example_top.sv", text)
         self.assertIn("TOP_LEVEL_ENTITY arm7tdmi_mister_example_top", text)
+        self.assertNotRegex(text, r"(^|[\s\"'])/(home|Users|tmp)/")
+
+    def test_conformance_qsf_keeps_the_raw_feature_complete_top(self) -> None:
+        text = CONFORMANCE_QSF.read_text(encoding="utf-8")
+        self.assertIn("arm7tdmi_mister.qip", text)
+        self.assertIn("arm7tdmis_conformance.sdc", text)
+        self.assertIn("TOP_LEVEL_ENTITY arm7tdmis_top", text)
+        self.assertNotIn("arm7tdmi_mister_example_top", text)
         self.assertNotRegex(text, r"(^|[\s\"'])/(home|Users|tmp)/")
 
     def test_example_uses_only_the_public_wrapper(self) -> None:

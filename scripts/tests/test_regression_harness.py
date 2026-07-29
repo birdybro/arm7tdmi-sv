@@ -29,8 +29,37 @@ class RegressionHarnessTest(unittest.TestCase):
         self.assertEqual(metadata["seed"], 12345)
         self.assertEqual(metadata["manifest"]["unit"], ["alpha", "beta"])
         self.assertEqual(metadata["manifest"]["integration"], ["gamma"])
-        self.assertEqual(metadata["manifest"]["fpga"], ["quartus-analysis"])
+        self.assertEqual(
+            metadata["manifest"]["fpga"],
+            [
+                "quartus-analysis",
+                "quartus-conformance-analysis",
+                "quartus-compile",
+                "quartus-conformance-compile",
+            ],
+        )
         self.assertEqual(metadata["manifest"]["smoke"], ["arm7tdmis_tb_top"])
+
+    def test_full_regression_runs_both_quartus_profiles(self) -> None:
+        quick = [
+            name
+            for name, _ in regression_harness._phases(
+                ("unit",), ("integration",), quick=True
+            )
+        ]
+        full = [
+            name
+            for name, _ in regression_harness._phases(
+                ("unit",), ("integration",), quick=False
+            )
+        ]
+
+        self.assertIn("quartus-analysis", quick)
+        self.assertIn("quartus-conformance-analysis", quick)
+        self.assertNotIn("quartus-compile", quick)
+        self.assertNotIn("quartus-conformance-compile", quick)
+        self.assertIn("quartus-compile", full)
+        self.assertIn("quartus-conformance-compile", full)
 
     def test_atomic_report_is_machine_readable(self) -> None:
         report = {
