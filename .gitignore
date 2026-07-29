@@ -13,6 +13,12 @@ __pycache__/
 # Generated release evidence (archive selected immutable reports separately)
 /reports/generated/
 
+# Quartus project databases and generated programming/report artifacts
+/fpga/arm7tdmi_mister.qpf
+/fpga/db/
+/fpga/incremental_db/
+/fpga/output_files/
+
 # Editor / OS
 .vscode/
 .idea/
