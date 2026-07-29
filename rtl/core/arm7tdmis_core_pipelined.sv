@@ -157,34 +157,35 @@ module arm7tdmis_core_pipelined
         logic        valid;
     } de_t;
 
-    // A breakpoint stops the core before the Execute edge, but the external
-    // bus already carries the response for a younger in-flight opcode fetch.
-    // Preserve that response while the rest of the core is clock-disabled;
-    // otherwise restart would associate a later halted-bus value with the
-    // old inflight_pc_q and skip or corrupt the younger instruction.
-    logic        breakpoint_response_valid_q;
-    logic [31:0] breakpoint_response_data_q;
-    logic        breakpoint_response_abort_q;
-    logic        breakpoint_response_tag_q;
+    // Every halt can leave a younger opcode response in flight while the
+    // external bus is isolated from the stopped core.  Preserve that response
+    // until normal pipeline advance consumes it; debug-speed instruction
+    // injection must not discard it.  Breakpoints stop before their Execute
+    // edge, whereas watchpoints/DBGRQ stop on a completion edge and receive
+    // the outstanding response during the first halted cycle.
+    logic        halt_response_valid_q;
+    logic [31:0] halt_response_data_q;
+    logic        halt_response_abort_q;
+    logic        halt_response_tag_q;
 
     always_ff @(posedge CLK) begin
         if (!nRESET) begin
-            breakpoint_response_valid_q <= 1'b0;
-            breakpoint_response_data_q  <= 32'h0;
-            breakpoint_response_abort_q <= 1'b0;
-            breakpoint_response_tag_q   <= 1'b0;
+            halt_response_valid_q <= 1'b0;
+            halt_response_data_q  <= 32'h0;
+            halt_response_abort_q <= 1'b0;
+            halt_response_tag_q   <= 1'b0;
         end else if (dbg_pc_write) begin
             // A scan-loaded resume PC invalidates the younger fetch response
-            // saved when a breakpoint stopped the pipeline.
-            breakpoint_response_valid_q <= 1'b0;
-        end else if (!breakpoint_response_valid_q
-                     && dbg_halted && dbg_breakpoint_execute) begin
-            breakpoint_response_valid_q <= 1'b1;
-            breakpoint_response_data_q  <= RDATA;
-            breakpoint_response_abort_q <= ABORT;
-            breakpoint_response_tag_q   <= dbg_breakpoint_fetch;
-        end else if (CLKEN && breakpoint_response_valid_q) begin
-            breakpoint_response_valid_q <= 1'b0;
+            // saved when debug stopped the pipeline.
+            halt_response_valid_q <= 1'b0;
+        end else if (!halt_response_valid_q
+                     && dbg_halted && inflight_valid_q) begin
+            halt_response_valid_q <= 1'b1;
+            halt_response_data_q  <= RDATA;
+            halt_response_abort_q <= ABORT;
+            halt_response_tag_q   <= dbg_breakpoint_fetch;
+        end else if (CLKEN && halt_response_valid_q && latch_into_fd) begin
+            halt_response_valid_q <= 1'b0;
         end
     end
 
@@ -397,14 +398,14 @@ module arm7tdmis_core_pipelined
                 end
 
                 if (latch_into_fd) begin
-                    fd_q.instr <= breakpoint_response_valid_q
-                                ? breakpoint_response_data_q : RDATA;
+                    fd_q.instr <= halt_response_valid_q
+                                ? halt_response_data_q : RDATA;
                     fd_q.pc    <= inflight_pc_q;
                     fd_q.thumb <= cpsr.t;
-                    fd_q.pabort <= breakpoint_response_valid_q
-                                 ? breakpoint_response_abort_q : ABORT;
-                    fd_q.breakpoint <= breakpoint_response_valid_q
-                                     ? breakpoint_response_tag_q
+                    fd_q.pabort <= halt_response_valid_q
+                                 ? halt_response_abort_q : ABORT;
+                    fd_q.breakpoint <= halt_response_valid_q
+                                     ? halt_response_tag_q
                                      : dbg_breakpoint_fetch;
                     fd_q.injected <= 1'b0;
                     fd_q.valid <= 1'b1;

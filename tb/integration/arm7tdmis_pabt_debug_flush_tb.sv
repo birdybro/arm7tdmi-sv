@@ -247,8 +247,8 @@ module arm7tdmis_pabt_debug_flush_tb
             || (u_dut.u_core.de_q.valid
                 && (u_dut.u_core.de_q.pc == 32'h0000_0028)
                 && u_dut.u_core.de_q.pabort)
-            || (u_dut.u_core.breakpoint_response_valid_q
-                && u_dut.u_core.breakpoint_response_abort_q);
+            || (u_dut.u_core.halt_response_valid_q
+                && u_dut.u_core.halt_response_abort_q);
         if (!metadata_present)
             fail("halted pipeline did not retain the aborted fetch tag");
 
@@ -265,7 +265,7 @@ module arm7tdmis_pabt_debug_flush_tb
 
         if (u_dut.u_core.fd_q.pabort
             || u_dut.u_core.de_q.pabort
-            || u_dut.u_core.breakpoint_response_abort_q)
+            || u_dut.u_core.halt_response_abort_q)
             fail("scan-loaded PC did not clear old PABT metadata");
 
         clock_out(DEBUG_NOP, 1'b1);

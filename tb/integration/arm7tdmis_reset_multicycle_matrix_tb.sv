@@ -318,10 +318,10 @@ module arm7tdmis_reset_multicycle_matrix_tb
             fail(target, "one or more multicycle payload latches survived");
 
         if ({
-            u_dut.u_core.breakpoint_response_valid_q,
-            u_dut.u_core.breakpoint_response_data_q,
-            u_dut.u_core.breakpoint_response_abort_q,
-            u_dut.u_core.breakpoint_response_tag_q,
+            u_dut.u_core.halt_response_valid_q,
+            u_dut.u_core.halt_response_data_q,
+            u_dut.u_core.halt_response_abort_q,
+            u_dut.u_core.halt_response_tag_q,
             u_dut.u_core.dbg_inject_started_q,
             u_dut.u_core.dec_is_unimplemented_q,
             u_dut.u_core.data_abort_q,
