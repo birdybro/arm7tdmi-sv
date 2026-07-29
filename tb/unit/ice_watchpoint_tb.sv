@@ -440,6 +440,11 @@ module ice_watchpoint_tb;
         expect_monitor_transfer(2'b01, 2'b01, 1'b0,
                                 "monitor rejects RANGE coupling");
 
+        program_wp(1'b0, EXACT_ADDR, 32'h0, 32'h0, 32'hFFFF_FFFF,
+                   9'b1_00_1_11_10_1, 8'b10_0_0_0_00_0);
+        expect_monitor_transfer(2'b01, 2'b01, 1'b0,
+                                "monitor rejects CHAIN coupling");
+
         if (errors != 0)
             $fatal(1, "ice_watchpoint_tb: FAIL (%0d errors)", errors);
         $display("ice_watchpoint_tb: PASS");
