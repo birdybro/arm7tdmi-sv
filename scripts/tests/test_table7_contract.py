@@ -84,6 +84,20 @@ class Table7ContractTest(unittest.TestCase):
             with self.subTest(observation=observation):
                 self.assertIn(observation, text)
 
+    def test_core_oracle_crosses_endian_and_waits_at_every_phase(self) -> None:
+        text = CORE_ORACLE.read_text(encoding="utf-8")
+        for evidence in (
+            "ENDIAN_COUNT = 2",
+            "STALL_PROFILE_COUNT = 2",
+            ".CFGBIGEND(CFGBIGEND)",
+            "stall_cycles",
+            "check_stalled_phase",
+            "endian x %0d stall profiles",
+        ):
+            with self.subTest(evidence=evidence):
+                self.assertIn(evidence, text)
+        self.assertNotIn(".CFGBIGEND(1'b0)", text)
+
     def test_bus_closure_is_tied_to_the_executable_matrix(self) -> None:
         tasks = TASKS.read_text(encoding="utf-8")
         self.assertIn("- [x] **BUS-002:**", tasks)
