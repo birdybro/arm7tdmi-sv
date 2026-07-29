@@ -18,8 +18,8 @@ jobs:
       - name: Install open-source verification tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes build-essential clang lld llvm make \
-            python3 qemu-system-arm verilator
+          sudo apt-get install --yes build-essential clang curl lld llvm make \
+            python3 qemu-system-arm verilator xz-utils
       - name: Install pinned SystemVerilog frontend
         run: |
           mkdir -p "$GITHUB_WORKSPACE/.tools"

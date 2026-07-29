@@ -9,10 +9,10 @@ and may be stricter than this summary.
   (MIST-007 through MIST-009, FPGA-002, and FPGA-007).
 - Real debugger interoperability has not been demonstrated (JTAG-006).
 - Constrained-random generation, third-party ARMv4T suites, complete
-  cross/functional coverage, formal proof, compiler-built programs, long
-  sanitizing fuzz runs, and independent review remain open (VAL-002 through
-  VAL-011). The checked QEMU differential is the VAL-001 shared-subset
-  comparison, not evidence for those broader gates.
+  cross/functional coverage, formal proof, long sanitizing fuzz runs, and
+  independent review remain open (VAL-002 through VAL-008 and VAL-010 through
+  VAL-011). The checked QEMU differential and pinned compiler-program test
+  close VAL-001 and VAL-009 respectively, not those broader gates.
 - Independent synthesis plus CDC/RDC analysis, post-synthesis architectural
   simulation or equivalence, and a fully pinned clean-checkout release
   toolchain remain open (FPGA-004, FPGA-006, and FPGA-008).

@@ -15,12 +15,11 @@ historical baseline table in §31.1 forward as current state. Substantial fixes 
 landed since that baseline: the ARM/Thumb, exception/abort, coprocessor/CP14,
 EmbeddedICE-RT, and ETM-facing directed requirements are checked; regressions fail
 hard and publish evidence; and both FPGA characterization profiles pass checked
-Quartus flows. Current open categories are the unchecked §31 items: final all-cycle
-bus conformance, real-debugger interoperability, save states/framework/
-PocketStation/generic-SoC integration, independent differential/random/formal/
-compiler/soak validation, remaining FPGA/reproducibility/hardware work, and release
-documentation. Consult each checkbox and its attached evidence before making a
-narrower claim.
+Quartus flows. Current open categories are the unchecked §31 items:
+real-debugger interoperability, framework/PocketStation integration,
+random/suite/formal/soak validation, remaining FPGA/reproducibility/hardware
+work, and release documentation. Consult each checkbox and its attached
+evidence before making a narrower claim.
 
 Do not mark a feature complete because its module/decoder exists or because `make`
 returns zero. Use the VERIFIED definition and evidence gates in `TASKS.md` §31.
@@ -56,18 +55,21 @@ The `arm7tdmis_top` port list is fixed by the TRM and enumerated in TASKS.md §1
 ## Build / lint / test
 
 Toolchain: **Verilator 5.x** for simulation and fatal `--lint-only -Wall` lint;
-**GTKWave** for optional FST viewing; and **Quartus Lite 17.0.2** for the checked
-Cyclone V characterization flows. Yosys/SymbiYosys and the ARM cross-assembler are
-not currently installed. Icarus Verilog 13.0 has been evaluated but rejects the
-package syntax used by the source and is not a supported simulation flow. Build
-scripts and `.f` file lists live in `scripts/`; commit-message convention
+**GTKWave** for optional FST viewing; **Arm GNU Toolchain 14.3.Rel1** through
+the checksum-pinned local installer for compiler-program evidence; and
+**Quartus Lite 17.0.2** for the checked Cyclone V characterization flows.
+Yosys/SymbiYosys are not currently installed. Icarus Verilog 13.0 has been
+evaluated but rejects the package syntax used by the source and is not a
+supported simulation flow. Build scripts and `.f` file lists live in
+`scripts/`; commit-message convention
 `§N.M description …` per the working-style note below.
 
-Directed tests use hand-written, TRM-derived expected state. That is not an
-independent reference model: VAL-001 still requires an independently derived model or
-external emulator comparison, and subsequent VAL items require random programs,
-public suites, compiler tests, formal properties, and long soaks. Never describe the
-current hand-written expectations as differential validation.
+Directed tests use hand-written, TRM-derived expected state. The checked
+VAL-001 QEMU trace is the independent shared-subset differential; VAL-009
+separately executes pinned-compiler programs. Remaining VAL items require
+random programs, public suites, formal properties, functional-coverage
+closure, and long soaks. Do not describe hand-written expectations as
+independent differential validation.
 
 ## RTL coding discipline (load-bearing — read before writing any `.sv`)
 

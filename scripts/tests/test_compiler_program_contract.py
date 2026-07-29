@@ -87,6 +87,9 @@ class CompilerProgramContractTest(unittest.TestCase):
         regression = (
             REPO_ROOT / "scripts" / "regression_harness.py"
         ).read_text(encoding="utf-8")
+        release_evidence = (
+            REPO_ROOT / "scripts" / "release_evidence.py"
+        ).read_text(encoding="utf-8")
         workflow = (
             REPO_ROOT / ".github/workflows/verification.yml"
         ).read_text(encoding="utf-8")
@@ -96,6 +99,8 @@ class CompilerProgramContractTest(unittest.TestCase):
         self.assertIn("build_compiler_program.py", makefile)
         self.assertIn("REQUIRED_QUICK_INTEGRATION", regression)
         self.assertIn('"compiler"', regression)
+        self.assertIn('"integration-compiler"', release_evidence)
+        self.assertIn('REPORT_ROOT / "compiler"', release_evidence)
         self.assertIn("curl", workflow)
         self.assertIn("xz-utils", workflow)
         self.assertIn("- [x] **VAL-009:**", tasks)

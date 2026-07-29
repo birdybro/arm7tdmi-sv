@@ -27,6 +27,7 @@ from typing import Any
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 REPORT_SCHEMA = "arm7tdmis-regression-v1"
+REQUIRED_QUICK_INTEGRATION = ("qemu_diff", "compiler")
 
 
 def _run_text(command: Sequence[str]) -> str:
@@ -74,6 +75,8 @@ def _source_digest() -> str:
                 ".tcl",
                 ".json",
                 ".S",
+                ".c",
+                ".ld",
             } or path.name == "Makefile":
                 candidates.append(path)
 
@@ -267,7 +270,16 @@ def _phases(
     yield _make_phase("raw-checker-expected-failure", "raw-checker-self-test")
 
     selected_units = unit_tests[:1] if quick else unit_tests
-    selected_integration = integration_tests[:1] if quick else integration_tests
+    if quick:
+        selected_integration = tuple(
+            test
+            for test in integration_tests
+            if test in REQUIRED_QUICK_INTEGRATION
+        )
+        if not selected_integration:
+            selected_integration = integration_tests[:1]
+    else:
+        selected_integration = integration_tests
     for test in selected_units:
         yield _make_phase(f"unit-{test}", f"unit-{test}")
     for test in selected_integration:
@@ -296,7 +308,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--quick",
         action="store_true",
-        help="run one unit and one integration test plus lint/harness/smoke",
+        help=(
+            "run one unit and the mandatory independent/compiler "
+            "integrations plus lint/harness/smoke"
+        ),
     )
     parser.add_argument(
         "--simulation-only",

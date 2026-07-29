@@ -162,6 +162,15 @@ def _validated_files(
             for path in qemu_directory.rglob("*")
             if path.is_file()
         )
+    if "integration-compiler" in phase_names:
+        compiler_directory = REPORT_ROOT / "compiler"
+        if not (compiler_directory / "metadata.json").is_file():
+            raise ValueError("compiler-program metadata is missing")
+        candidates.extend(
+            path.resolve()
+            for path in compiler_directory.rglob("*")
+            if path.is_file()
+        )
     return sorted(set(candidates))
 
 

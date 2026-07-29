@@ -3325,8 +3325,20 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   also prove forward progress and absence of deadlock.
 - [ ] **VAL-008:** Add bounded formal cover traces for every FSM state/transition and
   every exception/debug entry and return.
-- [ ] **VAL-009:** Add software-level compiler tests built with pinned
+- [x] **VAL-009:** Add software-level compiler tests built with pinned
   `arm-none-eabi` tools for `-march=armv4t`, in ARM, Thumb, and interworked code.
+  `install_arm_toolchain.py` downloads Arm GNU Toolchain 14.3.Rel1 from Arm's
+  release endpoint, accepts it only at the recorded SHA-256, and caches a
+  versioned install with provenance metadata. `build_compiler_program.py`
+  compiles separate `-marm` and `-mthumb` C translation units plus ARM startup
+  code with `-mthumb-interwork`, rejects emitted `BLX`, requires ELF
+  `Tag_CPU_arch: v4T`, and records commands, tool identity, and source/output
+  hashes. `arm7tdmis_compiler_tb.sv` executes that exact image through the raw
+  bus, requires ARM and Thumb retirements plus both state-transition
+  directions, and fail-hard checks the compiler program's arithmetic, loop,
+  stack/call, and word/halfword/byte memory signature. `integ-compiler` is
+  mandatory in full regression and, with the QEMU differential, in quick CI;
+  generated compiler evidence is included in the release archive.
 - [ ] **VAL-010:** Run long deterministic fuzz/soak jobs under sanitizing simulator
   settings, X-propagation where supported, and multiple seeds. Archive failing seeds
   and minimize them into directed regressions.

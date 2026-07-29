@@ -53,8 +53,9 @@ evidence. A release workflow must copy the selected report and logs to its
 versioned artifact archive together with the corresponding clean source commit.
 
 `make -C scripts regress-quick` exercises the same metadata, clean-build, lint,
-harness, and smoke path with one unit and one integration test. Its report is
-explicitly marked `"mode": "quick"` and cannot be mistaken for the full run.
+harness, and smoke path with one unit plus the mandatory QEMU differential and
+pinned-compiler integration tests. Its report is explicitly marked
+`"mode": "quick"` and cannot be mistaken for the full run.
 
 `make -C scripts regress-ci` is the open-source CI form. It also uses quick
 selection, sets `"scope": "simulation-only"`, records an empty FPGA phase
@@ -157,6 +158,32 @@ count, and SHA-256 hashes. Generated files live under
 `reports/generated/qemu_diff/` and are included in release-evidence archives.
 The test is first in `INTEG_TESTS`, so quick open-source CI and full local
 regression both regenerate rather than trusting a committed golden trace.
+
+## Pinned ARM/Thumb compiler program
+
+`make -C scripts integ-compiler` installs Arm GNU Toolchain 14.3.Rel1 for
+Linux x86-64 into the ignored `.tools/` cache. The installer downloads the
+official `arm-none-eabi` archive and verifies SHA-256
+`8f6903f8ceb084d9227b9ef991490413014d991874a1e34074443c2a72b14dbd`
+before extraction. A cached install is reused only when its metadata,
+compiler executable, release, digest, and reported GCC 14.3.1 identity agree.
+
+The build uses `-march=armv4t -mthumb-interwork -ffreestanding`: startup and
+one C translation unit use `-marm`, while a second C translation unit uses
+`-mthumb`. ARM calls Thumb for a loop and mixed-width stores; Thumb calls back
+to an ARM arithmetic function on every loop iteration. The build fails if the
+linked image loses `Tag_CPU_arch: v4T`, lacks any expected function, or
+contains ARMv5 `BLX`. It records the exact commands, GCC identity, source and
+output hashes, disassembly, ELF attributes, link map, binary, and simulator
+hex under `reports/generated/compiler/`.
+
+`arm7tdmis_compiler_tb` loads that hex into the public raw-bus memory model.
+It requires retirements in both instruction states and both ARM-to-Thumb and
+Thumb-to-ARM transitions, rejects exceptions/debug injection, and accepts
+completion only after the C-written mailbox proves loop/arithmetic, stack and
+call behavior, plus compiler-generated word, halfword, and byte accesses.
+This test is mandatory in quick CI and full regression. Its generated build
+directory is included in release-evidence archives when the phase ran.
 
 ## Exhaustive encoding evidence
 

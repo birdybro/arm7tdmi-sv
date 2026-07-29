@@ -11,6 +11,9 @@ sign-off gate in `TASKS.md` §31.13.
 - Add an always-regenerated QEMU differential covering 77 consecutive
   ARM/Thumb retirements and final memory effects through the public
   architectural retirement interface.
+- Add a checksum-pinned Arm GNU 14.3.Rel1 compiler gate that executes separate
+  ARM and Thumb C units, bidirectional ARMv4T interworking, and mixed-width
+  memory signatures on the RTL.
 - Complete the remaining independent validation, formal, toolchain,
   MiSTer-framework, PocketStation, and hardware requirements in `TASKS.md`.
 - Freeze v1.0 only after every release-gate statement has durable evidence.

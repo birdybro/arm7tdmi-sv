@@ -82,6 +82,22 @@ class RegressionHarnessTest(unittest.TestCase):
         self.assertIn("harness-expected-failure", phases)
         self.assertIn("smoke", phases)
 
+    def test_quick_profile_keeps_independent_and_compiler_programs(self) -> None:
+        phases = [
+            name
+            for name, _ in regression_harness._phases(
+                ("unit",),
+                ("ordinary", "compiler", "qemu_diff", "later"),
+                quick=True,
+                include_fpga=False,
+            )
+        ]
+
+        self.assertIn("integration-qemu_diff", phases)
+        self.assertIn("integration-compiler", phases)
+        self.assertNotIn("integration-ordinary", phases)
+        self.assertNotIn("integration-later", phases)
+
     def test_atomic_report_is_machine_readable(self) -> None:
         report = {
             "schema": "arm7tdmis-regression-v1",

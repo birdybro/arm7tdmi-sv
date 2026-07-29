@@ -1,5 +1,6 @@
 # Verilator build output
 obj_dir/
+/.tools/
 
 # Simulation artifacts
 *.fst
