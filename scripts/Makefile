@@ -35,6 +35,7 @@ UNIT_TESTS := regfile psr reset_sync shifter alu multiplier condition decoder th
 INTEG_TESTS := umull umlal cp15_undef cp14_decode cp14_dcc cp14_r15 cp_pipeline_follow cp_cdp_protocol cp_reg_transfer cp_reg_r15 cp_ldc_stc cp_ldc_stc_abort cp_erratum14 cp_erratum15 cp_busy_interrupt cp_busy_dbgrq cpntrans debug_status debug_watchpoint_completion debug_breakpoint_flush debug_breakpoint_execute debug_inject_handshake abort_inactive abort_clken endian_data endian_thumb translated_ls cond_suppress reset_clken fetch_sequence bus_burst vector_catch abort irq fiq exception_priority dabt_fiq thumb_exception_lr ldm_pc pabt pabt_pipeline ldm_abort ldm_abort_base_list stm_abort stm_base_list ls_abort_modes swp_read_abort cycles swi undef thumb bx_interwork swpb_data flags_preserve mull_flags
 
 INTEG_COMMON_SRCS := \
+	../tb/integration/arm7tdmis_jtag_tb_pkg.sv \
 	../tb/integration/arm7tdmis_memory.sv \
 	../tb/integration/arm7tdmis_assertions.sv \
 	../tb/integration/arm7tdmis_test_fixture.sv

@@ -142,7 +142,8 @@ Trap fires when `!watch_nopc` (opcode fetch) AND `watch_addr` matches one of the
 - synced external `DBGBREAK` pin
 - `DBGRQI` = force-DBGRQ (ctrl[1]) OR synced external `DBGRQ`
 
-`tap_restart_req` pulses when TAP latches IR=RESTART at Update-IR.
+`tap_restart_req` is sampled on the edge that enters Run-Test/Idle with
+IR=RESTART, matching TRM §5.13.5.
 
 DBG_MONITOR (data-abort variant where the core takes an exception instead of halting) is stubbed — the wiring would overlap §17 DABT entry, deferred until that integration test lands.
 
@@ -189,27 +190,35 @@ BYPASS   = 4'b1111   // single-bit DR shift (default)
 ### Scan chains
 
 - **Chain 0**: reserved, returns zeros.
-- **Chain 1**: 33-bit. `[32] DBGBREAK control cell + [31:0] instruction`. Used for instruction injection during debug state.
-- **Chain 2**: 38-bit. `[37] R/W + [36:32] addr + [31:0] data`. EmbeddedICE-RT register R/W.
+- **Chain 1**: 33-bit logical value: `[32] DBGBREAK + [31:0] data`. Its
+  physical path is TDI → DATA0…DATA31 → DBGBREAK → TDO, so DBGBREAK is the
+  first captured bit shifted out and the first host bit shifted in when loading
+  a complete value, followed by DATA31…DATA0.
+- **Chain 2**: 38-bit logical value: `[37] R/W + [36:32] addr + [31:0] data`.
+  Its physical path is TDI → R/W → ADDR4…ADDR0 → DATA0…DATA31 → TDO.
 
-DR shift register is sized to 38 bits to hold chain 2. Smaller chains use the low bits.
+The test transport in `tb/integration/arm7tdmis_jtag_tb_pkg.sv` serializes these
+physical cell orders explicitly; treating either chain as a packed LSB-first
+vector reverses architecturally visible fields.
 
 ### Chain 2 R/W protocol
 
-To write a register: shift in `{R/W=1, addr[4:0], data[31:0]}`. Update-DR pulses `ice_scan_we` to the ICE-RT, which writes `regs[addr] := data`.
+To write a register, serialize the logical `{R/W=1, addr[4:0], data[31:0]}`
+using the chain-2 wire order above. Update-DR pulses `ice_scan_we` to the
+ICE-RT, which writes the selected register.
 
-To read a register: shift in `{R/W=0, target_addr, X*32}`. Update-DR latches nothing. On the next pass, Capture-DR loads the shift register with `{6'h0, regs[target_addr]}`. Shift-DR shifts the value out.
-
-The address-then-read pattern relies on `dr_shift_q[36:32]` (the addr field) being whatever was last shifted in — between passes it stays at the previously-shifted target address.
+To read a register, shift in a request with R/W=0. The read takes place at
+Update-DR, as required by TRM §5.14.5/§5.20.1, and the response is repacked
+into the physical scan cells. Chain 2 performs no Capture-DR action, so that
+response remains intact and shifts out on the next pass.
 
 ### Scan chain 1 inject runtime
 
-When the TAP fires `tap_inject_we` (Update-DR with IR=INTEST + chain selector = 1), the ICE-RT:
-
-1. Latches the instruction into `inject_instr_q`.
-2. Arms an 8-CLK un-halt window (`inject_phase_q := 8`).
-3. While the window is open, drops `core_halt` so the core processes the injected instruction.
-4. First cycle of the window pulses `dbg_inject_we` to the core.
+When the TAP fires `tap_inject_we` (Update-DR with IR=INTEST + chain selector
+= 1), the ICE-RT latches the instruction and holds `dbg_inject_we` until the
+core acknowledges it. The core then remains released for the actual lifetime
+of the instruction, including wait states and multicycle transfers. Its
+explicit retirement pulse re-arms debug halt; there is no guessed timeout.
 
 The core's F-stage handles the inject by overriding `fd_q`:
 
@@ -219,13 +228,16 @@ if (dbg_inject_we) begin
     fd_q.pc     <= de_q.pc;        // placeholder
     fd_q.thumb  <= cpsr.t;
     fd_q.pabort <= 1'b0;
+    fd_q.injected <= 1'b1;
     fd_q.valid  <= 1'b1;
 end else if (latch_into_fd) ...
 ```
 
-This bypasses the normal RDATA latch — no bus fetch happens during the un-halt window. D decodes the injected instruction, E executes it. Single-port regfile, single bus → the architecturally-allowed debug-state instructions per TRM §5.16.1 (DP, all L/S including LDM/STM, MSR/MRS) all work through this path.
-
-8 CLK is sized for the worst single-instruction completion (LDM-type or SWP with the §18 bus-overlap refactor). A more rigorous version would watch `state_q` for retirement and end the window precisely; the current shape relies on the debugger pacing chain-1 writes per TRM §5.16 anyway.
+This bypasses the normal instruction-fetch RDATA latch. D decodes the injected
+instruction and E executes it; memory data phases still use the external bus.
+The accepted/retired handshake is covered with a 12-register LDM plus a
+mid-transfer CLKEN stall in
+`tb/integration/arm7tdmis_debug_inject_handshake_tb.sv`.
 
 ## CP14 DCC data path
 

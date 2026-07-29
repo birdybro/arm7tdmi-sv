@@ -8,13 +8,12 @@
 // IR is 4 bits; valid public opcodes per debug_pkg are SCAN_N, RESTART,
 // INTEST, IDCODE, BYPASS. All other encodings BYPASS per IEEE 1149.1 default.
 //
-// DR mux for this scaffold:
+// DR mux:
 //   IDCODE  → 32-bit shift register seeded with IDCODE_VALUE at Capture-DR
 //   BYPASS  → 1-bit shift register
-//   SCAN_N  → 4-bit shift register (selects which scan chain — chain RTL
-//             lands with §22/§30.23.5)
-//   INTEST  → BYPASS for now (chain 1 wiring is §22)
-//   RESTART → BYPASS-shaped 1-bit, but UPDATE-DR exits debug state (§22)
+//   SCAN_N  → 4-bit shift register with fixed 1000 Capture-DR value
+//   INTEST  → selected physical scan chain (1 = 33-bit, 2 = 38-bit)
+//   RESTART → BYPASS-shaped 1-bit; entry to Run-Test/Idle restarts (§22)
 //
 // Reset: DBGnTRST forces the TAP to Test-Logic-Reset asynchronously per
 // IEEE 1149.1 §6.1. IR is loaded with IDCODE on reset (the standard
@@ -110,9 +109,15 @@ module arm7tdmis_jtag_tap
     logic [IR_WIDTH-1:0] ir_shift_q;
     logic [IR_WIDTH-1:0] ir_hold_q;       // committed at Update-IR
 
-    // ---- DR shift register (38-bit; sized for scan chain 2. IDCODE and
-    // BYPASS use the low 32 / 1 bits respectively; the upper bits stay at
-    // 0 for those instructions.
+    // ---- DR shift register (38-bit; sized for scan chain 2). For IDCODE,
+    // BYPASS, and SCAN_N, the conventional low bit is nearest TDO. For
+    // INTEST the indices follow physical position from TDI toward TDO:
+    //
+    // chain 1: [0]=DATA0 ... [31]=DATA31, [32]=DBGBREAK
+    // chain 2: [0]=R/W, [1:5]=ADDR4..ADDR0, [6:37]=DATA0..DATA31
+    //
+    // This is intentionally not a generic packed-vector LSB-first shift.
+    // It matches the cell order in TRM §5.11.1/§5.14.5.
     logic [37:0] dr_shift_q;
 
     // ---- Scan chain selector (4-bit, set via IR=SCAN_N). Chain numbers
@@ -151,23 +156,24 @@ module arm7tdmis_jtag_tap
                     unique case (ir_hold_q)
                         4'(IR_IDCODE): dr_shift_q <= {6'h0, IDCODE_VALUE};
                         4'(IR_BYPASS): dr_shift_q <= 38'h0;
-                        4'(IR_SCAN_N): dr_shift_q <= 38'h0;
+                        4'(IR_SCAN_N): dr_shift_q <= {34'h0, 4'b1000};
                         4'(IR_INTEST): begin
-                            // Capture current chain state. For chain 2, that's
-                            // the addressed ICE-RT register plus its response
-                            // address. DCC data overloads address bit 0 with W.
-                            if (scan_n_q == 4'd2)
-                                dr_shift_q <= {1'b0, ice_scan_raddr,
-                                               ice_scan_rdata};
-                            else
+                            // Reserved chains are hard zero. Chain 2 has no
+                            // Capture-DR action (§5.14.5), so a read response
+                            // loaded at Update-DR remains available to shift.
+                            // Chain 1 capture data is connected separately
+                            // with its debug-entry-cause implementation.
+                            if (scan_n_q == 4'd1)
+                                dr_shift_q <= 38'h0;
+                            else if (scan_n_q != 4'd2)
                                 dr_shift_q <= 38'h0;
                         end
                         default:       dr_shift_q <= 38'h0;
                     endcase
                 end
                 SDR: begin
-                    // Shift LSB-first toward TDO; TDI enters at the high bit
-                    // of the active width.
+                    // IDCODE/SCAN_N/BYPASS shift LSB-first. INTEST follows
+                    // each chain's physical TDI-to-TDO cell order.
                     //   IDCODE  : 32-bit width — shift positions [31:1]
                     //   BYPASS  : 1-bit — single bit through position 0
                     //   SCAN_N  : 4-bit — shift through bits [3:0]
@@ -181,9 +187,12 @@ module arm7tdmis_jtag_tap
                             dr_shift_q <= {34'h0, DBGTDI, dr_shift_q[3:1]};
                         4'(IR_INTEST): begin
                             unique case (scan_n_q)
-                                4'd2:    dr_shift_q <= {DBGTDI, dr_shift_q[37:1]};
-                                4'd1:    dr_shift_q <= {5'h0, DBGTDI, dr_shift_q[32:1]};
-                                default: dr_shift_q <= {37'h0, DBGTDI};
+                                4'd2:    dr_shift_q <= {dr_shift_q[36:0],
+                                                       DBGTDI};
+                                4'd1:    dr_shift_q <= {5'h0,
+                                                       dr_shift_q[31:0],
+                                                       DBGTDI};
+                                default: dr_shift_q <= 38'h0;
                             endcase
                         end
                         default:
@@ -198,6 +207,20 @@ module arm7tdmis_jtag_tap
                     // combinationally via ice_scan_we below).
                     if (ir_hold_q == 4'(IR_SCAN_N))
                         scan_n_q <= dr_shift_q[3:0];
+                    else if ((ir_hold_q == 4'(IR_INTEST))
+                             && (scan_n_q == 4'd2)
+                             && !dr_shift_q[0]) begin
+                        // A chain-2 read occurs at Update-DR. Repack the
+                        // combinational ICE response into physical scan-cell
+                        // order; the next Capture-DR deliberately preserves it.
+                        dr_shift_q[0]    <= 1'b0;
+                        dr_shift_q[1]    <= ice_scan_raddr[4];
+                        dr_shift_q[2]    <= ice_scan_raddr[3];
+                        dr_shift_q[3]    <= ice_scan_raddr[2];
+                        dr_shift_q[4]    <= ice_scan_raddr[1];
+                        dr_shift_q[5]    <= ice_scan_raddr[0];
+                        dr_shift_q[37:6] <= ice_scan_rdata;
+                    end
                 end
                 default: ;
             endcase
@@ -211,7 +234,20 @@ module arm7tdmis_jtag_tap
     //   Shift-IR : TDO = LSB of IR shift register
     //   Shift-DR : TDO = LSB of DR shift register
     //   else     : TDO drive is don't-care (DBGnTDOEN HIGH)
-    assign DBGTDO    = (tap_q == SIR) ? ir_shift_q[0] : dr_shift_q[0];
+    always_comb begin
+        if (tap_q == SIR) begin
+            DBGTDO = ir_shift_q[0];
+        end else if ((tap_q == SDR)
+                     && (ir_hold_q == 4'(IR_INTEST))) begin
+            unique case (scan_n_q)
+                4'd1:    DBGTDO = dr_shift_q[32];
+                4'd2:    DBGTDO = dr_shift_q[37];
+                default: DBGTDO = 1'b0;
+            endcase
+        end else begin
+            DBGTDO = dr_shift_q[0];
+        end
+    end
     assign DBGnTDOEN = !((tap_q == SDR) || (tap_q == SIR));
 
     // ---- Public state observers (for §22 EmbeddedICE-RT etc.)
@@ -221,21 +257,22 @@ module arm7tdmis_jtag_tap
     assign in_capture_dr = (tap_q == CDR);
 
     // ---- Chain 2 outputs to the ICE-RT module.
-    assign ice_scan_addr  = dr_shift_q[36:32];
-    assign ice_scan_wdata = dr_shift_q;
+    assign ice_scan_addr  = {dr_shift_q[1], dr_shift_q[2],
+                             dr_shift_q[3], dr_shift_q[4],
+                             dr_shift_q[5]};
+    assign ice_scan_wdata = {dr_shift_q[0], ice_scan_addr,
+                             dr_shift_q[37:6]};
     assign ice_scan_we    = DBGTCKEN
                          && (tap_q == UDR)
                          && (ir_hold_q == 4'(IR_INTEST))
                          && (scan_n_q == 4'd2)
-                         && dr_shift_q[37];      // R/W=1 (write)
-    // A read request is shifted in and committed at Update-DR. On the next
-    // Capture-DR the addressed response is sampled into dr_shift_q; that
-    // same event tells ICE-RT that a side-effecting read has completed.
+                         && dr_shift_q[0];       // R/W=1 (write)
+    // Both reads and writes occur at Update-DR (§5.14.5/§5.20.1).
     assign ice_scan_re    = DBGTCKEN
-                         && (tap_q == CDR)
+                         && (tap_q == UDR)
                          && (ir_hold_q == 4'(IR_INTEST))
                          && (scan_n_q == 4'd2)
-                         && !dr_shift_q[37];     // R/W=0 (read)
+                         && !dr_shift_q[0];      // R/W=0 (read)
 
     // ---- Chain 1 outputs to the debug-state instruction-inject path.
     assign ice_inject_instr = dr_shift_q[31:0];

@@ -11,6 +11,7 @@
 module arm7tdmis_cp14_dcc_tb
     import arm7tdmis_bus_pkg::*;
     import arm7tdmis_debug_pkg::*;
+    import arm7tdmis_jtag_tb_pkg::*;
 ;
 
     localparam int    CLK_HALF_PERIOD = 5;
@@ -144,7 +145,10 @@ module arm7tdmis_cp14_dcc_tb
         input  logic [31:0] data,
         output logic [37:0] scan_result
     );
-        shift_dr(38, {write, addr, data}, scan_result);
+        logic [37:0] serial_result;
+        shift_dr(38, chain2_serial_in(write, addr, data),
+                 serial_result);
+        scan_result = chain2_parallel_out(serial_result);
     endtask
 
     task automatic await_pin(

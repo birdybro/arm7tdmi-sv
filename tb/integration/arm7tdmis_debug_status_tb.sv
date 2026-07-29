@@ -15,6 +15,7 @@
 module arm7tdmis_debug_status_tb
     import arm7tdmis_bus_pkg::*;
     import arm7tdmis_debug_pkg::*;
+    import arm7tdmis_jtag_tb_pkg::*;
 ;
 
     localparam int CYCLE_LIMIT = 1200;
@@ -147,7 +148,10 @@ module arm7tdmis_debug_status_tb
         input  logic [4:0] addr,
         output logic [37:0] scan_result
     );
-        shift_dr(38, {1'b0, addr, 32'h0}, scan_result);
+        logic [37:0] serial_result;
+        shift_dr(38, chain2_serial_in(1'b0, addr, 32'h0),
+                 serial_result);
+        scan_result = chain2_parallel_out(serial_result);
     endtask
 
     task automatic read_debug_status(output logic [37:0] response);

@@ -131,9 +131,11 @@ See [docs/PIPELINE.md](docs/PIPELINE.md) for the detailed FSM, bus-overlap reaso
   comparators, registers, and halt/restart paths. Monitor mode, phase-correct
   data-dependent watchpoints, complete registers, and conformant debug execution are
   missing.
-- **JTAG TAP scaffold** (`rtl/jtag/arm7tdmis_jtag_tap.sv`): a 16-state FSM,
-  IDCODE/BYPASS, and preliminary chain wiring. Chain-1 bit-33 semantics,
-  synchronization, DBGEN gating, and end-to-end debug are incomplete.
+- **JTAG TAP (partial)** (`rtl/jtag/arm7tdmis_jtag_tap.sv`): all 16 TAP
+  transitions, public/default instructions, SCAN_N, and the physical chain-1/2
+  wire orders are fail-hard tested. Chain-1 bit-33 entry/system-speed semantics,
+  synchronization, DBGEN gating, and end-to-end debugger integration remain
+  incomplete.
 - **ETM-facing instrumentation**: `DBGnEXEC` and `DBGINSTRVALID` exist, but their full
   commit semantics and the external ETM contract are unverified.
 

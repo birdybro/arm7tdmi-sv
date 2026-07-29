@@ -9,6 +9,7 @@
 
 module arm7tdmis_debug_breakpoint_flush_tb
     import arm7tdmis_debug_pkg::*;
+    import arm7tdmis_jtag_tb_pkg::*;
 ;
 
     localparam int CYCLE_LIMIT = 1400;
@@ -133,7 +134,7 @@ module arm7tdmis_debug_breakpoint_flush_tb
         input logic [4:0] addr,
         input logic [31:0] data
     );
-        shift_dr(38, {1'b1, addr, data});
+        shift_dr(38, chain2_serial_in(1'b1, addr, data));
     endtask
 
     int unsigned errors = 0;

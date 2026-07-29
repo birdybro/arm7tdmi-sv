@@ -21,8 +21,9 @@ Known release blockers include:
 - Coprocessors: CPB/busy/data/C-cycle behavior is absent, CPnTRANS is wrong, CP14 is a
   simplified nonconformant shared register, and the fabricated internal CP15 must be
   removed.
-- Debug: EmbeddedICE-RT and JTAG explicitly contain scaffold/deferred behavior,
-  including missing monitor mode and nonconformant fixed-window instruction injection.
+- Debug: EmbeddedICE-RT and JTAG still contain deferred behavior, including missing
+  monitor mode, system-speed scan execution, chain-1 entry-cause capture, and DBGEN
+  transport gating.
 - Verification: several benches print `FAIL` then exit zero; there is no exhaustive,
   differential, coverage, formal, synthesis, or hardware closure. The 2026-07-28
   `make unit integ run` audit returned 0 even though smoke printed two failures.

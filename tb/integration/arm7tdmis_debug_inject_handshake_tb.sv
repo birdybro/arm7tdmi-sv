@@ -11,6 +11,7 @@
 module arm7tdmis_debug_inject_handshake_tb
     import arm7tdmis_bus_pkg::*;
     import arm7tdmis_debug_pkg::*;
+    import arm7tdmis_jtag_tb_pkg::*;
 ;
 
     localparam int CYCLE_LIMIT = 1800;
@@ -133,7 +134,7 @@ module arm7tdmis_debug_inject_handshake_tb
     endtask
 
     task automatic inject_debug_speed(input logic [31:0] instruction);
-        shift_dr(33, {5'h0, 1'b0, instruction});
+        shift_dr(33, chain1_serial_in(instruction, 1'b0));
     endtask
 
     int unsigned errors = 0;

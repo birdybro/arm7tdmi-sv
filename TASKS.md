@@ -2183,6 +2183,13 @@ Anchor each cycle test to an explicit TRM table:
 8. **`DBGnTDOEN` polarity** (Appendix A): LOW = TDO actively driven; HIGH = HiZ. Gated by `DBGEN`.
 9. **3-stage TCK synchronizer** to `CLK` for off-chip Multi-ICE-style debug (TRM Fig. 5-4); off-chip device must wait on `RTCK` before the next TCK edge. TMS/TDI on-chip latches gated by `DBGTCKEN`. All synchronizer flops reset by `DBGnTRST`.
 10. **Scan-path-select register**: 4 bits; CAPTURE-DR loads `4'b1000`; UPDATE-DR latches selection. Default chain 0 on TAP reset.
+11. **INTEST wire order is chain-specific** (TRM §5.11.1/§5.14.5):
+   - Chain 1 physically runs TDI → `DATA[0]` … `DATA[31]` → `DBGBREAK` → TDO.
+     `DBGBREAK` is therefore the first captured bit shifted out; a complete host
+     load sends `DBGBREAK` followed by `DATA[31:0]` most-significant bit first.
+   - Chain 2 physically runs TDI → R/W → `ADDR[4:0]` (4 to 0) →
+     `DATA[0:31]` → TDO. Do not serialize either INTEST chain as a generic packed
+     LSB-first vector; only IR, IDCODE, and SCAN_N have that stated ordering.
 
 ## 30.24 ETM-facing interface (amends §24)
 
@@ -2566,15 +2573,16 @@ number of cycles spent in an internal FSM state.
 - [ ] **DBG-007:** Implement debug entry/exit PC formulas, temporary DBGACK behavior,
   pending interrupt preservation, interrupt masking during at-speed execution, and
   the DBGRQ/PC-modify errata policy.
-- [ ] **JTAG-001:** Exhaustively verify all 16 TAP states and transitions, async
+- [x] **JTAG-001:** Exhaustively verify all 16 TAP states and transitions, async
   `DBGnTRST`, Capture/Shift/Update-IR, fixed `0001` capture, all five public
-  instructions, and BYPASS for every other IR encoding.
+  instructions, and BYPASS for every other IR encoding. Fail-hard evidence:
+  `tb/unit/jtag_tap_tb.sv`.
 - [ ] **JTAG-002:** Verify IDCODE bit fields and configurability. Do not call
   `0x7F1F0F0F` universally correct without documenting manufacturer/part/revision
   policy for the synthesized product.
 - [ ] **JTAG-003:** Implement and verify SCAN_N selection, chain 0, 33-bit chain 1,
-  38-bit chain 2, reserved chains, LSB-first order, update atomicity, and chain-1 bit
-  33's entry-cause/debug-speed/system-speed meanings.
+  38-bit chain 2, reserved chains, the TRM-defined physical cell order, update
+  atomicity, and chain-1 bit 33's entry-cause/debug-speed/system-speed meanings.
 - [ ] **JTAG-004:** Gate TMS/TDI/TCKEN/TDO/TDOEN as specified by DBGEN. Implement the
   required TCK synchronization/RTCK convention or publish a proven synchronous-only
   FPGA debug-port wrapper with a different, explicit interface name.
