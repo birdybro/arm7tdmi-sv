@@ -5,10 +5,14 @@ from __future__ import annotations
 
 import json
 import pathlib
+import sys
 import unittest
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+import traceability_report  # noqa: E402
 
 
 def _read(relative: str) -> str:
@@ -145,6 +149,14 @@ class PublicSuiteContractTest(unittest.TestCase):
         self.assertIn("Public ARMv4T suite", verification)
         self.assertIn("jsmolka/gba-suite", provenance)
         self.assertNotIn("Third-party ARMv4T suites", limitations)
+
+    def test_traceability_uses_the_dedicated_regression_phase(self) -> None:
+        self.assertEqual(
+            traceability_report._phase_names_from_paths(
+                ["tb/integration/arm7tdmis_public_suite_tb.sv"]
+            ),
+            ["public-suite"],
+        )
 
 
 if __name__ == "__main__":
