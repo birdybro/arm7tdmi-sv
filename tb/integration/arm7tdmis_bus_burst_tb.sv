@@ -1,7 +1,8 @@
 // BUS-005/BUS-011 regression: validate every S-cycle in a mixed ARM/Thumb
 // workload against the immediately preceding address-class phase. An S-cycle
 // is legal only as an incrementing continuation of an active word/halfword
-// burst or as the committing half of a merged I-S cycle at the same address.
+// burst, as the committing half of a merged I-S cycle at the same address,
+// or as Table 7-16's explicit exception-vector S discontinuity.
 
 module arm7tdmis_bus_burst_tb
     import arm7tdmis_bus_pkg::*;
@@ -40,6 +41,8 @@ module arm7tdmis_bus_burst_tb
     logic seen_data_to_code_n;
     logic seen_thumb_s;
     logic seen_illegal_s;
+    logic prev_exception_entry;
+    logic [31:0] prev_exception_vector;
 
     wire active_now = u_fixture.TRANS inside {TRANS_N, TRANS_S};
     wire active_prev = prev_trans inside {TRANS_N, TRANS_S};
@@ -60,6 +63,12 @@ module arm7tdmis_bus_burst_tb
                   && controls_match
                   && (u_fixture.SIZE inside {SIZE_HALFWORD, SIZE_WORD})
                   && (u_fixture.ADDR == prev_addr);
+    wire exception_vector_s = prev_exception_entry
+                           && (u_fixture.ADDR == prev_exception_vector)
+                           && (u_fixture.WRITE == WRITE_READ)
+                           && (u_fixture.SIZE == SIZE_WORD)
+                           && (u_fixture.PROT == PROT_OPC_PRIV)
+                           && (u_fixture.LOCK == LOCK_FREE);
 
     always_ff @(posedge CLK or negedge nRESET) begin
         if (!nRESET) begin
@@ -77,10 +86,13 @@ module arm7tdmis_bus_burst_tb
             seen_data_to_code_n <= 1'b0;
             seen_thumb_s       <= 1'b0;
             seen_illegal_s     <= 1'b0;
+            prev_exception_entry <= 1'b0;
+            prev_exception_vector <= 32'h0;
         end else if (!u_fixture.u_dut.core_nreset) begin
             // Do not let reset I-cycles qualify the first post-reset access
             // as a merged I-S cycle.
-            prev_valid <= 1'b0;
+            prev_valid           <= 1'b0;
+            prev_exception_entry <= 1'b0;
         end else begin
             if (active_now) begin
                 if (!seen_first) begin
@@ -93,7 +105,8 @@ module arm7tdmis_bus_burst_tb
                         seen_active_s <= 1'b1;
                     if (merged_is)
                         seen_merged_is <= 1'b1;
-                    if (!(active_continuation || merged_is)) begin
+                    if (!(active_continuation || merged_is
+                          || exception_vector_s)) begin
                         seen_illegal_s <= 1'b1;
                         $display("[bus_burst] illegal S: prev T/A/W/S/P/L=%b/%08x/%b/%b/%b/%b current=%b/%08x/%b/%b/%b/%b",
                                  prev_trans, prev_addr, prev_write, prev_size,
@@ -122,6 +135,11 @@ module arm7tdmis_bus_burst_tb
             prev_prot  <= u_fixture.PROT;
             prev_lock  <= u_fixture.LOCK;
             prev_trans <= u_fixture.TRANS;
+            prev_exception_entry <=
+                u_fixture.u_dut.u_core.any_exc_fires;
+            if (u_fixture.u_dut.u_core.any_exc_fires)
+                prev_exception_vector <=
+                    u_fixture.u_dut.u_core.exc_pc_target_addr;
         end
     end
 
