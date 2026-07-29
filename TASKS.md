@@ -2631,7 +2631,7 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
 - [x] **ISA-015:** Test instruction sequences, not only isolated opcodes: forwarding/
   dependency pairs, self-modifying stores under the documented memory contract,
   back-to-back PC changes, back-to-back MRC, and mode/bank transitions.
-  `arm7tdmis_sequence_dependencies_tb` executes 15 reset-per-case programs covering
+  `arm7tdmis_sequence_dependencies_tb` executes 16 reset-per-case programs covering
   adjacent DP Rn/Rm/Rs and flag consumers; LDR, post-index, MUL, UMULL, LDM, and
   store-data consumers; immediate System/FIQ/Supervisor bank transitions; an
   already-prefetched opcode patched by STR and then explicitly refetched; three

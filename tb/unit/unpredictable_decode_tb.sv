@@ -76,7 +76,7 @@ module unpredictable_decode_tb
         input logic [3:0] rs,
         input logic [3:0] rm
     );
-        return {4'hE, 5'b00001, unsigned_form, accumulate, 1'b0,
+        return {4'hE, 5'b00001, ~unsigned_form, accumulate, 1'b0,
                 rd_hi, rd_lo, rs, 4'b1001, rm};
     endfunction
 

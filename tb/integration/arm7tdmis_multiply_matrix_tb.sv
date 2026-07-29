@@ -97,7 +97,7 @@ module arm7tdmis_multiply_matrix_tb
         input logic [3:0] rs,
         input logic [3:0] rm
     );
-        return {4'hE, 5'b00001, unsigned_form, accumulate, set_flags,
+        return {4'hE, 5'b00001, ~unsigned_form, accumulate, set_flags,
                 rd_hi, rd_lo, rs, 4'b1001, rm};
     endfunction
 

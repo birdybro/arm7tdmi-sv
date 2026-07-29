@@ -10,10 +10,10 @@ How MUL/MLA/UMULL/SMULL/UMLAL/SMLAL are sequenced through the E-stage substate F
 |---|---|---|---|---|
 | MUL  | INSTR_MUL  | — | 0 | Rd |
 | MLA  | INSTR_MUL  | — | 1 | Rd, accumulate from Rn |
-| UMULL | INSTR_MULL | 1 | 0 | RdLo, RdHi |
-| UMLAL | INSTR_MULL | 1 | 1 | RdLo, RdHi (with accumulate) |
-| SMULL | INSTR_MULL | 0 | 0 | RdLo, RdHi |
-| SMLAL | INSTR_MULL | 0 | 1 | RdLo, RdHi (with accumulate) |
+| UMULL | INSTR_MULL | 0 | 0 | RdLo, RdHi |
+| UMLAL | INSTR_MULL | 0 | 1 | RdLo, RdHi (with accumulate) |
+| SMULL | INSTR_MULL | 1 | 0 | RdLo, RdHi |
+| SMLAL | INSTR_MULL | 1 | 1 | RdLo, RdHi (with accumulate) |
 
 Encoding bit positions (bits[19:16]=RdHi/Rd, bits[15:12]=RdLo/Rn, bits[11:8]=Rs, bits[3:0]=Rm) follow `decoded_t`:
 

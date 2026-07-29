@@ -400,7 +400,10 @@ module arm7tdmis_sequence_dependencies_tb
             16: begin
                 if (u_dut.u_core.u_regfile.regs[2] !== 32'h0000_0001
                  || u_dut.u_core.u_regfile.regs[3] !== 32'hFFFF_FFFE)
-                    fail(case_id, "second UMULL reused stale operands/result");
+                    fail(case_id, $sformatf(
+                        "second UMULL reused stale operands/result: r2=%08x r3=%08x",
+                        u_dut.u_core.u_regfile.regs[2],
+                        u_dut.u_core.u_regfile.regs[3]));
             end
             default: ;
         endcase

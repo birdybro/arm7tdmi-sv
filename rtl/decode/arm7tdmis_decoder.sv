@@ -309,7 +309,7 @@ module arm7tdmis_decoder
 
         // Multiply
         dec.mul_accumulate = instr[21];
-        dec.mul_signed     = (c == INSTR_MULL) ? ~instr[22] : 1'b0;  // U=0 → signed
+        dec.mul_signed     = (c == INSTR_MULL) ? instr[22] : 1'b0;
 
         // Branch
         dec.branch_link    = instr[24];

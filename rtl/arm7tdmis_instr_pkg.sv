@@ -90,7 +90,7 @@ package arm7tdmis_instr_pkg;
 
         // Multiply
         logic         mul_accumulate; // A bit (MLA / UMLAL / SMLAL)
-        logic         mul_signed;     // U bit cleared (signed for SMULL/SMLAL)
+        logic         mul_signed;     // U bit set (signed for SMULL/SMLAL)
 
         // Branch
         logic         branch_link;

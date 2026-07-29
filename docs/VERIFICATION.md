@@ -518,7 +518,7 @@ The focused `arm7tdmis_ldm_pc_tb` and
 
 ## Instruction-sequence evidence
 
-`arm7tdmis_sequence_dependencies_tb` runs 15 reset-per-case programs rather
+`arm7tdmis_sequence_dependencies_tb` runs 16 reset-per-case programs rather
 than isolated instructions. It places consumers immediately after producers
 for DP Rn, shifted Rm, register-controlled Rs, flags, LDR data, post-index
 bases, MUL, both UMULL halves, LDM data/writeback, and store data. A separate

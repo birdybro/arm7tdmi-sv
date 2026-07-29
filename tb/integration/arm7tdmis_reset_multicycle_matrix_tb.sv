@@ -146,9 +146,9 @@ module arm7tdmis_reset_multicycle_matrix_tb
             10:        return 32'hE590_3000; // LDR r3,[r0]
             2, 8:      return 32'hE8B0_000E; // LDMIA r0!,{r1-r3}
             3, 4, 11:  return 32'hE100_3091; // SWP r3,r1,[r0]
-            5:         return 32'hE0C4_3291; // UMULL r3,r4,r1,r2
+            5:         return 32'hE084_3291; // UMULL r3,r4,r1,r2
             6:         return 32'hE003_0291; // MUL r3,r1,r2
-            7:         return 32'hE0E4_3291; // UMLAL r3,r4,r1,r2
+            7:         return 32'hE0A4_3291; // UMLAL r3,r4,r1,r2
             9:         return 32'hE1A0_3211; // MOV r3,r1,LSL r2
             12:        return 32'hEE00_0400; // CDP p4,0,c0,c0,c0,0
             13:        return 32'hEE01_0412; // MCR p4,0,r0,c1,c2,0
