@@ -113,6 +113,7 @@ module arm7tdmis_mister_wrapper_tb;
     integer current_wait;
     logic   saw_code;
     logic   saw_data;
+    logic   saw_merged_load_fetch;
     logic   saw_nonsequential;
     logic   saw_sequential;
     logic   saw_word_write;
@@ -159,6 +160,7 @@ module arm7tdmis_mister_wrapper_tb;
             request_held_q       <= 1'b0;
             saw_code             <= 1'b0;
             saw_data             <= 1'b0;
+            saw_merged_load_fetch <= 1'b0;
             saw_nonsequential    <= 1'b0;
             saw_sequential       <= 1'b0;
             saw_word_write       <= 1'b0;
@@ -175,10 +177,24 @@ module arm7tdmis_mister_wrapper_tb;
                 check(!(MEM_WRITE && MEM_CODE),
                       "instruction fetch was marked as a write");
 
-                if (MEM_ADDR < 32'h0000_0080)
-                    check(MEM_CODE, "program fetch was not marked as code");
-                else
-                    check(!MEM_CODE, "data transfer was marked as code");
+                // Table 7-11 merges an LDR's internal writeback cycle
+                // with the pc+12 prefetch. The resulting active S request
+                // deliberately retains data-class PROT even though its
+                // address lies in the program image.
+                if (MEM_ADDR < 32'h0000_0080 && !MEM_CODE) begin
+                    check(MEM_ADDR == 32'h0000_0028
+                          && !MEM_WRITE && MEM_SEQUENTIAL,
+                          $sformatf(
+                              "unexpected data-class program request at %08x",
+                              MEM_ADDR));
+                    if (MEM_ADDR == 32'h0000_0028
+                        && !MEM_WRITE && MEM_SEQUENTIAL)
+                        saw_merged_load_fetch <= 1'b1;
+                end else if (MEM_ADDR >= 32'h0000_0080) begin
+                    check(!MEM_CODE,
+                          $sformatf("data transfer %08x was marked as code",
+                                    MEM_ADDR));
+                end
 
                 saw_code          <= saw_code || MEM_CODE;
                 saw_data          <= saw_data || !MEM_CODE;
@@ -309,6 +325,8 @@ module arm7tdmis_mister_wrapper_tb;
         check(longest_wait >= 1, "random memory never inserted a wait");
         check(saw_code && saw_data,
               "code/data metadata did not cover both access classes");
+        check(saw_merged_load_fetch,
+              "LDR writeback did not expose its merged data-class prefetch");
         check(saw_nonsequential && saw_sequential,
               "N/S hints did not cover both request classes");
         check(saw_word_write && saw_byte_write && saw_halfword_write,
