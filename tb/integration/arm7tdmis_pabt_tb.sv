@@ -1,21 +1,18 @@
-// IRQ integration test: validates the §9d 2-cycle commit path
-// end-to-end inside the pipelined core. Program at tb/programs/pabt_test.hex:
+// Prefetch-abort integration test. Program at tb/programs/pabt_test.hex:
 //
 //   0x00: B 0x20
+//   0x0C: B 0x40                 ; PABT vector
 //   ...
-//   0x20: MOV r0, #0x10000000   ; 2^28
-//   0x24: MOV r1, #0x10         ; 16
-//   0x28: IRQ-test r2, r3, r0, r1  ; r2:r3 = r0 * r1 = 2^32
-//   0x2C: MOV r15, #0x2C        ; self-loop
+//   0x20: MOV r0, #1
+//   0x24: B 0x100                ; fetch receives ABORT
+//   ...
+//   0x40: MOV r7, #0xAB          ; handler marker
+//   0x44: B 0x44                 ; self-loop
 //
-// Expected:
-//   r0 = 0x10000000
-//   r1 = 0x00000010
-//   r2 = 0x00000000  (low half of 2^32)
-//   r3 = 0x00000001  (high half of 2^32)
-//
-// The high half being non-zero specifically exercises the S_MULL_HI
-// substate cycle and the latched RdHi/result_hi writeback.
+// The injection predicate uses the memory model's latched response phase,
+// not the core's current address phase. This is both the externally visible
+// ABORT timing and necessary to keep exception redirection from feeding back
+// into its own input combinationally.
 
 `timescale 1ns/1ps
 
@@ -176,12 +173,13 @@ module arm7tdmis_pabt_tb
         end
     endtask
 
-    // Inject ABORT whenever the bus is reading from address ≥ 0x100 —
-    // i.e., outside the loaded program region. Causes the memory to
-    // assert ABORT on any access targeting that range. Sequential
-    // fetches in 0x00-0xFC are unaffected.
+    // Inject ABORT on opcode read responses at or above 0x100. Sequential
+    // fetches in 0x00-0xFC and all data responses are unaffected.
     always_comb begin
-        mem_inject_abort = (ADDR >= 32'h100);
+        mem_inject_abort = u_mem.is_active_q
+                         && !u_mem.write_q
+                         && (u_mem.prot_q[PROT_BIT_DATA] == 1'b0)
+                         && (u_mem.addr_q >= 32'h100);
     end
 
     initial begin
