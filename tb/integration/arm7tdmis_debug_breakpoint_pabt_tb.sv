@@ -82,7 +82,7 @@ module arm7tdmis_debug_breakpoint_pabt_tb
 
     assign inject_abort = u_mem.is_active_q
                         && !u_mem.write_q
-                        && !u_mem.PROT[0]
+                        && !u_mem.prot_q[PROT_BIT_DATA]
                         && (u_mem.addr_q == FAULT_ADDR);
 
     logic [37:0] ignored_scan;

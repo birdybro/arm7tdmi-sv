@@ -60,6 +60,7 @@ module arm7tdmis_memory
     logic [31:0]      addr_q;
     logic             write_q;
     logic [1:0]       size_q;
+    logic [1:0]       prot_q;
     logic [1:0]       trans_q;
 
     wire is_active_q = (trans_q == 2'(TRANS_N)) || (trans_q == 2'(TRANS_S));
@@ -73,11 +74,13 @@ module arm7tdmis_memory
             addr_q  <= 32'h0;
             write_q <= 1'b0;
             size_q  <= 2'(SIZE_WORD);
+            prot_q  <= 2'(PROT_OPC_PRIV);
             trans_q <= 2'(TRANS_I);
         end else if (CLKEN) begin
             addr_q  <= ADDR;
             write_q <= WRITE;
             size_q  <= SIZE;
+            prot_q  <= PROT;
             trans_q <= TRANS;
         end
     end
@@ -149,13 +152,14 @@ module arm7tdmis_memory
         end
     end
 
-    // This zero-wait behavioral memory intentionally does not interpret
-    // PROT/LOCK; dedicated raw-bus, protection, SWP, and DMA checkers verify
-    // their architectural semantics.
+    // This zero-wait behavioral memory retains PROT with the response phase
+    // so abort-injection tests can distinguish opcode and data responses. It
+    // does not otherwise interpret PROT/LOCK; dedicated raw-bus, protection,
+    // SWP, and DMA checkers verify their architectural semantics.
     // addr_q upper bits beyond INDEX_BITS+1 are not consulted by an N-word
     // memory; the index slice already discards them.
     /* verilator lint_off UNUSEDSIGNAL */
-    wire _unused = &{1'b0, PROT, LOCK, addr_q[31:INDEX_BITS+2]};
+    wire _unused = &{1'b0, prot_q, LOCK, addr_q[31:INDEX_BITS+2]};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule
