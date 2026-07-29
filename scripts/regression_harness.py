@@ -118,7 +118,12 @@ def collect_metadata(
                 "testbench",
             ],
             "harness": ["unit", "expected-failure"],
-            "fpga": ["quartus-analysis"],
+            "fpga": [
+                "quartus-analysis",
+                "quartus-conformance-analysis",
+                "quartus-compile",
+                "quartus-conformance-compile",
+            ],
             "unit": list(unit_tests),
             "integration": list(integration_tests),
             "smoke": ["arm7tdmis_tb_top"],
@@ -216,6 +221,14 @@ def _phases(
     yield _make_phase("lint-mister-wrapper", "lint-mister")
     yield _make_phase("lint-fpga-package-example", "lint-example")
     yield _make_phase("quartus-analysis", "quartus-analysis")
+    yield _make_phase(
+        "quartus-conformance-analysis", "quartus-conformance-analysis"
+    )
+    if not quick:
+        yield _make_phase("quartus-compile", "quartus-compile")
+        yield _make_phase(
+            "quartus-conformance-compile", "quartus-conformance-compile"
+        )
     yield _make_phase("lint-testbench", "lint-tb")
     yield _make_phase("harness-unit", "harness-unit")
     yield _make_phase("harness-expected-failure", "harness-self-test")

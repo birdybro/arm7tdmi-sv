@@ -2884,7 +2884,9 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   `make -C scripts quartus-analysis` reads the QSF/QIP and successfully
   analyzes/elaborates it with Quartus 17.0.2 for `5CSEBA6U23I7`. All three
   checks are release-regression phases. The trimmed example also has the
-  fail-hard fit/timing characterization recorded under FPGA-003; a real
+  fail-hard fit/timing characterization recorded under FPGA-003.
+  `fpga/arm7tdmis_conformance.{qsf,sdc}` separately preserves and fits every
+  raw debug, JTAG, coprocessor, trace, endian, and bus boundary. A real
   framework build remains MIST-007.
 - [ ] **MIST-006:** Add a versioned architectural state export/import handshake for
   MiSTer save states. Include all visible registers, banked registers, CPSR/SPSRs,
@@ -2968,17 +2970,21 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   two-flop asynchronous event inputs, and reports zero unconstrained setup/hold
   endpoints. This does not close the task: the selected real MiSTer framework's
   PLL clocks, generated clocks, and complete top-level I/O still need constraints.
-- [ ] **FPGA-003:** Run clean Quartus analysis/synthesis, fit, TimeQuest at all required
+- [x] **FPGA-003:** Run clean Quartus analysis/synthesis, fit, TimeQuest at all required
   corners, and assembly for both conformance and trimmed MiSTer profiles. Treat critical
   warnings as failures.
-  `make -C scripts quartus-compile` now closes the trimmed
-  `arm7tdmi_mister_example_top` profile in Quartus Lite 17.0.2: synthesis, fit,
-  assembly, and four-corner TimeQuest complete; all setup/hold/pulse-width slacks
-  are nonnegative; the design is fully constrained; and a nonempty SOF is emitted.
+  `make -C scripts quartus-compile` closes the trimmed
+  `arm7tdmi_mister_example_top` profile, and
+  `make -C scripts quartus-conformance-compile` closes the raw,
+  feature-complete `arm7tdmis_top` profile in Quartus Lite 17.0.2. In both
+  profiles synthesis, fit, assembly, and four-corner TimeQuest complete; all
+  setup/hold/pulse-width slacks are nonnegative; the design is fully
+  constrained; and a nonempty SOF is emitted.
   `scripts/quartus_report_check.py` rejects missing stages/images, critical
   warnings, ignored constraints, unconstrained endpoints, negative slack, wrong
-  top/device, and resource-budget overruns. The conformance and real MiSTer
-  framework profiles remain open, so FPGA-003 is not yet complete.
+  top/device, and profile-specific resource-budget overruns. Both full flows
+  are mandatory phases of `make -C scripts regress`; quick regression runs
+  analysis/elaboration for both.
 - [ ] **FPGA-004:** Run an independent synthesizer/linter where supported and CDC/RDC
   analysis. Resolve combinational loops, inferred latches, multiple drivers,
   simulation/synthesis mismatches, unsafe synchronizers, and reset-domain crossings.
@@ -2986,6 +2992,8 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   register, MLAB/M10K, DSP, clock, power estimate, and Fmax data with budget headroom.
   The trimmed profile currently fits in 3,311 ALMs, 2,611 registers, six DSP
   blocks, and zero memory bits against enforced limits of 5,000/4,096/8/0.
+  The full raw profile fits in 4,750 ALMs, 3,766 registers, six DSP blocks,
+  and zero memory bits against enforced limits of 7,500/6,000/8/0.
   Optional-feature deltas, explicit clock-enable inference, power, and maximum
   frequency characterization remain open.
 - [ ] **FPGA-006:** Prove synthesis equivalence or run post-synthesis simulation for

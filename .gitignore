@@ -19,6 +19,8 @@ __pycache__/
 /fpga/db/
 /fpga/incremental_db/
 /fpga/output_files/
+/fpga/conformance_output_files/
+/fpga/arm7tdmis_conformance.qpf
 
 # Editor / OS
 .vscode/

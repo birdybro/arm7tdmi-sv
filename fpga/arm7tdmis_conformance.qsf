@@ -1,0 +1,159 @@
+# Feature-complete raw-core characterization. This intentionally selects
+# arm7tdmis_top so debug, JTAG, coprocessor, trace, endian, and raw bus ports
+# remain observable and cannot be optimized away.
+
+set_global_assignment -name FAMILY "Cyclone V"
+set_global_assignment -name DEVICE 5CSEBA6U23I7
+set_global_assignment -name TOP_LEVEL_ENTITY arm7tdmis_top
+
+set_global_assignment -name QIP_FILE arm7tdmi_mister.qip
+set_global_assignment -name SDC_FILE arm7tdmis_conformance.sdc
+
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY conformance_output_files
+set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
+set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
+
+# CLK uses a representative Cyclone V global-clock pin so the fit includes a
+# real clock tree. Every functional interface pin is virtual; this is a module
+# characterization, not a programmable board pinout.
+set_location_assignment PIN_V11 -to CLK
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to CLK
+set_instance_assignment -name VIRTUAL_PIN ON -to CLKEN
+set_instance_assignment -name VIRTUAL_PIN ON -to nRESET
+set_instance_assignment -name VIRTUAL_PIN ON -to CFGBIGEND
+set_instance_assignment -name VIRTUAL_PIN ON -to nIRQ
+set_instance_assignment -name VIRTUAL_PIN ON -to nFIQ
+set_instance_assignment -name VIRTUAL_PIN ON -to ABORT
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[0]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[1]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[2]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[3]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[4]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[5]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[6]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[7]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[8]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[9]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[10]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[11]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[12]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[13]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[14]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[15]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[16]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[17]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[18]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[19]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[20]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[21]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[22]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[23]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[24]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[25]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[26]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[27]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[28]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[29]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[30]
+set_instance_assignment -name VIRTUAL_PIN ON -to RDATA[31]
+set_instance_assignment -name VIRTUAL_PIN ON -to CPA
+set_instance_assignment -name VIRTUAL_PIN ON -to CPB
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGEN
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGRQ
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGBREAK
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGEXT[0]
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGEXT[1]
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGTCKEN
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGTMS
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGTDI
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGnTRST
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[0]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[1]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[2]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[3]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[4]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[5]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[6]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[7]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[8]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[9]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[10]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[11]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[12]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[13]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[14]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[15]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[16]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[17]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[18]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[19]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[20]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[21]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[22]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[23]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[24]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[25]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[26]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[27]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[28]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[29]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[30]
+set_instance_assignment -name VIRTUAL_PIN ON -to ADDR[31]
+set_instance_assignment -name VIRTUAL_PIN ON -to WRITE
+set_instance_assignment -name VIRTUAL_PIN ON -to SIZE[0]
+set_instance_assignment -name VIRTUAL_PIN ON -to SIZE[1]
+set_instance_assignment -name VIRTUAL_PIN ON -to PROT[0]
+set_instance_assignment -name VIRTUAL_PIN ON -to PROT[1]
+set_instance_assignment -name VIRTUAL_PIN ON -to LOCK
+set_instance_assignment -name VIRTUAL_PIN ON -to TRANS[0]
+set_instance_assignment -name VIRTUAL_PIN ON -to TRANS[1]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[0]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[1]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[2]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[3]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[4]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[5]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[6]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[7]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[8]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[9]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[10]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[11]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[12]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[13]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[14]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[15]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[16]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[17]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[18]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[19]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[20]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[21]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[22]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[23]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[24]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[25]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[26]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[27]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[28]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[29]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[30]
+set_instance_assignment -name VIRTUAL_PIN ON -to WDATA[31]
+set_instance_assignment -name VIRTUAL_PIN ON -to CPnMREQ
+set_instance_assignment -name VIRTUAL_PIN ON -to CPSEQ
+set_instance_assignment -name VIRTUAL_PIN ON -to CPnTRANS
+set_instance_assignment -name VIRTUAL_PIN ON -to CPnOPC
+set_instance_assignment -name VIRTUAL_PIN ON -to CPTBIT
+set_instance_assignment -name VIRTUAL_PIN ON -to CPnI
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGACK
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGnEXEC
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGINSTRVALID
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGRNG[0]
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGRNG[1]
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGCOMMTX
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGCOMMRX
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGTDO
+set_instance_assignment -name VIRTUAL_PIN ON -to DBGnTDOEN
+set_instance_assignment -name VIRTUAL_PIN ON -to DMORE
+
+set_global_assignment -name LAST_QUARTUS_VERSION "17.0.2 Lite Edition"

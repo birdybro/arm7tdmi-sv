@@ -162,7 +162,7 @@ features; the complete backlog is `TASKS.md` §31.
 
 | Gap | Why | Re-enable when |
 |---|---|---|
-| **Quartus place-and-route** | The trimmed portable profile passes Quartus 17.0.2 synthesis, fit, four-corner TimeQuest, assembly, strict report checks, and resource budgets at a characterized 25 MHz. Conformance-profile, real-framework, CDC/RDC, post-synthesis, and hardware evidence remain open. | `§31.11` FPGA closure. |
+| **Quartus place-and-route** | Both the trimmed wrapper and full raw conformance profiles pass Quartus 17.0.2 synthesis, fit, four-corner TimeQuest, assembly, strict report checks, and resource budgets at a characterized 25 MHz. Real-framework, CDC/RDC, post-synthesis, and hardware evidence remain open. | `§31.11` FPGA closure. |
 | Correct exception, abort, endian, and bus timing | Release-blocking functional work. | Implement and verify §31.3–§31.5. |
 | MiSTer/PocketStation integration | The canonical wrapper and portable FPGA source package exist, but save states, framework/hardware builds, and a reference boot do not. | Complete §31.9. |
 | Formal/differential/coverage closure | Required sign-off evidence is absent. | Implement and verify §31.10. |

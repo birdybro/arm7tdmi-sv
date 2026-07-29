@@ -45,7 +45,9 @@ INTEG_COMMON_SRCS := \
 	../tb/integration/arm7tdmis_assertions.sv \
 	../tb/integration/arm7tdmis_test_fixture.sv
 
-.PHONY: all lint lint-mister lint-example lint-tb quartus-analysis quartus-compile \
+.PHONY: all lint lint-mister lint-example lint-tb \
+        quartus-analysis quartus-compile \
+        quartus-conformance-analysis quartus-conformance-compile \
         sim run wave clean help regress regress-quick \
         harness-unit harness-self-test \
         $(addprefix unit-, $(UNIT_TESTS)) unit \
@@ -76,6 +78,22 @@ quartus-analysis:
 quartus-compile:
 	cd ../fpga && $(QUARTUS_SH) --flow compile arm7tdmi_mister
 	PYTHONPATH=. $(PYTHON) quartus_report_check.py ../fpga/output_files
+
+quartus-conformance-analysis:
+	cd ../fpga && $(QUARTUS_MAP) --analysis_and_elaboration \
+	    --read_settings_files=on --write_settings_files=off \
+	    arm7tdmis_conformance -c arm7tdmis_conformance
+
+quartus-conformance-compile:
+	cd ../fpga && $(QUARTUS_SH) --flow compile arm7tdmis_conformance
+	PYTHONPATH=. $(PYTHON) quartus_report_check.py \
+	    --project arm7tdmis_conformance \
+	    --top arm7tdmis_top \
+	    --max-alm 7500 \
+	    --max-register 6000 \
+	    --max-dsp 8 \
+	    --max-memory-bit 0 \
+	    ../fpga/conformance_output_files
 
 lint-tb:
 	$(VERILATOR) --lint-only $(VFLAGS_LINT) --top-module $(TOP_TB) -f $(SIM_F) -f $(TB_F)
@@ -167,6 +185,8 @@ help:
 	@echo "  lint-example Verilator --lint-only on the portable FPGA example"
 	@echo "  quartus-analysis Quartus analysis/elaboration of the FPGA package"
 	@echo "  quartus-compile Full Quartus synth/fit/timing/assembly flow"
+	@echo "  quartus-conformance-analysis Quartus analysis of the raw/full profile"
+	@echo "  quartus-conformance-compile Full Quartus flow for the raw/full profile"
 	@echo "  lint-tb      Verilator --lint-only including the integration TB"
 	@echo "  sim          build the integration testbench binary"
 	@echo "  run          build and run; emits cycle.csv + waves.fst"

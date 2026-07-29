@@ -131,12 +131,20 @@ source set using Quartus's QIP-relative path anchor. A MiSTer project can add
 that one QIP and instantiate `arm7tdmi_mister`; it does not need private
 include paths or generated source edits.
 
-`fpga/arm7tdmi_mister.qsf` is a standalone Cyclone V/DE10-Nano elaboration
-example, not a complete MiSTer framework project. It selects
+`fpga/arm7tdmi_mister.qsf` is a standalone Cyclone V part-characterization
+example, not a complete MiSTer framework or board project. It selects
 `5CSEBA6U23I7`, imports the QIP, the example SDC, and
 `fpga/example/arm7tdmi_mister_example_top.sv`. The example top exposes only
 the canonical memory and event boundary and trims debug/coprocessor features.
 It contains no hierarchy-dependent integration.
+
+`fpga/arm7tdmis_conformance.qsf` and
+`fpga/arm7tdmis_conformance.sdc` form a second characterization project whose
+top is the raw `arm7tdmis_top`. Every optional debug, JTAG, coprocessor, trace,
+endian, and bus signal remains a virtual boundary pin, so synthesis cannot
+prove an option constant and trim it. This profile is for feature-complete
+synthesis evidence; integrators should continue to consume the canonical
+wrapper unless they intentionally need the raw pin-level contract.
 
 From the repository root, run:
 
@@ -145,6 +153,8 @@ make -C scripts harness-unit
 make -C scripts lint-example
 make -C scripts quartus-analysis
 make -C scripts quartus-compile
+make -C scripts quartus-conformance-analysis
+make -C scripts quartus-conformance-compile
 ```
 
 The first command proves that the plain file list and QIP contain exactly the
@@ -158,10 +168,16 @@ negative slack, a missing image, or a resource-budget overrun. For the
 trimmed profile characterized on Quartus Lite 17.0.2, the checked result is
 3,311 ALMs, 2,611 registers, six DSPs, no memory bits, +7.638 ns worst setup
 slack, and +0.165 ns worst hold slack.
+The fifth and sixth commands perform the corresponding analysis-only and full
+checked flows for the raw, feature-complete conformance profile.
 The supplied SDC assumes a timing-verified 25 MHz standalone `CLK` and a
 0.25-to-5 ns synchronous input arrival window. A containing MiSTer project
 must replace boundary delays and the clock period with its selected framework
 constraints while retaining equivalent reset/CDC treatment.
+The raw conformance profile uses the same clock and input-window assumptions.
+Its checked Quartus Lite 17.0.2 result is 4,750 ALMs, 3,766 registers, six
+DSPs, no memory bits, +5.182 ns worst setup slack, and +0.151 ns worst hold
+slack.
 
 ## Evidence and current limits
 
