@@ -116,11 +116,13 @@ UNPREDICTABLE even though this implementation reuses the same datapath rules.
 
 ## Reset-visible state
 
-Reset initializes all 31 implementation GPR storage slots and all five
-physical SPSRs to zero. This includes the architecturally UNPREDICTABLE
-`r14_svc` and `SPSR_svc` reset values. CPSR uses its architecture-defined
-Supervisor/ARM/I/F reset value, and the first PC fetch remains separately
-defined by the reset-vector contract. Reset dominates CLKEN.
+Reset initializes all 31 flat regfile-array slots to zero: 30 architectural
+r0-r14 locations plus the deliberately inaccessible slot 15 retained by the
+implementation layout. It also initializes all five physical SPSRs to zero.
+This includes the architecturally UNPREDICTABLE `r14_svc` and `SPSR_svc`
+reset values. The shared architectural PC is core-owned and follows the
+reset-vector contract. CPSR uses its architecture-defined
+Supervisor/ARM/I/F reset value. Reset dominates CLKEN.
 
 `reset_state_policy_tb` checks every physical storage slot with CLKEN low.
 `arm7tdmis_invalid_spsr_return_policy_tb` proves that consuming the zero

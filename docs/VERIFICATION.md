@@ -105,6 +105,32 @@ the exact LR/SPSR/handler state, no data cycle, no successor retirement, and
 unchanged memory. The policy is implementation behavior, not an architectural
 promise about UNPREDICTABLE encodings.
 
+## Register-banking evidence
+
+ARM's count is 31 physical GPRs: 30 banked r0-r14 locations plus the one
+shared PC. The flat regfile array contains those 30 locations and one
+inaccessible layout hole at slot 15; PC is owned by the core.
+`regfile_banking_tb` performs 599 operations against an independent map. It
+checks every r0-r14 view in all seven modes, every physical slot after every
+normal/debug/force-User mutation, all three read ports, User/System aliases,
+FIQ r8-r14, all r13/r14 banks, and shared PC reads in ARM and Thumb state.
+
+`psr_banking_tb` independently performs 47 operations across all five physical
+SPSRs. It proves current-mode write/read/restore selection, every
+exception-target save index, all seven mode transitions, User/System
+read-as-zero/write-ignore behavior, CLKEN suppression, and reset priority.
+
+`arm7tdmis_register_banking_matrix_tb` carries the architectural User-bank
+path through public pins. Its ten reset-per-case rows execute STM^ and LDM^
+from FIQ, IRQ, Supervisor, Abort, and Undefined mode. Each row seeds both
+banks through instructions, checks seven address phases and seven pipelined
+data responses, and compares every flat register slot, all five SPSRs, CPSR,
+and memory. System is privileged but has no SPSR; ARMv4T requires S=0 there.
+The existing User/System S-form rows in `arm7tdmis_block_ls_policy_tb`
+therefore verify the selected precise-Undefined policy rather than a defined
+User-bank transfer. The normative map is in
+[REGISTER_BANKING.md](REGISTER_BANKING.md).
+
 ## ARM block-transfer evidence
 
 `arm7tdmis_block_ls_matrix_tb` executes 272 reset-per-case rows. Its 256

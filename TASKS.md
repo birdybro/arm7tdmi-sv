@@ -2643,10 +2643,21 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   preservation/rejection, r4p3 MCR-r15, every JTAG IR/chain selector, and every
   reserved EmbeddedICE-RT address, while explicitly excluding later ISA
   features and violations of external contracts.
-- [ ] **ISA-017:** Exhaustively verify the 31 physical GPRs and five physical SPSRs across
-  User/System/FIQ/IRQ/SVC/Abort/Undefined, including FIQ r8–r14 banking, User/System
-  sharing, `^` transfers from every privileged mode, mode changes, and inaccessible/
-  UNKNOWN SPSR cases.
+- [x] **ISA-017:** Exhaustively verify ARM's 31 physical GPRs (30 banked r0-r14
+  locations plus the shared PC) and five physical SPSRs across
+  User/System/FIQ/IRQ/SVC/Abort/Undefined. `regfile_banking_tb` performs 599
+  operations covering every logical r0-r14 view in all seven modes, every
+  physical flat-array slot after each normal/debug/force-User write, all three
+  read ports, User/System sharing, FIQ r8-r14, every r13/r14 bank, PC reads in
+  both states, CLKEN, and reset. `psr_banking_tb` performs 47 operations across
+  all five SPSR write/read/restore/exception-save routes, all mode transitions,
+  and User/System RAZ/WI inaccessible-bank policy. The ten-row pin-level
+  `arm7tdmis_register_banking_matrix_tb` executes both STM^ and LDM^ from every
+  SPSR-owning mode, checks all seven address and response phases, every physical
+  register slot, memory, mode, and SPSR preservation. The old phrase “every
+  privileged mode” was inaccurate: ARMv4T requires S=0 in System mode, so the
+  existing User/System S-form rows correctly take the documented precise
+  Undefined policy. `docs/REGISTER_BANKING.md` is the complete mapping.
 
 ## 31.4 P0 — exceptions, reset, and aborts
 

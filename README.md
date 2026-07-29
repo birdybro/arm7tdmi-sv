@@ -42,7 +42,7 @@ the evidence required to promote a path to VERIFIED are listed in `TASKS.md` §3
 | Halfword / signed L/S | LDRH/STRH/LDRSH/LDRSB Addressing Mode 3 is verified across every P/U/W and immediate/register row |
 | Block transfer | ARM LDM/STM addressing, list bits, banking, PC restore, base/list, and operand policies are directed-verified; pin-level cycle closure remains |
 | Swap | SWP/SWPB data, endian/alignment, alias policy, atomic LOCK, stalls, aborts, reset, and debug interaction are directed-verified |
-| PSR transfer | MRS/MSR register/immediate and field-mask paths exist; privilege/reserved-bit handling is incomplete |
+| PSR transfer | MRS/MSR register/immediate, field masks, privilege/reserved policy, absent SPSRs, and all five physical SPSR banks are directed-verified |
 | Software interrupt | An SWI entry path exists |
 | Coprocessor | Decode classes and pins exist; accepted-operation and busy/data protocols do not |
 
@@ -215,7 +215,8 @@ tb/
 
 docs/
   PIPELINE.md, DEBUG.md, MULTIPLY.md, EXCEPTIONS.md, PSR.md,
-  UNPREDICTABLE.md, VERIFICATION.md, INTEGRATION.md, README.md
+  REGISTER_BANKING.md, UNPREDICTABLE.md, VERIFICATION.md,
+  INTEGRATION.md, README.md
 
 scripts/      Makefile, sim.f / tb.f filelists, arm7tdmis.sdc
 fpga/         portable wrapper file list/QIP/QSF/SDC and public example top

@@ -81,6 +81,8 @@ instruction as one E cycle per TRM Table 7-6.
 ## Evidence
 
 - `tb/unit/psr_tb.sv` covers reset, field writes, SPSR banks, restore, and BX.
+- `tb/unit/psr_banking_tb.sv` exhausts all five physical SPSR
+  write/read/restore/exception-save routes and the absent User/System views.
 - `tb/unit/psr_policy_tb.sv` covers reserved-bit preservation with nonzero
   storage, invalid modes, User/System RAZ/WI, and privilege filtering.
 - `tb/integration/arm7tdmis_psr_policy_tb.sv` executes the policy in
@@ -94,3 +96,5 @@ instruction as one E cycle per TRM Table 7-6.
 
 The complete project policy inventory is
 [UNPREDICTABLE.md](UNPREDICTABLE.md).
+The complete GPR/SPSR physical map is
+[REGISTER_BANKING.md](REGISTER_BANKING.md).

@@ -1,4 +1,7 @@
-// 31-entry GPR bank with mode banking per TRM §2.7 / TASKS.md §3.
+// Flat banked-r0..r14 storage per TRM §2.7 / TASKS.md §3.
+// ARM's 31 physical GPR count is 30 banked r0-r14 locations plus the shared
+// PC. This array retains an inaccessible slot 15 for stable physical indices,
+// so its 31 entries must not be mistaken for 31 storage-backed GPRs.
 //
 // PC (r15) does NOT live in this module — it's owned by the integrating
 // core, which feeds its current value in via `pc_in`. Rationale: the

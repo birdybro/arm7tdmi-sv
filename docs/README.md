@@ -23,6 +23,9 @@ because they agree with each other.
 - **[PSR.md](PSR.md)** — CPSR/SPSR bit map, MSR field and privilege rules,
   deterministic invalid-mode and absent-SPSR policy, and the frozen CPSR.T
   behavior.
+- **[REGISTER_BANKING.md](REGISTER_BANKING.md)** — complete 31-GPR and
+  five-SPSR physical map, mode aliases, PC ownership, User-bank `^` rules,
+  debug routing, and exhaustive ISA-017 evidence.
 - **[UNPREDICTABLE.md](UNPREDICTABLE.md)** — normative ledger separating
   ARMv4T guarantees from every deterministic trap/result/RAZ-WI policy selected
   for architecturally UNPREDICTABLE or UNKNOWN behavior.
