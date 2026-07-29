@@ -111,13 +111,13 @@ module arm7tdmis_memory
     end
 
     // ---- Write path: synchronous, partial-word merge per SIZE/CFGBIGEND.
-    //      No explicit nRESET gate — the address-phase async reset clears
-    //      trans_q to TRANS_I, which makes is_active_q false and naturally
-    //      suppresses writes during reset (avoids a sync/async-net warning).
+    //      A transaction that returns ABORT is failed and does not modify
+    //      this behavioral memory. Later transfers from a completing STM
+    //      remain independent and can still commit.
     always_ff @(posedge CLK) begin
         logic       hw_hi;
         logic [1:0] byte_lane;
-        if (nRESET && CLKEN && is_active_q && write_q) begin
+        if (nRESET && CLKEN && is_active_q && write_q && !ABORT) begin
             unique case (size_q)
                 2'(SIZE_WORD): mem[index_q] <= WDATA;
                 2'(SIZE_HALFWORD): begin
