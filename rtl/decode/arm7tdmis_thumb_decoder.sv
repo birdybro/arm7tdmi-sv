@@ -4,14 +4,9 @@
 // execute paths don't need a parallel Thumb-specific datapath — Thumb is
 // just a more compact encoding that translates to ARM-equivalent ops.
 //
-// Minimum viable Thumb coverage in this commit:
-//
-//   Format 3  MOV/CMP/ADD/SUB immediate (Rd[7:0] from low 3 bits, imm8)
-//   Format 5  BX (branch and exchange — also the way back to ARM)
-//
-// Other Thumb formats (1-2, 4, 6-19) fall to INSTR_UNDEF and will be
-// added incrementally. All Thumb DP ops always update flags (no S bit),
-// and Thumb is unconditional except for the conditional B variant.
+// All 19 ARMv4T Thumb formats are classified below. Thumb DP operations
+// update flags except for the architecturally flag-neutral high-register
+// and SP/PC forms; only Format 16 carries an explicit condition.
 
 module arm7tdmis_thumb_decoder
     import arm7tdmis_types_pkg::*;
@@ -48,7 +43,9 @@ module arm7tdmis_thumb_decoder
     wire is_fmt15    = (thumb_instr[15:12] == 4'b1100);             // LDMIA / STMIA
     wire is_fmt16_17 = (thumb_instr[15:12] == 4'b1101);             // B-cond / SWI
     wire is_fmt17_swi = is_fmt16_17 && (thumb_instr[11:8] == 4'b1111);
-    wire is_fmt16_b  = is_fmt16_17 && !is_fmt17_swi;
+    // 1101 1110 is reserved in ARMv4T.  1101 1111 is Format 17 SWI;
+    // only conditions 0000..1101 are Format 16 branches.
+    wire is_fmt16_b  = is_fmt16_17 && (thumb_instr[11:8] < 4'b1110);
     wire is_fmt18_b  = (thumb_instr[15:11] == 5'b11100);            // B unconditional
     wire is_fmt19_pfx = (thumb_instr[15:11] == 5'b11110);           // BL prefix (high offset)
     wire is_fmt19_sfx = (thumb_instr[15:11] == 5'b11111);           // BL suffix (low offset)
@@ -221,7 +218,9 @@ module arm7tdmis_thumb_decoder
             dec.rm             = {1'b0, fmt1_rs};
             dec.dp_use_imm     = 1'b0;            // operand2 = Rm shifted
             dec.shifter_op     = shift_op_e'(fmt1_op);
-            dec.shifter_amount = {3'h0, fmt1_imm5};
+            dec.shifter_amount = (fmt1_imm5 == 5'h00
+                                  && (fmt1_op inside {2'b01, 2'b10}))
+                                ? 8'd32 : {3'h0, fmt1_imm5};
             dec.shifter_is_rrx = 1'b0;
             dec.shifter_use_rs = 1'b0;
         end else if (is_fmt2) begin

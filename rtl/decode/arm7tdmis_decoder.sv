@@ -180,9 +180,17 @@ module arm7tdmis_decoder
         end else begin
             dec.shifter_op      = shift_op_e'(instr[6:5]);
             // shift-by-immediate: amount in instr[11:7].
+            // In ARM's immediate form an all-zero field encodes 32 for
+            // LSR/ASR.  LSL keeps the literal zero and ROR #0 is selected
+            // separately as RRX below.
             // shift-by-register: amount = Rs[7:0] — the core picks this up
             // when shifter_use_rs=1.
-            dec.shifter_amount  = (instr[4]) ? 8'h00 : {3'h0, instr[11:7]};
+            if (!instr[4] && instr[11:7] == 5'h00
+                && (instr[6:5] inside {2'b01, 2'b10}))
+                dec.shifter_amount = 8'd32;
+            else
+                dec.shifter_amount = instr[4] ? 8'h00
+                                              : {3'h0, instr[11:7]};
             // ROR #0 (imm-shift) is encoded as RRX.
             dec.shifter_is_rrx  = (instr[27:25] == 3'b000) && (instr[4] == 1'b0)
                                 && (instr[6:5] == 2'b11) && (instr[11:7] == 5'b00000);
