@@ -40,7 +40,7 @@ INTEG_COMMON_SRCS := \
 	../tb/integration/arm7tdmis_assertions.sv \
 	../tb/integration/arm7tdmis_test_fixture.sv
 
-.PHONY: all lint lint-tb sim run wave clean help regress \
+.PHONY: all lint lint-tb sim run wave clean help regress harness-unit \
         $(addprefix unit-, $(UNIT_TESTS)) unit \
         $(addprefix integ-, $(INTEG_TESTS)) integ
 
@@ -112,6 +112,9 @@ regress:
 	$(MAKE) integ
 	$(MAKE) run
 
+harness-unit:
+	PYTHONPATH=. python3 -m unittest -v tests/test_regression_harness.py
+
 clean:
 	rm -rf $(OBJ_DIR) $(RUN_ARTIFACTS)
 
@@ -126,4 +129,5 @@ help:
 	@echo "  unit         run every unit test ($(UNIT_TESTS))"
 	@echo "  integ        run every directed integration test ($(INTEG_TESTS))"
 	@echo "  regress      clean, lint, and run every unit/integration/smoke test"
+	@echo "  harness-unit unit-test the machine-readable regression harness"
 	@echo "  clean        remove obj_dir + run artifacts"
