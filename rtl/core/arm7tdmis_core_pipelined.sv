@@ -1506,7 +1506,25 @@ module arm7tdmis_core_pipelined
                                   ? {{16{load_hw_raw[15]}}, load_hw_raw}
                                   : {16'h0, load_hw_raw};
 
-    wire [31:0] load_word_val   = RDATA;
+    // ARMv4T legacy unaligned-word behavior (ARM ARM A2.8 / LDR):
+    // the memory system ignores ADDR[1:0] and returns the naturally
+    // aligned word, then the core rotates that word right by one byte per
+    // low address increment.  The rotation is identical in LE and BE-32;
+    // endianness changes which addressed byte occupies which result lane.
+    function automatic logic [31:0] rotate_word_for_address(
+        input logic [31:0] data,
+        input logic [1:0]  address_low
+    );
+        case (address_low)
+            2'd0: return data;
+            2'd1: return {data[7:0], data[31:8]};
+            2'd2: return {data[15:0], data[31:16]};
+            2'd3: return {data[23:0], data[31:24]};
+        endcase
+    endfunction
+
+    wire [31:0] load_word_val   =
+        rotate_word_for_address(RDATA, ls_addr_lo_q);
     wire [31:0] load_value      = ls_halfword_q ? load_hw_val
                                 : ls_byte_q    ? load_byte_val
                                                 : load_word_val;
@@ -1528,7 +1546,11 @@ module arm7tdmis_core_pipelined
                                            :  swp_addr_lo_q;
     wire [4:0]  swp_byte_shift = {swp_byte_lane, 3'b000};
     wire [31:0] swp_byte_val   = (swp_loaded_q >> swp_byte_shift) & 32'h0000_00FF;
-    wire [31:0] swp_load_value = swp_byte_q ? swp_byte_val : swp_loaded_q;
+    // Prior to ARMv6, SWP uses the LDR rule for its read half and the STR
+    // rule (aligned store, low address bits ignored by memory) for write.
+    wire [31:0] swp_word_val =
+        rotate_word_for_address(swp_loaded_q, swp_addr_lo_q);
+    wire [31:0] swp_load_value = swp_byte_q ? swp_byte_val : swp_word_val;
 
     // Regfile write-port mux (priority as in non-pipelined core)
     always_comb begin
