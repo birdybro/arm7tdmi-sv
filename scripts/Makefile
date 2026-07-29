@@ -40,16 +40,18 @@ UNIT_TESTS := regfile regfile_banking psr psr_banking psr_policy reset_state_pol
 INTEG_TESTS := umull umlal multiply_matrix cp15_undef cp14_decode cp14_dcc cp14_r15 cp_pipeline_follow cp_cdp_protocol cp_reg_transfer cp_reg_r15 cp_ldc_stc cp_ldc_stc_abort cp_address_wrap_policy cp_erratum14 cp_erratum15 cp_busy_interrupt cp_busy_dbgrq cpntrans debug_status debug_control_sync debug_reserved_regs debug_software_breakpoint debug_watchpoint_completion debug_watchpoint_priority debug_breakpoint_pabt debug_breakpoint_interrupt debug_dbgrq_exception debug_pc_modify_dbgrq debug_breakpoint_flush debug_breakpoint_execute debug_external_break debug_inject_handshake debug_inject_matrix debug_dbgen_gating debug_dbgen_sources debug_entry_cause debug_system_speed debug_register_scan debug_pc_capture debug_pc_resume debug_monitor_mode mister_wrapper mister_cdc_reset mister_profiles abort_inactive abort_clken endian_data endian_thumb translated_ls translated_ls_matrix unaligned_access_matrix ldr_pc_unaligned_policy ldr_pc_bus thumb_word_unaligned_policy thumb_halfword_policy single_ls_matrix extra_ls_matrix single_ls_policy block_ls_matrix block_ls_policy register_banking_matrix thumb_block_policy swp_policy swp_bus_matrix cond_suppress cond_fail_matrix sequence_dependencies thumb_bl_boundary thumb_bl_pair_policy thumb_bx_pc_policy address_wrap_policy dp_pc_no_spsr_policy invalid_spsr_return_policy unpredictable_runtime unpredictable_trap reset_clken reset_multicycle_matrix fetch_sequence table7_core_phase_matrix bus_burst dmore_matrix abort irq fiq interrupt_sampling_matrix interrupt_latency exception_priority dabt_fiq arm_exception_lr thumb_exception_lr exception_bus_matrix exception_return_matrix ldm_pc pabt pabt_pipeline pabt_debug_flush ldm_abort ldm_abort_base_list stm_abort stm_base_list ls_abort_modes swp_read_abort cycles swi undef reserved_execute thumb bx_interwork swpb_data flags_preserve psr_policy pc_operands pc_write_alignment mull_flags
 
 INTEG_COMMON_SRCS := \
+	../verification/arm7tdmis_raw_bus_checker.sv \
 	../tb/integration/arm7tdmis_jtag_tb_pkg.sv \
 	../tb/integration/arm7tdmis_memory.sv \
 	../tb/integration/arm7tdmis_assertions.sv \
-	../tb/integration/arm7tdmis_test_fixture.sv
+	../tb/integration/arm7tdmis_test_fixture.sv \
+	../tb/integration/arm7tdmis_raw_bus_bind.sv
 
 .PHONY: all lint lint-mister lint-example lint-tb \
         quartus-analysis quartus-compile \
         quartus-conformance-analysis quartus-conformance-compile \
         sim run wave clean help regress regress-quick \
-        harness-unit harness-self-test \
+        harness-unit harness-self-test raw-checker-self-test \
         $(addprefix unit-, $(UNIT_TESTS)) unit \
         $(addprefix integ-, $(INTEG_TESTS)) integ
 
@@ -173,6 +175,20 @@ harness-self-test:
 	    exit 1; \
 	else \
 	    echo "[harness-self-test] PASS: simulator failure propagated nonzero"; \
+	fi
+
+raw-checker-self-test:
+	mkdir -p $(OBJ_DIR)
+	$(VERILATOR) $(VFLAGS_BUILD) --top-module raw_bus_checker_violation_tb \
+	    --Mdir $(OBJ_DIR)/raw_checker_expected_failure \
+	    -f $(SIM_F) \
+	    ../verification/arm7tdmis_raw_bus_checker.sv \
+	    ../tb/harness/raw_bus_checker_violation_tb.sv
+	@if ./$(OBJ_DIR)/raw_checker_expected_failure/Vraw_bus_checker_violation_tb; then \
+	    echo "[raw-checker-self-test] FAIL: protocol violation returned zero"; \
+	    exit 1; \
+	else \
+	    echo "[raw-checker-self-test] PASS: protocol violation propagated nonzero"; \
 	fi
 
 clean:

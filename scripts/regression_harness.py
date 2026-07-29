@@ -117,7 +117,7 @@ def collect_metadata(
                 "fpga-package-example",
                 "testbench",
             ],
-            "harness": ["unit", "expected-failure"],
+            "harness": ["unit", "expected-failure", "raw-bus-checker"],
             "fpga": [
                 "quartus-analysis",
                 "quartus-conformance-analysis",
@@ -232,6 +232,7 @@ def _phases(
     yield _make_phase("lint-testbench", "lint-tb")
     yield _make_phase("harness-unit", "harness-unit")
     yield _make_phase("harness-expected-failure", "harness-self-test")
+    yield _make_phase("raw-checker-expected-failure", "raw-checker-self-test")
 
     selected_units = unit_tests[:1] if quick else unit_tests
     selected_integration = integration_tests[:1] if quick else integration_tests
