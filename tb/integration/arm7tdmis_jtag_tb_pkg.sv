@@ -19,6 +19,15 @@ package arm7tdmis_jtag_tb_pkg;
         return serial_bits;
     endfunction
 
+    function automatic logic [31:0] chain1_parallel_data(
+        input logic [37:0] serial_bits
+    );
+        logic [31:0] data;
+        for (int i = 0; i < 32; i++)
+            data[31 - i] = serial_bits[i + 1];
+        return data;
+    endfunction
+
     function automatic logic [37:0] chain2_serial_in(
         input logic        write,
         input logic [4:0]  address,
