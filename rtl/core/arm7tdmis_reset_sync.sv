@@ -1,6 +1,6 @@
 // External-nRESET synchronizer.
 //
-// CLAUDE.md says synchronous deassertion of nRESET at the macrocell boundary
+// AGENTS.md says synchronous deassertion of nRESET at the macrocell boundary
 // is required (TRM §4 / §30.4); inside the core, every other flop uses sync
 // reset and reads `core_nreset` instead of `nRESET` directly. This module is
 // the only place where nRESET appears as an asynchronous flop reset.

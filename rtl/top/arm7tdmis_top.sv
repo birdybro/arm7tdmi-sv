@@ -1,5 +1,5 @@
 // Top-level ARM7TDMI-S r4p3. Pin names match the TRM exactly per
-// TASKS.md §1.4 / CLAUDE.md so downstream tests, the ETM wrapper (§24),
+// TASKS.md §1.4 / AGENTS.md so downstream tests, the ETM wrapper (§24),
 // and the scan wrapper (§25) all line up.
 //
 // At §7 the top instantiates a synchronized reset and the simple

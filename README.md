@@ -199,7 +199,7 @@ scripts/      Makefile, sim.f / tb.f filelists, arm7tdmis.sdc
 
 ARM_DDI_0234B_ARM7TDMI-S_r4p3_TRM.pdf   authoritative spec
 TASKS.md      implementation roadmap (29 sections, 10 milestones)
-CLAUDE.md     guidance for AI agents working in this repo
+AGENTS.md      guidance for GPT/Codex and other coding agents
 ```
 
 ---

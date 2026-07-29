@@ -2160,7 +2160,7 @@ Anchor each cycle test to an explicit TRM table:
 3. **IR width = 4 bits**, no parity. CAPTURE-IR loads fixed pattern `4'b0001` (LSB-first). SHIFT-IR shifts in LSB-first. UPDATE-IR latches. Reset value = `IDCODE` (TRM §5.14.3, p. 156).
 4. **IDCODE** (TRM §5.14.2, p. 155):
    - 32-bit format `[31:28]=Version, [27:12]=PartNumber, [11:1]=ManufacturerID, [0]=1` (LSB always 1 per IEEE 1149.1; do not tie LOW).
-   - r4p3 default value `0x7F1F0F0F` (matches CLAUDE.md).
+   - r4p3 default value `0x7F1F0F0F` (matches `AGENTS.md`).
    - No parallel write. CAPTURE-DR loads the constant; SHIFT-DR clocks LSB-first; UPDATE-DR is a no-op for IDCODE.
 5. **Scan chain map**:
    - 0: reserved (returns zeros if selected).
@@ -2336,7 +2336,7 @@ parameter and test both settings.
 | Architectural/cycle conformance | MISSING | No independent reference model, full encoding matrix, bus-cycle scoreboard, coverage closure, formal proof, or real conformance suite. |
 | Quartus / FPGA closure | MISSING | No QSF/QIP/IP manifest, synthesis, fit, resource, Fmax, CDC/RDC, or hardware result. The SDC names a nonexistent `DBGTCK` port and false-paths synchronous IRQ/FIQ pins. |
 | MiSTer integration | MISSING | No MiSTer wrapper, request/completion bridge, build, save-state interface, PocketStation boot test, or generic integration example. |
-| Documentation | INCORRECT | README/CLAUDE/docs call scaffolded or untested paths "complete" and document incorrect abort/cycle/CP behavior. |
+| Documentation | INCORRECT | README/AGENTS/docs call scaffolded or untested paths "complete" and document incorrect abort/cycle/CP behavior. |
 
 The useful accomplishments are therefore narrower than the old status pages claim:
 the repository has a substantial synthesizable RTL prototype, broad decoder/datapath
@@ -2728,7 +2728,7 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
 ## 31.12 Documentation and release hygiene
 
 - [ ] **DOC-001:** Replace all unconditional "Complete", "all green", and
-  "cycle-accurate" claims in README, CLAUDE, and `docs/` with the §31 status vocabulary
+  "cycle-accurate" claims in README, AGENTS, and `docs/` with the §31 status vocabulary
   until linked sign-off evidence exists.
 - [ ] **DOC-002:** Correct documentation for LDM/STM aborts, exception priority/LR,
   logical V preservation, PC values, STM/coprocessor cycles, endianness, CP14, absence
@@ -2766,7 +2766,7 @@ The release owner may sign off only when all statements below are true:
 [ ] A real MiSTer build and on-board PocketStation reference run pass
 [ ] Save-state restore is deterministic in the PocketStation integration
 [ ] Generic second-SoC integration builds and runs
-[ ] README/CLAUDE/docs exactly match the audited state and link the release evidence
+[ ] README/AGENTS/docs exactly match the audited state and link the release evidence
 [ ] License/provenance review is complete
 [ ] Two reviewers, including one not responsible for the RTL, approve the traceability matrix
 [ ] Release tag, source hash, spec hashes, toolchain, artifacts, and reports are frozen

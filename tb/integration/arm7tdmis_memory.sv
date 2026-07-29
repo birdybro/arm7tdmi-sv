@@ -65,7 +65,7 @@ module arm7tdmis_memory
     wire is_active_q = (trans_q == 2'(TRANS_N)) || (trans_q == 2'(TRANS_S));
     wire [INDEX_BITS-1:0] index_q = addr_q[INDEX_BITS+1:2];
 
-    // ---- Address-phase capture (synchronous reset; matches CLAUDE.md's
+    // ---- Address-phase capture (synchronous reset; matches AGENTS.md's
     //      FPGA preference and avoids a sync/async-net warning across
     //      modules that read nRESET as data, e.g. the cycle logger).
     always_ff @(posedge CLK) begin

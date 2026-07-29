@@ -1,7 +1,7 @@
 // ARM7TDMI-S multiplier (TASKS.md §5.3): MUL/MLA/UMULL/UMLAL/SMULL/SMLAL.
 //
 // Single-cycle 32×32 → 64 multiplier with optional accumulate. The bare `*`
-// infers a Cyclone V variable-precision DSP block (per CLAUDE.md); we
+// infers a Cyclone V variable-precision DSP block (per AGENTS.md); we
 // don't hand-roll an array multiplier. Cycle-accurate behavior — the real
 // macrocell is multi-cycle with early termination — is shaped externally
 // by the cycle controller, which uses the `cycle_count` (m parameter)
