@@ -259,7 +259,7 @@ protocol used by OpenOCD: scan the block instruction, two pipeline NOPs, then
 one word for each selected register in ascending register order. The transfer
 uses an internal register-file debug port, honors the instruction's `S`
 user-bank selection, and keeps the external bus idle. The public-pin round
-trip for r1-r14 is verified by
+trip for r0-r14 is verified by
 `tb/integration/arm7tdmis_debug_register_scan_tb.sv`.
 
 For a system-speed access, bit 33 arms the *following* scan-chain word rather

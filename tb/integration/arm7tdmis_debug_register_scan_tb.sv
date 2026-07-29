@@ -15,7 +15,7 @@ module arm7tdmis_debug_register_scan_tb
 ;
 
     localparam int CYCLE_LIMIT = 7000;
-    localparam logic [15:0] REGISTER_MASK = 16'h7FFE; // r1-r14
+    localparam logic [15:0] REGISTER_MASK = 16'h7FFF; // r0-r14
     localparam logic [31:0] DEBUG_LDM =
         32'hE890_0000 | 32'(REGISTER_MASK);
     localparam logic [31:0] DEBUG_STM =
@@ -229,12 +229,12 @@ module arm7tdmis_debug_register_scan_tb
         select_chain1();
         monitor_debug_bus = 1'b1;
 
-        // OpenOCD arm7tdmi_write_core_regs(), restricted only to r1-r14
+        // OpenOCD arm7tdmi_write_core_regs(), restricted only to r0-r14
         // so PC return-address handling can be checked independently.
         clock_out(DEBUG_LDM);
         clock_out(DEBUG_NOP);
         clock_out(DEBUG_NOP);
-        for (int reg_index = 1; reg_index <= 14; reg_index++)
+        for (int reg_index = 0; reg_index <= 14; reg_index++)
             clock_out(expected[reg_index]);
         clock_out(DEBUG_NOP);
 
@@ -242,7 +242,7 @@ module arm7tdmis_debug_register_scan_tb
         clock_out(DEBUG_STM);
         clock_out(DEBUG_NOP);
         clock_out(DEBUG_NOP);
-        for (int reg_index = 1; reg_index <= 14; reg_index++) begin
+        for (int reg_index = 0; reg_index <= 14; reg_index++) begin
             clock_data_in(observed);
             if (observed !== expected[reg_index])
                 fail($sformatf(
