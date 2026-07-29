@@ -42,6 +42,7 @@ module ice_rt_tb
     logic [1:0]  DBGRNG;
 
     logic        scan_we;
+    logic        scan_re;
     logic [4:0]  scan_addr;
     logic [37:0] scan_wdata;
     logic [31:0] scan_rdata;
@@ -68,18 +69,31 @@ module ice_rt_tb
         .ifen               (ifen),
         .DBGRNG             (DBGRNG),
         .scan_we            (scan_we),
+        .scan_re            (scan_re),
         .scan_addr          (scan_addr),
         .scan_wdata         (scan_wdata),
         .scan_rdata         (scan_rdata),
         .core_dcc_we        (1'b0),
+        .core_dcc_re        (1'b0),
         .core_dcc_wdata     (32'h0),
+        .core_dcc_control   (tb_dcc_control),
         .core_dcc_rdata     (tb_dcc_rdata),
+        .core_dbgabt_we     (1'b0),
+        .core_dbgabt_wdata  (1'b0),
+        .core_dbgabt_rdata  (tb_dbgabt_rdata),
+        .debug_abort_set    (1'b0),
+        .dcc_tx_empty       (tb_dcc_tx_empty),
+        .dcc_rx_full        (tb_dcc_rx_full),
         .tap_inject_we      (1'b0),
         .tap_inject_instr   (32'h0),
         .dbg_inject_we      (tb_inject_we),
         .dbg_inject_instr   (tb_inject_instr)
     );
     logic [31:0] tb_dcc_rdata;
+    logic [31:0] tb_dcc_control;
+    logic [31:0] tb_dbgabt_rdata;
+    logic        tb_dcc_tx_empty;
+    logic        tb_dcc_rx_full;
     logic        tb_inject_we;
     logic [31:0] tb_inject_instr;
 
@@ -123,6 +137,7 @@ module ice_rt_tb
         dbg_break_in    = 1'b0;
         tap_restart_req = 1'b0;
         scan_we         = 1'b0;
+        scan_re         = 1'b0;
         scan_addr    = 5'h0;
         scan_wdata   = 38'h0;
 
@@ -191,7 +206,8 @@ module ice_rt_tb
 
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused = &{1'b0, DBGRNG[1], dbg_ack, ifen, core_halt, tb_dcc_rdata,
-                     tb_inject_we, tb_inject_instr};
+                     tb_dcc_control, tb_dbgabt_rdata, tb_dcc_tx_empty,
+                     tb_dcc_rx_full, tb_inject_we, tb_inject_instr};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule

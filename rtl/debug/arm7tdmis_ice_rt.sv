@@ -48,13 +48,19 @@ module arm7tdmis_ice_rt
                                             //      pulse (Update-IR with
                                             //      IR_RESTART loaded)
 
-    // §20: CP14 DCC data path from/to the core. core_dcc_we/data writes
-    // the DCC Data register (addr 0x04) from the core side (MCR p14 c0);
-    // core_dcc_rd_data exposes the register for the core to read on
-    // MRC p14 c0.
+    // §20: CP14 DCC and Debug Abort Status paths. Processor c1 writes fill
+    // TX; processor c1 reads consume RX. c0 returns live version/W/R status.
     input  logic        core_dcc_we,
+    input  logic        core_dcc_re,
     input  logic [31:0] core_dcc_wdata,
+    output logic [31:0] core_dcc_control,
     output logic [31:0] core_dcc_rdata,
+    input  logic        core_dbgabt_we,
+    input  logic        core_dbgabt_wdata,
+    output logic [31:0] core_dbgabt_rdata,
+    input  logic        debug_abort_set,
+    output logic        dcc_tx_empty,
+    output logic        dcc_rx_full,
 
     // §22 scan-chain-1 instruction injection. TAP latches a 33-bit value
     // on Update-DR (instruction + break flag); ice_rt buffers it,
@@ -84,6 +90,7 @@ module arm7tdmis_ice_rt
     // instantiates this module. When the TAP wiring lands, these become
     // read/write ports into the register bank.
     input  logic        scan_we,
+    input  logic        scan_re,
     input  logic [4:0]  scan_addr,
     input  logic [37:0] scan_wdata,       // 38-bit chain: [37]=R/W, [36:32]=addr, [31:0]=data
     output logic [31:0] scan_rdata
@@ -98,8 +105,8 @@ module arm7tdmis_ice_rt
     //   0x00: Debug Control     (6 bits used)
     //   0x01: Debug Status      (5 bits, read-only)
     //   0x02: Vector Catch      (8 bits)
-    //   0x04: Debug Comms Data  (32 bits) — moved with §20 to CP14
-    //   0x05: Debug Comms Ctrl  (2 bits)
+    //   0x04: Debug Comms Control (32-bit live version/W/R value)
+    //   0x05: Debug Comms Data    (RX on host write, TX on host read)
     //   0x08-0x0F: WP0 (Addr Val, Addr Mask, Data Val, Data Mask,
     //              Ctrl Val, Ctrl Mask, reserved, reserved)
     //   0x10-0x17: WP1 (same shape)
@@ -121,24 +128,76 @@ module arm7tdmis_ice_rt
     localparam logic [4:0] WP1_CTRL_VAL  = 5'h14;
     localparam logic [4:0] WP1_CTRL_MASK = 5'h15;
 
-    // Async reset (DBGnTRST) per TRM. Two write ports: JTAG scan chain 2
-    // (scan_we) and the core's CP14 DCC TX path (core_dcc_we). Scan wins
-    // on simultaneous writes — the architectural rule is "don't issue
-    // both at once" but we resolve deterministically rather than fault.
-    localparam logic [4:0] DCC_DATA_ADDR = 5'h04;
+    // Async reset (DBGnTRST) per TRM. Normal ICE registers are writable
+    // from scan chain 2. DCC control/data are live resources implemented
+    // separately below rather than ordinary storage slots.
+    localparam logic [4:0] DCC_CTRL_ADDR = 5'h04;
     always_ff @(posedge CLK or negedge DBGnTRST) begin
         if (!DBGnTRST) begin
             for (int i = 0; i < 32; i = i + 1) regs[i] <= 32'h0;
-        end else if (CLKEN) begin
-            if (scan_we) begin
+        end else begin
+            if (scan_we && (scan_addr != DCC_CTRL_ADDR)
+                        && (scan_addr != 5'h05)) begin
                 regs[scan_addr] <= scan_wdata[31:0];
-            end else if (core_dcc_we) begin
-                regs[DCC_DATA_ADDR] <= core_dcc_wdata;
             end
         end
     end
 
-    assign core_dcc_rdata = regs[DCC_DATA_ADDR];
+    // ---- Debug Communications Channel
+    // W=1 means unread processor TX is pending. R=1 means unread host RX
+    // is pending. If a producer and consumer act on the same edge, the new
+    // producer wins so a newly-arrived word is never lost.
+    logic [31:0] dcc_tx_data_q;
+    logic [31:0] dcc_rx_data_q;
+    logic        dcc_tx_full_q;
+    logic        dcc_rx_full_q;
+    logic        dbg_abt_q;
+
+    always_ff @(posedge CLK or negedge DBGnTRST) begin
+        if (!DBGnTRST) begin
+            dcc_tx_data_q <= 32'h0;
+            dcc_rx_data_q <= 32'h0;
+            dcc_tx_full_q <= 1'b0;
+            dcc_rx_full_q <= 1'b0;
+            dbg_abt_q     <= 1'b0;
+        end else begin
+            // Host consumption clears W; a simultaneous CPU write replaces
+            // the consumed word and leaves W asserted.
+            if (scan_re && (scan_addr == 5'h05))
+                dcc_tx_full_q <= 1'b0;
+            if (CLKEN && core_dcc_we) begin
+                dcc_tx_data_q <= core_dcc_wdata;
+                dcc_tx_full_q <= 1'b1;
+            end
+
+            // CPU consumption clears R; a simultaneous host write installs
+            // a new word and leaves R asserted.
+            if (CLKEN && core_dcc_re)
+                dcc_rx_full_q <= 1'b0;
+            if (scan_we && (scan_addr == 5'h05)) begin
+                dcc_rx_data_q <= scan_wdata[31:0];
+                dcc_rx_full_q <= 1'b1;
+            end else if (scan_we && (scan_addr == DCC_CTRL_ADDR)
+                                 && !scan_wdata[0]) begin
+                // Backward-compatible debugger escape for a stuck R bit.
+                dcc_rx_full_q <= 1'b0;
+            end
+
+            // Debug-generated aborts are sticky. Software may write c2;
+            // debug set wins a coincident clear.
+            if (CLKEN && core_dbgabt_we)
+                dbg_abt_q <= core_dbgabt_wdata;
+            if (debug_abort_set)
+                dbg_abt_q <= 1'b1;
+        end
+    end
+
+    assign core_dcc_control = {4'b0111, 26'h0,
+                               dcc_tx_full_q, dcc_rx_full_q};
+    assign core_dcc_rdata   = dcc_rx_data_q;
+    assign core_dbgabt_rdata = {31'h0, dbg_abt_q};
+    assign dcc_tx_empty = !dcc_tx_full_q;
+    assign dcc_rx_full  = dcc_rx_full_q;
 
     // §30.22.6: 2-flop synchronizer for asynchronous DBGRQ. The external
     // DBGRQ pin can fire any time relative to CLK; metastability mitigated
@@ -193,8 +252,14 @@ module arm7tdmis_ice_rt
         dbg_rq_synced,      // [1] synced DBGRQ (2-flop CDC chain)
         dbg_ack             // [0] DBGACK
     };
-    assign scan_rdata = (scan_addr == 5'h01) ? {27'h0, dbg_status}
-                                              : regs[scan_addr];
+    always_comb begin
+        unique case (scan_addr)
+            5'h01: scan_rdata = {27'h0, dbg_status};
+            5'h04: scan_rdata = core_dcc_control;
+            5'h05: scan_rdata = dcc_tx_data_q;
+            default: scan_rdata = regs[scan_addr];
+        endcase
+    end
 
     // ---- Watchpoint comparator: XNOR-with-mask match (TRM §30.22.2).
     // match[i] = (value_i XNOR input_i) OR mask_i; full match = all bits set.

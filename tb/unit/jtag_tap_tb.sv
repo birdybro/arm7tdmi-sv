@@ -27,6 +27,7 @@ module jtag_tap_tb
     logic [4:0]  ice_scan_addr;
     logic [37:0] ice_scan_wdata;
     logic        ice_scan_we;
+    logic        ice_scan_re;
     logic [31:0] ice_inject_instr;
     logic        ice_inject_break;
     logic        ice_inject_we;
@@ -47,6 +48,7 @@ module jtag_tap_tb
         .ice_scan_addr    (ice_scan_addr),
         .ice_scan_wdata   (ice_scan_wdata),
         .ice_scan_we      (ice_scan_we),
+        .ice_scan_re      (ice_scan_re),
         .ice_scan_rdata   (32'h0),
         .ice_inject_instr (ice_inject_instr),
         .ice_inject_break (ice_inject_break),
@@ -146,7 +148,8 @@ module jtag_tap_tb
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused = &{1'b0, DBGnTDOEN, in_shift_dr, in_update_dr, in_capture_dr,
                      ice_scan_addr, ice_scan_wdata, ice_scan_we, tap_restart_req,
-                     ice_inject_instr, ice_inject_break, ice_inject_we};
+                     ice_scan_re, ice_inject_instr, ice_inject_break,
+                     ice_inject_we};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule

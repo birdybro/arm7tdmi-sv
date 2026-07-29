@@ -77,11 +77,17 @@ module arm7tdmis_core_pipelined
     output logic        DBGnEXEC,
     output logic        DBGINSTRVALID,
 
-    // §20: CP14 DCC data path. core_dcc_we asserts when MCR p14 c0 commits;
-    // core_dcc_rdata is the current DCC TX register (mirror of ICE-RT 0x04).
+    // §20: internal CP14 register interface.  c0 is the read-only DCC
+    // control register, c1 is the split RX/TX data register, and c2 is the
+    // read/write Debug Abort Status register.
     output logic        core_dcc_we,
+    output logic        core_dcc_re,
     output logic [31:0] core_dcc_wdata,
+    input  logic [31:0] core_dcc_control,
     input  logic [31:0] core_dcc_rdata,
+    output logic        core_dbgabt_we,
+    output logic        core_dbgabt_wdata,
+    input  logic [31:0] core_dbgabt_rdata,
 
     // §22 scan-chain-1 instruction injection. When dbg_inject_we pulses
     // HIGH, the F-stage overrides fd_q with dbg_inject_instr (skipping
@@ -455,16 +461,13 @@ module arm7tdmis_core_pipelined
 
     wire instr_is_ls_decoder = (dec.instr_class == INSTR_LDR_STR);
     wire block_active        = (state_q == S_BLOCK_DATA);
-    // MCR p14 c0 reads dec.rd via port C (the source register goes to the
-    // coprocessor). LDR/STR also uses port C for dec.rd as the store
-    // source. cp14_mcr_dcc detection is combinational from de_q.
-    wire instr_mcr_p14_decoder = (dec.instr_class == INSTR_MCR_MRC)
-                              && (dec.cp_num == 4'd14)
-                              && !de_q.instr[20]
-                              && (de_q.instr[19:16] == 4'd0);
+    // MCR reads dec.rd via port C (the source register goes to the
+    // coprocessor). LDR/STR also uses port C for dec.rd as the store source.
+    wire instr_mcr_decoder = (dec.instr_class == INSTR_MCR_MRC)
+                          && !de_q.instr[20];
     wire [3:0] rc_addr_eff   = block_active        ? block_curr_reg_q
                              : instr_is_ls_decoder ? dec.rd
-                             : instr_mcr_p14_decoder ? dec.rd
+                             : instr_mcr_decoder   ? dec.rd
                                                    : dec.rs;
 
     wire instr_is_mul_decoder = (dec.instr_class == INSTR_MUL);
@@ -813,19 +816,38 @@ module arm7tdmis_core_pipelined
     wire instr_is_cp14 = instr_is_cp && (dec.cp_num == 4'd14);
     wire instr_is_mrc  = (dec.instr_class == INSTR_MCR_MRC) && de_q.instr[20];
     wire instr_is_mcr  = (dec.instr_class == INSTR_MCR_MRC) && !de_q.instr[20];
-    wire cp14_crn0     = (de_q.instr[19:16] == 4'd0);
-    wire cp14_mrc_dcc  = instr_is_cp14 && instr_is_mrc && cp14_crn0;
-    wire cp14_mcr_dcc  = instr_is_cp14 && instr_is_mcr && cp14_crn0;
-    wire cp_undef_trap = executing && condition_pass && instr_is_cp && CPA
-                      && !instr_is_cp14;
-    wire cp14_mcr_dcc_fires = passes_cond && cp14_mcr_dcc;
-    wire cp14_mrc_dcc_fires = passes_cond && cp14_mrc_dcc;
+    wire cp14_exact_fields = instr_is_cp14
+                          && (dec.instr_class == INSTR_MCR_MRC)
+                          && (de_q.instr[23:21] == 3'b000)
+                          && (de_q.instr[7:5] == 3'b000)
+                          && (de_q.instr[3:0] == 4'b0000);
+    wire cp14_mrc_control = cp14_exact_fields && instr_is_mrc
+                          && (de_q.instr[19:16] == 4'd0);
+    wire cp14_mrc_data    = cp14_exact_fields && instr_is_mrc
+                          && (de_q.instr[19:16] == 4'd1);
+    wire cp14_mcr_data    = cp14_exact_fields && instr_is_mcr
+                          && (de_q.instr[19:16] == 4'd1);
+    wire cp14_mrc_dbgabt  = cp14_exact_fields && instr_is_mrc
+                          && (de_q.instr[19:16] == 4'd2);
+    wire cp14_mcr_dbgabt  = cp14_exact_fields && instr_is_mcr
+                          && (de_q.instr[19:16] == 4'd2);
+    wire cp14_supported   = cp14_mrc_control || cp14_mrc_data
+                          || cp14_mcr_data || cp14_mrc_dbgabt
+                          || cp14_mcr_dbgabt;
+    wire cp_undef_trap = executing && condition_pass && instr_is_cp
+                      && (instr_is_cp14 ? !cp14_supported : CPA);
 
-    // §20: DCC TX write — when MCR p14 c0 commits, push rf_rc_data
-    // (= dec.rd's value, routed via port C above) into the ICE-RT
-    // DCC Data register.
-    assign core_dcc_we    = cp14_mcr_dcc_fires;
+    wire cp14_mcr_data_fires   = passes_cond && cp14_mcr_data;
+    wire cp14_mrc_data_fires   = passes_cond && cp14_mrc_data;
+    wire cp14_mcr_dbgabt_fires = passes_cond && cp14_mcr_dbgabt;
+
+    // c1 has separate processor-facing directions. A read consumes RX;
+    // a write fills TX. c2 is a one-bit software-visible status register.
+    assign core_dcc_we        = cp14_mcr_data_fires;
+    assign core_dcc_re        = cp14_mrc_data_fires;
     assign core_dcc_wdata = rf_rc_data;
+    assign core_dbgabt_we     = cp14_mcr_dbgabt_fires;
+    assign core_dbgabt_wdata  = rf_rc_data[0];
 
     wire msr_fires   = passes_cond && instr_is_msr;
     wire mrs_fires   = passes_cond && instr_is_mrs;
@@ -1167,10 +1189,20 @@ module arm7tdmis_core_pipelined
             rf_write_addr = dec.rd;
             rf_write_data = dec.psr_use_spsr ? 32'(spsr_value) : 32'(cpsr);
             rf_write_en   = 1'b1;
-        end else if (cp14_mrc_dcc_fires) begin
-            // §20: MRC p14, 0, Rd, c0, c0, 0 — DCC RX read.
+        end else if (passes_cond && cp14_mrc_control) begin
+            // MRC p14,0,Rd,c0,c0,0 — DCC control/version/status.
+            rf_write_addr = dec.rd;
+            rf_write_data = core_dcc_control;
+            rf_write_en   = 1'b1;
+        end else if (cp14_mrc_data_fires) begin
+            // MRC p14,0,Rd,c1,c0,0 — consume DCC RX data.
             rf_write_addr = dec.rd;
             rf_write_data = core_dcc_rdata;
+            rf_write_en   = 1'b1;
+        end else if (passes_cond && cp14_mrc_dbgabt) begin
+            // MRC p14,0,Rd,c2,c0,0 — Debug Abort Status.
+            rf_write_addr = dec.rd;
+            rf_write_data = core_dbgabt_rdata;
             rf_write_en   = 1'b1;
         end else if (state_q == S_DP_SHIFT) begin
             // §18 DP shift-by-reg: commit deferred from S_EXEC. Uses

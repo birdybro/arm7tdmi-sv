@@ -43,6 +43,7 @@ module arm7tdmis_jtag_tap
     output logic [4:0]  ice_scan_addr,    // valid every cycle (= dr_shift_q[36:32])
     output logic [37:0] ice_scan_wdata,
     output logic        ice_scan_we,      // pulse high on Update-DR when chain 2 active and R/W=1
+    output logic        ice_scan_re,      // pulse on Capture-DR for a pending R/W=0 request
     input  logic [31:0] ice_scan_rdata,   // captured at Capture-DR
 
     // ---- Scan chain 1 (33-bit) — debug instruction injection.
@@ -225,6 +226,14 @@ module arm7tdmis_jtag_tap
                          && (ir_hold_q == 4'(IR_INTEST))
                          && (scan_n_q == 4'd2)
                          && dr_shift_q[37];      // R/W=1 (write)
+    // A read request is shifted in and committed at Update-DR. On the next
+    // Capture-DR the addressed response is sampled into dr_shift_q; that
+    // same event tells ICE-RT that a side-effecting read has completed.
+    assign ice_scan_re    = DBGTCKEN
+                         && (tap_q == CDR)
+                         && (ir_hold_q == 4'(IR_INTEST))
+                         && (scan_n_q == 4'd2)
+                         && !dr_shift_q[37];     // R/W=0 (read)
 
     // ---- Chain 1 outputs to the debug-state instruction-inject path.
     assign ice_inject_instr = dr_shift_q[31:0];

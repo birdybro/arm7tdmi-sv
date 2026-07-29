@@ -119,8 +119,13 @@ module arm7tdmis_top
         .DBGnEXEC      (DBGnEXEC),
         .DBGINSTRVALID (DBGINSTRVALID),
         .core_dcc_we      (core_dcc_we),
+        .core_dcc_re      (core_dcc_re),
         .core_dcc_wdata   (core_dcc_wdata),
+        .core_dcc_control (core_dcc_control),
         .core_dcc_rdata   (core_dcc_rdata),
+        .core_dbgabt_we    (core_dbgabt_we),
+        .core_dbgabt_wdata (core_dbgabt_wdata),
+        .core_dbgabt_rdata (core_dbgabt_rdata),
         .dbg_inject_we    (dbg_inject_we),
         .dbg_inject_instr (dbg_inject_instr)
     );
@@ -136,8 +141,15 @@ module arm7tdmis_top
     logic ice_core_halt;
     logic tap_restart_req;
     logic        core_dcc_we;
+    logic        core_dcc_re;
     logic [31:0] core_dcc_wdata;
+    logic [31:0] core_dcc_control;
     logic [31:0] core_dcc_rdata;
+    logic        core_dbgabt_we;
+    logic        core_dbgabt_wdata;
+    logic [31:0] core_dbgabt_rdata;
+    logic        dcc_tx_empty;
+    logic        dcc_rx_full;
     logic        dbg_inject_we;
     logic [31:0] dbg_inject_instr;
 
@@ -163,12 +175,21 @@ module arm7tdmis_top
         .core_halt          (ice_core_halt),
         .DBGRNG             (ice_dbgrng),
         .scan_we            (ice_scan_we),
+        .scan_re            (ice_scan_re),
         .scan_addr          (ice_scan_addr),
         .scan_wdata         (ice_scan_wdata),
         .scan_rdata         (ice_scan_rdata),
         .core_dcc_we        (core_dcc_we),
+        .core_dcc_re        (core_dcc_re),
         .core_dcc_wdata     (core_dcc_wdata),
+        .core_dcc_control   (core_dcc_control),
         .core_dcc_rdata     (core_dcc_rdata),
+        .core_dbgabt_we     (core_dbgabt_we),
+        .core_dbgabt_wdata  (core_dbgabt_wdata),
+        .core_dbgabt_rdata  (core_dbgabt_rdata),
+        .debug_abort_set    (1'b0),
+        .dcc_tx_empty       (dcc_tx_empty),
+        .dcc_rx_full        (dcc_rx_full),
         .tap_inject_we      (tap_inject_we),
         .tap_inject_instr   (tap_inject_instr),
         .dbg_inject_we      (dbg_inject_we),
@@ -178,10 +199,11 @@ module arm7tdmis_top
     assign DBGRNG = ice_dbgrng;
     assign DBGACK = ice_dbg_ack;
 
-    // DBGCOMM* still tied off — CP14 DCC (§20) wires those when DCC data
-    // transfer lands.
-    assign DBGCOMMTX     = 1'b0;
-    assign DBGCOMMRX     = 1'b0;
+    // Appendix A polarity: TX is HIGH while the processor-to-debugger
+    // register is empty; RX is HIGH while debugger data is pending.
+    // Both status pins are suppressed when external debug is disabled.
+    assign DBGCOMMTX = DBGEN && dcc_tx_empty;
+    assign DBGCOMMRX = DBGEN && dcc_rx_full;
 
     // ICE-generated break signal not yet routed back into the core's
     // debug-entry path (no debug-state FSM yet).
@@ -197,6 +219,7 @@ module arm7tdmis_top
     logic [4:0]   ice_scan_addr;
     logic [37:0]  ice_scan_wdata;
     logic         ice_scan_we;
+    logic         ice_scan_re;
     logic [31:0]  ice_scan_rdata;
 
     logic [31:0] tap_inject_instr;
@@ -222,6 +245,7 @@ module arm7tdmis_top
         .ice_scan_addr    (ice_scan_addr),
         .ice_scan_wdata   (ice_scan_wdata),
         .ice_scan_we      (ice_scan_we),
+        .ice_scan_re      (ice_scan_re),
         .ice_scan_rdata   (ice_scan_rdata),
         .ice_inject_instr (tap_inject_instr),
         .ice_inject_break (tap_inject_break),
