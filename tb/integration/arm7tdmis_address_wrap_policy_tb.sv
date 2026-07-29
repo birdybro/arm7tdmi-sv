@@ -1,10 +1,12 @@
 // ISA-016 address-space rollover policy matrix.
 //
-// ARMv4T makes branch-target overflow and sequential execution across the
-// top of the 32-bit address space UNPREDICTABLE. This implementation uses
-// ordinary modulo-2^32 address arithmetic. These checks freeze that project
-// policy for ARM B/BL, Thumb B/conditional-B/BL, and sequential execution
-// in both states; they are not portable ARM software guarantees.
+// ARMv4T makes branch-target overflow, sequential instruction execution, and
+// multiword transfers across the top of the 32-bit address space
+// UNPREDICTABLE. This implementation uses ordinary modulo-2^32 address
+// arithmetic. These checks freeze that project policy for ARM B/BL,
+// Thumb B/conditional-B/BL, sequential execution in both states, ARM and
+// Thumb LDM/STM, and Thumb PUSH/POP. They are not portable ARM software
+// guarantees.
 
 `timescale 1ns/1ps
 
@@ -12,7 +14,7 @@ module arm7tdmis_address_wrap_policy_tb
     import arm7tdmis_bus_pkg::*;
 ;
 
-    localparam int CASE_COUNT = 7;
+    localparam int CASE_COUNT = 13;
 
     logic CLK;
     initial begin
@@ -68,7 +70,7 @@ module arm7tdmis_address_wrap_policy_tb
     int unsigned errors;
 
     function automatic logic is_thumb_case(input int case_id);
-        return case_id >= 4;
+        return ((case_id >= 4) && (case_id <= 7)) || (case_id >= 10);
     endfunction
 
     function automatic logic is_sequential_case(input int case_id);
@@ -156,6 +158,53 @@ module arm7tdmis_address_wrap_policy_tb
         end
     endtask
 
+    task automatic setup_transfer_case(input int case_id);
+        logic [31:0] base_value;
+        logic [31:0] opcode;
+
+        for (int word = 0; word < 256; word++)
+            u_mem.mem[word] = 32'hEAFF_FFFE;
+
+        base_value = (case_id == 13)
+                   ? 32'h0000_0004 : 32'hFFFF_FFFC;
+
+        u_mem.mem[0]  = 32'hEA00_0006; // reset: B 0x20; second load word
+        u_mem.mem[8]  = 32'hE59F_0058; // r0 <- 0xfffffffc
+        u_mem.mem[9]  = 32'hE59F_1058; // r1 <- store seed 1
+        u_mem.mem[10] = 32'hE59F_2058; // r2 <- store seed 2
+        u_mem.mem[32] = 32'hFFFF_FFFC;
+        u_mem.mem[33] = 32'h1111_1111;
+        u_mem.mem[34] = 32'h2222_2222;
+        u_mem.mem[255] = 32'hA1A2_A3A4;
+
+        if (case_id <= 9) begin
+            opcode = (case_id == 8)
+                   ? 32'hE8B0_0006  // LDMIA r0!,{r1,r2}
+                   : 32'hE8A0_0006; // STMIA r0!,{r1,r2}
+            u_mem.mem[11] = opcode;
+            u_mem.mem[12] = 32'hE3A0_7000 | 32'(case_id);
+            u_mem.mem[13] = 32'hEAFF_FFFE;
+        end else begin
+            // Thumb cases additionally seed SP and enter at 0x40.
+            u_mem.mem[11] = 32'hE59F_D058; // sp <- mem[35]
+            u_mem.mem[12] = 32'hE59F_3058; // r3 <- Thumb target
+            u_mem.mem[13] = 32'hE12F_FF13; // BX r3
+            u_mem.mem[35] = base_value;
+            u_mem.mem[36] = 32'h0000_0041;
+
+            unique case (case_id)
+                10: opcode = 32'h0000_C806; // LDMIA r0!,{r1,r2}
+                11: opcode = 32'h0000_C006; // STMIA r0!,{r1,r2}
+                12: opcode = 32'h0000_BC06; // POP {r1,r2}
+                default: opcode = 32'h0000_B406; // PUSH {r1,r2}
+            endcase
+            u_mem.mem[16] = {
+                (16'h2700 | 16'(case_id)), opcode[15:0]
+            };
+            u_mem.mem[17] = 32'hE7FE_E7FE;
+        end
+    endtask
+
     task automatic run_case(input int case_id);
         logic saw_high_fetch;
         logic saw_wrap_fetch;
@@ -232,10 +281,100 @@ module arm7tdmis_address_wrap_policy_tb
         end
     endtask
 
+    task automatic run_transfer_case(input int case_id);
+        logic        is_load;
+        logic [31:0] expected_base;
+        int unsigned data_cycles;
+
+        @(negedge CLK);
+        nRESET = 1'b0;
+        repeat (4) @(posedge CLK);
+        setup_transfer_case(case_id);
+        @(negedge CLK);
+        nRESET = 1'b1;
+
+        is_load = case_id inside {8, 10, 12};
+        expected_base = (case_id == 13)
+                      ? 32'hFFFF_FFFC : 32'h0000_0004;
+        data_cycles = 0;
+
+        repeat (150) begin
+            @(negedge CLK);
+            if ((TRANS inside {TRANS_N, TRANS_S})
+                && PROT[PROT_BIT_DATA]
+                && (ADDR inside {32'hFFFF_FFFC, 32'h0000_0000})) begin
+                if (data_cycles >= 2) begin
+                    fail(case_id, "issued more than two data beats");
+                end else begin
+                    if (ADDR !== (data_cycles == 0
+                               ? 32'hFFFF_FFFC : 32'h0000_0000))
+                        fail(case_id, $sformatf(
+                            "beat %0d address expected %08x got %08x",
+                            data_cycles,
+                            data_cycles == 0
+                                ? 32'hFFFF_FFFC : 32'h0000_0000,
+                            ADDR));
+                    if (SIZE !== 2'(SIZE_WORD)
+                        || WRITE !== !is_load
+                        || TRANS !== (data_cycles == 0
+                                   ? 2'(TRANS_N) : 2'(TRANS_S)))
+                        fail(case_id, $sformatf(
+                            "beat %0d SIZE/WRITE/TRANS=%02b/%0b/%02b",
+                            data_cycles, SIZE, WRITE, TRANS));
+                    // ADDR describes the next transfer while DMORE
+                    // describes the currently returning data transfer.
+                    // It therefore rises with the second address phase,
+                    // while the first beat is completing.
+                    if (DMORE !== (data_cycles == 1))
+                        fail(case_id, $sformatf(
+                            "beat %0d DMORE expected %0b got %0b",
+                            data_cycles, data_cycles == 1, DMORE));
+                end
+                data_cycles++;
+            end
+        end
+
+        if (data_cycles != 2)
+            fail(case_id, $sformatf(
+                "expected two data beats, observed %0d", data_cycles));
+        if (DMORE)
+            fail(case_id, "DMORE remained asserted after the final beat");
+        if (u_dut.u_core.u_regfile.regs[7] !== 32'(case_id))
+            fail(case_id, "post-transfer completion marker did not retire");
+        if (is_thumb_case(case_id) && !u_dut.u_core.cpsr.t)
+            fail(case_id, "Thumb transfer left Thumb state");
+
+        if (is_load) begin
+            if (u_dut.u_core.u_regfile.regs[1] !== 32'hA1A2_A3A4
+             || u_dut.u_core.u_regfile.regs[2] !== 32'hEA00_0006)
+                fail(case_id, $sformatf(
+                    "wrapped load data r1/r2=%08x/%08x",
+                    u_dut.u_core.u_regfile.regs[1],
+                    u_dut.u_core.u_regfile.regs[2]));
+        end else begin
+            if (u_mem.mem[255] !== 32'h1111_1111
+             || u_mem.mem[0] !== 32'h2222_2222)
+                fail(case_id, $sformatf(
+                    "wrapped store memory=%08x/%08x",
+                    u_mem.mem[255], u_mem.mem[0]));
+        end
+
+        if (case_id <= 11) begin
+            if (u_dut.u_core.u_regfile.regs[0] !== expected_base)
+                fail(case_id, "r0 writeback did not wrap modulo 2^32");
+        end else if (u_dut.u_core.u_regfile.regs[25] !== expected_base) begin
+            fail(case_id, "Supervisor SP writeback did not wrap modulo 2^32");
+        end
+    endtask
+
     initial begin
         errors = 0;
-        for (int case_id = 1; case_id <= CASE_COUNT; case_id++)
-            run_case(case_id);
+        for (int case_id = 1; case_id <= CASE_COUNT; case_id++) begin
+            if (case_id <= 7)
+                run_case(case_id);
+            else
+                run_transfer_case(case_id);
+        end
 
         if (errors != 0)
             $fatal(1, "[address_wrap_policy] FAIL (%0d errors)", errors);
