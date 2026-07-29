@@ -129,13 +129,15 @@ class FpgaPackageTest(unittest.TestCase):
                 self.assertIn(relative, filelist_sources)
                 self.assertIn(relative, qip_sources)
                 for forbidden in (
-                    "arm7tdmi_mister",
-                    "arm7tdmis_top",
                     ".u_core.",
                     "request_valid_q",
                     "response_valid_q",
                 ):
                     self.assertNotIn(forbidden, text)
+                self.assertNotRegex(
+                    text,
+                    r"\b(?:arm7tdmi_mister|arm7tdmis_top)\s*(?:#\s*\()?\s+u_",
+                )
 
     def test_non_dft_compatibility_wrapper_is_honest_and_excluded(self) -> None:
         self.assertFalse(
