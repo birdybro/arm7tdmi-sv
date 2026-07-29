@@ -878,6 +878,12 @@ module arm7tdmis_core_pipelined
 
     wire [15:0] block_after_curr = block_remaining_q & ~(16'h1 << block_curr_reg_q);
     wire        block_has_more   = (block_after_curr != 16'h0);
+    wire [3:0]  block_next_reg   = lowest_set_idx(block_after_curr);
+    wire [15:0] block_after_next =
+        block_after_curr & ~(16'h1 << block_next_reg);
+    wire block_first_has_follower =
+        (dec.block_reg_list & (dec.block_reg_list - 16'd1)) != 16'h0;
+    wire block_next_has_follower = block_after_next != 16'h0;
     wire block_ldm_abort_writeback = (state_q == S_BLOCK_DATA)
                                    && !block_has_more
                                    && block_load_q
@@ -2624,7 +2630,15 @@ module arm7tdmis_core_pipelined
         end
     end
 
-    assign DMORE = nRESET && !dbg_halted && block_active && block_has_more;
+    // Rev-4 §1.5.5: DMORE accompanies the address-class prediction. It is
+    // HIGH when the data address currently on ADDR has another sequential
+    // data address after it. S_EXEC advertises beat 1; S_BLOCK_DATA
+    // advertises the next beat while the previous beat returns.
+    assign DMORE = nRESET && !dbg_halted && !any_exc_fires
+                 && (((state_q == S_EXEC) && block_take_cycle
+                      && block_first_has_follower)
+                  || (block_active && block_has_more
+                      && block_next_has_follower));
 
     // =====================================================================
     // §19: Coprocessor pipeline-following signals

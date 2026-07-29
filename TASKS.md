@@ -2777,10 +2777,15 @@ number of cycles spent in an internal FSM state.
   stable pins/state, and proves a mid-pair DBGRQ waits for atomic completion
   before DBGACK. `arm7tdmis_unaligned_access_matrix_tb` additionally requires
   exactly two locked accepted transfers for every endian/address suffix.
-- [ ] **BUS-010:** Drive `DMORE` as the §1.5.5 address-class prediction for a
+- [x] **BUS-010:** Drive `DMORE` as the §1.5.5 address-class prediction for a
   next data access that has a guaranteed sequential follower, not from the
   returning data phase or a loose "block active" flag. Verify
   first/middle/last/single-beat/stalled/aborted LDM and STM.
+  `arm7tdmis_dmore_matrix_tb` has eight reset-isolated LDM/STM rows covering
+  one- and three-word lists, every DMORE position, first/middle CLKEN stalls,
+  and accepted first/middle response aborts. `arm7tdmis_address_wrap_policy_tb`
+  independently checks the two-word prediction across 32-bit address rollover
+  in ARM and Thumb block-transfer forms.
 - [ ] **BUS-011:** Verify burst address increments, control stability, byte
   non-bursting, alignment, reset I cycles, and branch/exception/refill waveforms.
 - [ ] **BUS-012:** Publish a precise raw-bus integration contract, including when an

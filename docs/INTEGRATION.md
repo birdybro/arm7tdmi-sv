@@ -34,7 +34,7 @@ The wrapper permits one outstanding request. These signals form one payload:
 | `MEM_PRIVILEGED` | High for privileged-mode accesses. A translated `LDRT/STRT/LDRBT/STRBT` data access is low while the processor remains privileged. |
 | `MEM_LOCK` | High for both transfers of SWP/SWPB. |
 | `MEM_SEQUENTIAL` | High when the raw transfer is an S continuation. |
-| `MEM_MORE` | High only when another block-transfer beat is guaranteed. |
+| `MEM_MORE` | Address-phase hint: the data request currently presented has a guaranteed sequential data request after it. High on beats 1..n-1 of an n-word LDM/STM and low on beat n. |
 | `MEM_RDATA[31:0]` | Read response, valid with `MEM_READY`. |
 | `MEM_ERROR` | Failed completion, valid with `MEM_READY`. |
 
