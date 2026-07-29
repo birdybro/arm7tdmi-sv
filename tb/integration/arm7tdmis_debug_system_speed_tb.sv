@@ -14,6 +14,10 @@
 // restore r0, run LDMIA r0!,{r5-r8} at system speed, and scan r0/r5-r8
 // back at debug speed. This proves debugger-visible writes and reads rather
 // than accepting an internal register or memory-array observation alone.
+//
+// Finally, the r4p3 erratum [8] trigger is exercised exactly: with IRQ still
+// asserted in Debug state, eight-beat at-speed STM and LDM instructions must
+// finish every transfer before automatic re-entry and must never enter IRQ.
 
 `timescale 1ns/1ps
 
@@ -23,7 +27,7 @@ module arm7tdmis_debug_system_speed_tb
     import arm7tdmis_jtag_tb_pkg::*;
 ;
 
-    localparam int CYCLE_LIMIT = 5200;
+    localparam int CYCLE_LIMIT = 8000;
     localparam logic [31:0] DEBUG_NOP = 32'hE1A0_0000;
     localparam logic [31:0] DEBUG_STM_PC = 32'hE880_8000;
     localparam logic [31:0] SYSTEM_LDR = 32'hE590_4000; // LDR r4,[r0]
@@ -32,12 +36,18 @@ module arm7tdmis_debug_system_speed_tb
     localparam logic [31:0] DEBUG_STM_R0_R8 = 32'hE880_01E1;
     localparam logic [31:0] SYSTEM_STM_R1_R4 = 32'hE8A0_001E;
     localparam logic [31:0] SYSTEM_LDM_R5_R8 = 32'hE8B0_01E0;
+    localparam logic [31:0] DEBUG_LDM_R0_R8_ALL = 32'hE890_01FF;
+    localparam logic [31:0] DEBUG_STM_R0_R8_ALL = 32'hE880_01FF;
+    localparam logic [31:0] SYSTEM_STM_R1_R8 = 32'hE8A0_01FE;
+    localparam logic [31:0] SYSTEM_LDM_R1_R8 = 32'hE8B0_01FE;
     localparam logic [31:0] ROUNDTRIP_BASE   = 32'h0000_0120;
     localparam logic [31:0] ROUNDTRIP_END    = 32'h0000_0130;
     localparam logic [31:0] ROUNDTRIP_WORD1  = 32'h1122_3344;
     localparam logic [31:0] ROUNDTRIP_WORD2  = 32'h5566_7788;
     localparam logic [31:0] ROUNDTRIP_WORD3  = 32'h99AA_BBCC;
     localparam logic [31:0] ROUNDTRIP_WORD4  = 32'hDDEE_F00D;
+    localparam logic [31:0] LONG_BASE        = 32'h0000_0160;
+    localparam logic [31:0] LONG_END         = 32'h0000_0180;
     localparam logic [31:0] BYTE_BASE        = 32'h0000_0141;
     localparam logic [31:0] BYTE_SOURCE      = 32'hA1B2_C3D4;
     localparam logic [31:0] SYSTEM_STRB_R1   = 32'hE4C0_1001;
@@ -373,6 +383,7 @@ module arm7tdmis_debug_system_speed_tb
         bit          pre_restart_access;
         bit          reentered;
         int unsigned roundtrip_beats;
+        int unsigned long_beats;
 
         $dumpfile("debug_system_speed.fst");
         $dumpvars(0, arm7tdmis_debug_system_speed_tb);
@@ -675,6 +686,137 @@ module arm7tdmis_debug_system_speed_tb
             fail($sformatf(
                 "word 3 expected %08x, scanned %08x",
                 ROUNDTRIP_WORD4, scanned_data));
+
+        // Erratum [8]: a pending interrupt in Debug state must not truncate
+        // an at-speed LDM/STM lasting more than six cycles. Load r0-r8 via
+        // the public scan-data path, then store all eight data registers.
+        wait_for_inject_idle("pre-long-STM scan tail did not retire");
+        inject(DEBUG_LDM_R0_R8_ALL, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        inject(LONG_BASE, 1'b0);
+        for (int i = 1; i <= 8; i++)
+            inject(32'hA000_0000 + 32'(i), 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        wait_for_inject_idle("long-STM register load did not retire");
+
+        inject(DEBUG_NOP, 1'b0);
+        wait_for_inject_idle("long-STM setup NOP did not retire");
+        inject(DEBUG_NOP, 1'b1);
+        wait_for_inject_idle("long-STM bit-33 NOP did not retire");
+        inject(SYSTEM_STM_R1_R8, 1'b0);
+        load_ir(4'(IR_RESTART));
+
+        long_beats = 0;
+        reentered = 1'b0;
+        for (int i = 0; i < 360; i++) begin
+            @(posedge CLK);
+            #1;
+            if (CLKEN && TRANS inside {2'(TRANS_N), 2'(TRANS_S)}
+                && PROT[0] && (ADDR >= LONG_BASE) && (ADDR < LONG_END)) begin
+                if (WRITE !== 1'b1)
+                    fail("erratum-8 long STM issued a read");
+                if (ADDR !== (LONG_BASE + 32'(long_beats << 2)))
+                    fail($sformatf(
+                        "erratum-8 STM beat %0d expected %08x got %08x",
+                        long_beats, LONG_BASE + 32'(long_beats << 2), ADDR));
+                if (DBGACK)
+                    fail("erratum-8 long STM re-entered debug before completion");
+                long_beats++;
+            end
+            if (DBGACK && u_dut.u_ice.core_halt
+                && (TRANS == 2'(TRANS_I))) begin
+                reentered = 1'b1;
+                break;
+            end
+        end
+        if (!reentered || long_beats != 8)
+            fail($sformatf(
+                "erratum-8 STM reentry/beats=%0b/%0d expected 1/8",
+                reentered, long_beats));
+        for (int i = 1; i <= 8; i++) begin
+            if (u_mem.mem[(LONG_BASE >> 2) + i - 1]
+                !== (32'hA000_0000 + 32'(i)))
+                fail($sformatf(
+                    "erratum-8 STM word %0d expected %08x got %08x",
+                    i, 32'hA000_0000 + 32'(i),
+                    u_mem.mem[(LONG_BASE >> 2) + i - 1]));
+        end
+        if (u_dut.u_core.cpsr.m !== 5'h13)
+            fail("pending IRQ interrupted the erratum-8 long STM");
+        if (reentered) begin
+            capture_reentry_cause(reentry_cause);
+            if (reentry_cause !== 1'b1)
+                fail("erratum-8 STM re-entry did not report bit 33 HIGH");
+        end
+
+        // Replace memory, restore r0, and repeat for an eight-beat LDM.
+        wait_for_inject_idle("post-long-STM capture did not retire");
+        write_debug_r0(LONG_BASE);
+        for (int i = 1; i <= 8; i++)
+            u_mem.mem[(LONG_BASE >> 2) + i - 1] =
+                32'hB000_0000 + 32'(i);
+
+        inject(DEBUG_NOP, 1'b0);
+        wait_for_inject_idle("long-LDM setup NOP did not retire");
+        inject(DEBUG_NOP, 1'b1);
+        wait_for_inject_idle("long-LDM bit-33 NOP did not retire");
+        inject(SYSTEM_LDM_R1_R8, 1'b0);
+        load_ir(4'(IR_RESTART));
+
+        long_beats = 0;
+        reentered = 1'b0;
+        for (int i = 0; i < 360; i++) begin
+            @(posedge CLK);
+            #1;
+            if (CLKEN && TRANS inside {2'(TRANS_N), 2'(TRANS_S)}
+                && PROT[0] && (ADDR >= LONG_BASE) && (ADDR < LONG_END)) begin
+                if (WRITE !== 1'b0)
+                    fail("erratum-8 long LDM issued a write");
+                if (ADDR !== (LONG_BASE + 32'(long_beats << 2)))
+                    fail($sformatf(
+                        "erratum-8 LDM beat %0d expected %08x got %08x",
+                        long_beats, LONG_BASE + 32'(long_beats << 2), ADDR));
+                if (DBGACK)
+                    fail("erratum-8 long LDM re-entered debug before completion");
+                long_beats++;
+            end
+            if (DBGACK && u_dut.u_ice.core_halt
+                && (TRANS == 2'(TRANS_I))) begin
+                reentered = 1'b1;
+                break;
+            end
+        end
+        if (!reentered || long_beats != 8)
+            fail($sformatf(
+                "erratum-8 LDM reentry/beats=%0b/%0d expected 1/8",
+                reentered, long_beats));
+        if (u_dut.u_core.cpsr.m !== 5'h13)
+            fail("pending IRQ interrupted the erratum-8 long LDM");
+        if (reentered) begin
+            capture_reentry_cause(reentry_cause);
+            if (reentry_cause !== 1'b1)
+                fail("erratum-8 LDM re-entry did not report bit 33 HIGH");
+        end
+
+        // Scan all nine registers through the public chain.  This is the
+        // architectural oracle for LDM completion, including base writeback.
+        wait_for_inject_idle("post-long-LDM capture did not retire");
+        inject(DEBUG_STM_R0_R8_ALL, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        capture_data(scanned_data);
+        if (scanned_data !== LONG_END)
+            fail($sformatf(
+                "erratum-8 LDM base expected %08x scanned %08x",
+                LONG_END, scanned_data));
+        for (int i = 1; i <= 8; i++) begin
+            capture_data(scanned_data);
+            if (scanned_data !== (32'hB000_0000 + 32'(i)))
+                fail($sformatf(
+                    "erratum-8 LDM r%0d expected %08x scanned %08x",
+                    i, 32'hB000_0000 + 32'(i), scanned_data));
+        end
 
         // OpenOCD's 8-bit path uses one post-indexed transfer per register.
         // Exercise an unaligned byte address so this cannot alias a word path.
