@@ -17,6 +17,8 @@ SDC = FPGA_DIR / "arm7tdmi_mister.sdc"
 CONFORMANCE_QSF = FPGA_DIR / "arm7tdmis_conformance.qsf"
 CONFORMANCE_SDC = FPGA_DIR / "arm7tdmis_conformance.sdc"
 EXAMPLE = FPGA_DIR / "example" / "arm7tdmi_mister_example_top.sv"
+NO_DFT_WRAPPER = REPO_ROOT / "rtl" / "top" / "arm7tdmis_no_dft.sv"
+MISLEADING_DFT_WRAPPER = REPO_ROOT / "rtl" / "top" / "arm7tdmis_chip.sv"
 
 
 def _required_rtl() -> set[pathlib.Path]:
@@ -29,7 +31,7 @@ def _required_rtl() -> set[pathlib.Path]:
             continue
         resolved = (sim_file.parent / line).resolve()
         relative = resolved.relative_to(REPO_ROOT)
-        if relative.as_posix() != "rtl/top/arm7tdmis_chip.sv":
+        if relative.as_posix() != "rtl/top/arm7tdmis_no_dft.sv":
             required.add(relative)
     return required
 
@@ -107,6 +109,24 @@ class FpgaPackageTest(unittest.TestCase):
             "fetch_pc_q",
         ):
             self.assertNotIn(forbidden, text)
+
+    def test_non_dft_compatibility_wrapper_is_honest_and_excluded(self) -> None:
+        self.assertFalse(
+            MISLEADING_DFT_WRAPPER.exists(),
+            "a tied-off scan facade must not be named as a chip/DFT wrapper",
+        )
+        self.assertTrue(NO_DFT_WRAPPER.is_file(), "missing named no-DFT wrapper")
+        text = NO_DFT_WRAPPER.read_text(encoding="utf-8")
+        self.assertRegex(text, r"\bmodule\s+arm7tdmis_no_dft\b")
+        self.assertNotRegex(text, r"\bmodule\s+arm7tdmis_chip\b")
+        self.assertIn("assign SO = 1'b0;", text)
+        self.assertNotIn("scan-flop stitching happens", text)
+        self.assertNotIn(NO_DFT_WRAPPER.relative_to(REPO_ROOT), _required_rtl())
+        self.assertNotIn(
+            NO_DFT_WRAPPER.relative_to(REPO_ROOT),
+            _resolved_filelist_sources(),
+        )
+        self.assertNotIn(NO_DFT_WRAPPER.relative_to(REPO_ROOT), _qip_sources())
 
 
 if __name__ == "__main__":
