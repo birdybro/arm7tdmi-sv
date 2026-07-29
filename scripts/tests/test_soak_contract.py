@@ -38,6 +38,33 @@ class SoakContractTest(unittest.TestCase):
         self.assertEqual(minimized, 1)
         self.assertEqual(still_fails.call_count, 15)
 
+    def test_minimizer_rejects_a_different_failure_signature(self) -> None:
+        observed = {
+            "status": "failed",
+            "failure_signature": "testbench:request changed",
+        }
+        with mock.patch.object(
+            soak_harness,
+            "_execute",
+            return_value=(False, observed, "different failure"),
+        ):
+            self.assertFalse(
+                soak_harness._still_fails(
+                    pathlib.Path("/unused/simulator"),
+                    7,
+                    1.0,
+                    "sanitizer:address",
+                )
+            )
+            self.assertTrue(
+                soak_harness._still_fails(
+                    pathlib.Path("/unused/simulator"),
+                    7,
+                    1.0,
+                    "testbench:request changed",
+                )
+            )
+
     def test_failure_artifacts_support_external_directories(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
