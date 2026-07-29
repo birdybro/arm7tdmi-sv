@@ -3,9 +3,12 @@
 // Twelve reset-isolated rows cover SWI, UNDEF, PABT, DABT, IRQ, and FIQ
 // from both ARM and Thumb User state.  Every row scoreboards all three
 // entry cycles at the raw ARM7TDMI-S pins:
-//   1. old-state PC+2i, N, old SIZE/PROT/mode/T
-//   2. vector Xn, S, privileged ARM state
-//   3. vector Xn+4, S, privileged ARM state
+//   1. vector Xn, N, privileged ARM address class (CPSR still old)
+//   2. vector Xn+4, S, privileged ARM state
+//   3. vector Xn+8, S, privileged ARM state
+// The response during cycle 1 is the abandoned old-state PC+2i opcode.
+// Section 7.1 places the address-class values one cycle ahead of that
+// returned data; the trailing Xn+8 row is therefore visible on the pins.
 // Poison instructions in the abandoned sequential path additionally prove
 // that returned prefetched data from the entry window is discarded.
 
@@ -152,29 +155,23 @@ module arm7tdmis_exception_bus_matrix_scenario #(
     // Sample halfway through each bus cycle, after edge-triggered state has
     // settled and before the receiving rising edge.
     always @(negedge CLK) begin
-        logic [31:0] cycle1_addr;
         if (!nRESET) begin
             phase         <= 0;
             entry_checked <= 1'b0;
         end else begin
-            cycle1_addr = FAULT_PC
-                        + ((KIND == K_DABT)
-                           ? (THUMB ? 32'd6 : 32'd12)
-                           : (THUMB ? 32'd4 : 32'd8));
             if (phase == 0 && u_fixture.u_dut.u_core.any_exc_fires) begin
                 check_pin_cycle(
-                    1, cycle1_addr, 2'(TRANS_N),
-                    THUMB ? 2'(SIZE_HALFWORD) : 2'(SIZE_WORD),
-                    2'(PROT_OPC_USR), 5'(MODE_USER), THUMB);
+                    1, vector, 2'(TRANS_N), 2'(SIZE_WORD),
+                    2'(PROT_OPC_PRIV), 5'(MODE_USER), THUMB);
                 phase <= 1;
             end else if (phase == 1) begin
                 check_pin_cycle(
-                    2, vector, 2'(TRANS_S), 2'(SIZE_WORD),
+                    2, vector + 32'd4, 2'(TRANS_S), 2'(SIZE_WORD),
                     2'(PROT_OPC_PRIV), target_mode, 1'b0);
                 phase <= 2;
             end else if (phase == 2) begin
                 check_pin_cycle(
-                    3, vector + 32'd4, 2'(TRANS_S), 2'(SIZE_WORD),
+                    3, vector + 32'd8, 2'(TRANS_S), 2'(SIZE_WORD),
                     2'(PROT_OPC_PRIV), target_mode, 1'b0);
                 phase         <= 3;
                 entry_checked <= 1'b1;
