@@ -109,6 +109,102 @@ def validate_soak_evidence(
         raise ValueError("soak report contains a non-passing seed")
 
 
+def validate_constrained_random_evidence(
+    report: dict[str, Any],
+    *,
+    expected_commit: str,
+    release_grade: bool,
+) -> None:
+    """Reject stale, weakened, incomplete, or non-passing VAL-002 evidence."""
+    if report.get("schema") != "arm7tdmis-constrained-random-v1":
+        raise ValueError("constrained-random report has wrong schema")
+    if report.get("status") != "passed" or report.get("failure"):
+        raise ValueError("constrained-random report is not passed")
+    if report.get("git", {}).get("dirty"):
+        raise ValueError(
+            "constrained-random report describes a dirty source tree"
+        )
+    if report.get("git", {}).get("commit") != expected_commit:
+        raise ValueError(
+            "constrained-random report commit does not match regression"
+        )
+
+    configuration = report.get("configuration", {})
+    seeds = report.get("seeds", [])
+    if (
+        not isinstance(seeds, list)
+        or any(not isinstance(entry, dict) for entry in seeds)
+        or report.get("completed_seed_count") != len(seeds)
+        or configuration.get("seed_count") != len(seeds)
+        or len({entry.get("seed") for entry in seeds}) != len(seeds)
+        or any(entry.get("status") != "passed" for entry in seeds)
+    ):
+        raise ValueError("constrained-random seed manifest is incomplete")
+    minimum_seeds = 32 if release_grade else 2
+    minimum_instructions = 256 if release_grade else 64
+    if (
+        len(seeds) < minimum_seeds
+        or configuration.get("instructions_per_seed", 0)
+        < minimum_instructions
+        or configuration.get("release_grade") is not release_grade
+    ):
+        raise ValueError("constrained-random campaign strength is too low")
+    total_events = sum(int(entry.get("qemu_events", 0)) for entry in seeds)
+    if report.get("total_qemu_events") != total_events:
+        raise ValueError("constrained-random event total is inconsistent")
+    if release_grade and total_events < 8_192:
+        raise ValueError("constrained-random release trace is too short")
+
+    required = set(report.get("required_coverage", []))
+    covered = set(report.get("covered", []))
+    required_dimensions = {
+        "instruction",
+        "arm",
+        "thumb",
+        "register",
+        "flags",
+        "mode",
+        "banked_register",
+        "memory",
+        "load",
+        "store",
+        "exception",
+        "svc",
+        "undefined",
+        "alignment",
+        "aligned",
+        "unaligned",
+        "little",
+        "big",
+        "dependency",
+        "permitted_memory",
+    }
+    if required != required_dimensions or not required <= covered:
+        raise ValueError("constrained-random required coverage is incomplete")
+    for seed in seeds:
+        if (
+            int(seed.get("qemu_events", 0))
+            < configuration.get("instructions_per_seed", 0)
+            or set(seed.get("policy_profiles", {})) != {"little", "big"}
+            or not isinstance(seed.get("reproducer"), list)
+            or not seed["reproducer"]
+        ):
+            raise ValueError("constrained-random seed evidence is incomplete")
+        for name, expected_endian in (
+            ("little", "little"),
+            ("big", "big"),
+        ):
+            profile = seed["policy_profiles"][name]
+            if (
+                profile.get("status") != "passed"
+                or profile.get("endian") != expected_endian
+                or profile.get("result_words", 0) < 20
+            ):
+                raise ValueError(
+                    f"constrained-random {name} profile is incomplete"
+                )
+
+
 def _sha256(path: pathlib.Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -287,6 +383,92 @@ def _validated_files(
                 )
             candidates.append(input_path)
         candidates.append(soak_path.resolve())
+    random_phase_names = {
+        "random-validation",
+        "random-validation-quick",
+    } & phase_names
+    if random_phase_names:
+        if len(random_phase_names) != 1:
+            raise ValueError("regression contains ambiguous random phases")
+        random_report_path = REPORT_ROOT / "constrained-random-report.json"
+        if not random_report_path.is_file():
+            raise ValueError("constrained-random report is missing")
+        random_report = json.loads(
+            random_report_path.read_text(encoding="utf-8")
+        )
+        release_grade = "random-validation" in random_phase_names
+        validate_constrained_random_evidence(
+            random_report,
+            expected_commit=str(
+                regression.get("git", {}).get("commit", "")
+            ),
+            release_grade=release_grade,
+        )
+        for input_entry in random_report.get("inputs", {}).values():
+            if not isinstance(input_entry, dict):
+                raise ValueError(
+                    "constrained-random report has a malformed input"
+                )
+            input_path = _repo_path(str(input_entry.get("path", "")))
+            if (
+                input_path.stat().st_size != input_entry.get("bytes")
+                or _sha256(input_path) != input_entry.get("sha256")
+            ):
+                raise ValueError(
+                    "constrained-random input hash mismatch"
+                )
+            candidates.append(input_path)
+
+        artifact_root = REPORT_ROOT / "constrained_random"
+        for seed in random_report.get("seeds", []):
+            seed_value = int(seed["seed"])
+            seed_root = artifact_root / f"seed-{seed_value:08x}"
+            artifact_groups = [
+                (
+                    seed_root / "differential",
+                    seed.get("differential", {}).get("artifacts", {}),
+                ),
+                *[
+                    (
+                        seed_root / f"policy_{name}",
+                        seed.get("policy_profiles", {})
+                        .get(name, {})
+                        .get("artifacts", {}),
+                    )
+                    for name in ("little", "big")
+                ],
+            ]
+            for group_root, artifacts in artifact_groups:
+                if not isinstance(artifacts, dict) or not artifacts:
+                    raise ValueError(
+                        "constrained-random artifact group is empty"
+                    )
+                for artifact in artifacts.values():
+                    if not isinstance(artifact, dict):
+                        raise ValueError(
+                            "constrained-random artifact is malformed"
+                        )
+                    artifact_path = (
+                        group_root / str(artifact.get("path", ""))
+                    ).resolve()
+                    try:
+                        artifact_path.relative_to(group_root.resolve())
+                    except ValueError as error:
+                        raise ValueError(
+                            "constrained-random artifact escapes its seed"
+                        ) from error
+                    if (
+                        not artifact_path.is_file()
+                        or artifact_path.stat().st_size
+                        != artifact.get("bytes")
+                        or _sha256(artifact_path)
+                        != artifact.get("sha256")
+                    ):
+                        raise ValueError(
+                            "constrained-random artifact hash mismatch"
+                        )
+                    candidates.append(artifact_path)
+        candidates.append(random_report_path.resolve())
     quality_phases = {"lint-independent", "cdc-rdc"}
     present_quality_phases = quality_phases & phase_names
     if present_quality_phases and present_quality_phases != quality_phases:

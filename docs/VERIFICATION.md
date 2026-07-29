@@ -199,6 +199,37 @@ count, and SHA-256 hashes. Generated files live under
 The test is first in `INTEG_TESTS`, so quick open-source CI and full local
 regression both regenerate rather than trusting a committed golden trace.
 
+## Constrained-random differential campaign
+
+`make -C scripts random-validation` builds two hierarchy-independent
+scoreboards once, then runs 32 deterministic seeds with 256 generated random
+instructions per seed. The shared-ARMv4T lane starts at the architectural
+vector table and uses QEMU ARM926 with one instruction per translation block.
+It covers ARM and Thumb instructions, register and flag choices,
+producer/consumer dependencies, aligned mixed-width memory operations, every
+privileged register-bank mode, and ARM/Thumb SVC and undefined entry/return.
+`arm7tdmis_random_diff_tb.sv` compares each retirement's instruction PC/state,
+post-state active r0-r14 bank, architectural CPSR fields, and synchronous
+exception cause, then compares five directly observed memory words to values
+independently loaded by QEMU. A release run must contain at least 8,192 such
+retirements.
+
+The second lane isolates behavior on which ARM926 is not an ARM7 oracle.
+For every seed, `constrained_random.py` generates separate little- and
+big-endian programs with all four legacy word-load alignments, byte lanes,
+aligned halfwords, signed loads, stores, and dependent mutations. Its compact
+architecture-derived memory model predicts only those permitted memory
+effects. `arm7tdmis_random_policy_tb.sv` compares every generated result plus
+the final source array and never reads CPU hierarchy.
+
+Schema `arm7tdmis-constrained-random-v1` records the clean commit, exact
+Clang/QEMU and simulator identities, generator/testbench hashes, all required
+coverage bins, per-seed event totals, source/ELF/binary/trace/expected/log
+hashes, and an exact single-seed reproducer. Full regression runs the 32 × 256
+campaign; quick CI runs `random-validation-quick` with two 64-instruction
+seeds. Release evidence independently revalidates the report strength, every
+input, and every generated artifact hash.
+
 ## Pinned ARM/Thumb compiler program
 
 `make -C scripts integ-compiler` installs Arm GNU Toolchain 14.3.Rel1 for
@@ -516,7 +547,7 @@ transfers and their independent responses remain covered by
 `arm7tdmis_cp_erratum15_tb`.
 
 Measured structural coverage reporting, mutation testing of architectural
-controls, independent QEMU/compiler execution, and deterministic sanitizing
-soak are implemented above. Required-bin functional coverage closure,
-broader constrained-random differential testing, public suites, and formal
+controls, independent QEMU/compiler execution, constrained-random
+differential/policy testing, and deterministic sanitizing soak are implemented
+above. Required-bin functional coverage closure, public suites, and formal
 evidence remain separate open requirements in `TASKS.md` §31.10.

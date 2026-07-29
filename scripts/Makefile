@@ -59,6 +59,12 @@ TRACEABILITY_REPORT := ../reports/generated/traceability-report.json
 INDEPENDENT_LINT_REPORT := ../reports/generated/independent-lint.json
 CDC_RDC_REPORT := ../reports/generated/cdc-rdc.json
 POSTFIT_REPORT := ../reports/generated/postfit-report.json
+RANDOM_SEEDS ?= 32
+RANDOM_INSTRUCTIONS ?= 256
+RANDOM_OBJ_DIR := $(OBJ_DIR)/constrained_random
+RANDOM_DIFF_BIN := $(RANDOM_OBJ_DIR)/diff/Varm7tdmis_random_diff_tb
+RANDOM_POLICY_BIN := $(RANDOM_OBJ_DIR)/policy/Varm7tdmis_random_policy_tb
+RANDOM_REPORT := ../reports/generated/constrained-random-report.json
 SOAK_SEEDS ?= 256
 SOAK_OBJ_DIR := $(OBJ_DIR)/soak
 SOAK_BIN := $(SOAK_OBJ_DIR)/Varm7tdmis_mister_wrapper_tb
@@ -119,7 +125,8 @@ INTEG_RUN_ARGS_compiler = \
         quartus-option-characterization postfit-sim \
         sim run wave clean help regress regress-quick regress-ci \
         coverage release-evidence \
-        traceability soak-build soak \
+        traceability random-validation-build random-validation \
+        random-validation-quick soak-build soak \
         harness-unit harness-self-test raw-checker-self-test mutation-self-test \
         $(addprefix unit-, $(UNIT_TESTS)) unit \
         $(addprefix integ-, $(INTEG_TESTS)) integ errata
@@ -278,6 +285,49 @@ $(foreach t,$(INTEG_TESTS),$(eval $(call INTEG_RULE,$(t))))
 integ: $(addprefix integ-, $(INTEG_TESTS))
 
 errata: $(addprefix integ-, $(ERRATA_TESTS))
+
+# VAL-002 builds the scoreboards once, then generates fresh source/reference
+# images and executes every deterministic seed through both oracle lanes.
+$(RANDOM_DIFF_BIN): Makefile $(SIM_F) $(RTL_SRCS) \
+                    ../tb/integration/arm7tdmis_memory.sv \
+                    ../tb/integration/arm7tdmis_random_diff_tb.sv
+	mkdir -p $(RANDOM_OBJ_DIR)/diff
+	$(VERILATOR) $(VFLAGS_BUILD) -Wno-SYNCASYNCNET \
+	    -DARM7TDMIS_VERIFICATION \
+	    --top-module arm7tdmis_random_diff_tb \
+	    --Mdir $(RANDOM_OBJ_DIR)/diff -f $(SIM_F) \
+	    ../tb/integration/arm7tdmis_memory.sv \
+	    ../tb/integration/arm7tdmis_random_diff_tb.sv
+
+$(RANDOM_POLICY_BIN): Makefile $(SIM_F) $(RTL_SRCS) \
+                      ../tb/integration/arm7tdmis_memory.sv \
+                      ../tb/integration/arm7tdmis_random_policy_tb.sv
+	mkdir -p $(RANDOM_OBJ_DIR)/policy
+	$(VERILATOR) $(VFLAGS_BUILD) -Wno-SYNCASYNCNET \
+	    --top-module arm7tdmis_random_policy_tb \
+	    --Mdir $(RANDOM_OBJ_DIR)/policy -f $(SIM_F) \
+	    ../tb/integration/arm7tdmis_memory.sv \
+	    ../tb/integration/arm7tdmis_random_policy_tb.sv
+
+random-validation-build: $(RANDOM_DIFF_BIN) $(RANDOM_POLICY_BIN)
+
+random-validation: random-validation-build
+	PYTHONPATH=../verification $(PYTHON) ../verification/constrained_random.py \
+	    --differential-binary $(abspath $(RANDOM_DIFF_BIN)) \
+	    --policy-binary $(abspath $(RANDOM_POLICY_BIN)) \
+	    --output $(RANDOM_REPORT) \
+	    --seeds $(RANDOM_SEEDS) --instructions $(RANDOM_INSTRUCTIONS) \
+	    --clang $(CLANG) --objcopy $(LLVM_OBJCOPY) --nm $(LLVM_NM) \
+	    --qemu $(QEMU_SYSTEM_ARM)
+
+random-validation-quick: random-validation-build
+	PYTHONPATH=../verification $(PYTHON) ../verification/constrained_random.py \
+	    --differential-binary $(abspath $(RANDOM_DIFF_BIN)) \
+	    --policy-binary $(abspath $(RANDOM_POLICY_BIN)) \
+	    --output $(RANDOM_REPORT) \
+	    --seeds 2 --instructions 64 \
+	    --clang $(CLANG) --objcopy $(LLVM_OBJCOPY) --nm $(LLVM_NM) \
+	    --qemu $(QEMU_SYSTEM_ARM)
 
 # The release soak uses a separate, sanitizer-instrumented binary so ordinary
 # developer simulations do not silently inherit host-specific sanitizer
@@ -452,6 +502,7 @@ help:
 	@echo "  unit         run every unit test ($(UNIT_TESTS))"
 	@echo "  integ        run every directed integration test ($(INTEG_TESTS))"
 	@echo "  errata       run the complete 15-entry r4p3 errata evidence matrix"
+	@echo "  random-validation run 32 x 256-instruction constrained-random seeds"
 	@echo "  soak         run 256 deterministic sanitizer/X-propagation seeds"
 	@echo "  regress      clean full run with JSON metadata/results under reports/"
 	@echo "  regress-quick lint/harness plus one unit/integration test and smoke"

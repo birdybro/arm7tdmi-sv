@@ -3321,9 +3321,28 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   records tool/source/output hashes under the generated evidence tree; the
   release archiver includes those files. It is first in the integration
   manifest and therefore mandatory in both quick CI and full local regression.
-- [ ] **VAL-002:** Generate constrained-random ARM and Thumb programs with instruction,
+- [x] **VAL-002:** Generate constrained-random ARM and Thumb programs with instruction,
   register, flag, mode, memory, exception, alignment, endian, and dependency coverage.
   Compare retirement state and permitted memory effects for long seeded runs.
+  `verification/constrained_random.py` deterministically generates 32 independent
+  256-instruction seeds for the release campaign. Each seed's shared-ARMv4T
+  lane boots at address zero on QEMU ARM926 and the RTL, walks all privileged
+  register-bank modes, takes ARM and Thumb SVC/undefined exceptions, and
+  randomizes legal ARM/Thumb data processing, flags, shifts, multiply,
+  conditions, aligned memory, register choices, and producer/consumer
+  dependencies. `arm7tdmis_random_diff_tb.sv` compares every post-instruction
+  PC/state, active r0-r14 bank, architectural CPSR field, exception cause, and
+  five permitted memory words through the public retirement interface. The
+  release minimum is 8,192 QEMU-compared retirements.
+  QEMU's later-core unaligned and endian policies are deliberately not used as
+  ARM7 evidence. A second generated lane uses a repository-authored
+  architecture-derived byte/halfword/legacy-word memory model and
+  `arm7tdmis_random_policy_tb.sv` to check all word alignments, signed accesses,
+  every byte lane, mutations, and final source/output memory in both little-
+  and big-endian profiles. Schema `arm7tdmis-constrained-random-v1` records
+  exact tool/input/artifact hashes, required bins, per-seed commands, and an
+  exact reproducer. Quick CI runs two 64-instruction seeds; the full regression
+  and release-evidence validator require the 32 × 256 campaign.
 - [ ] **VAL-003:** Integrate legally redistributable public ARMv4T suites (for example
   ARM/Thumb instruction exercisers used by mature open FPGA cores) after recording
   license, source commit, expected signature, and any patches. Do not claim the

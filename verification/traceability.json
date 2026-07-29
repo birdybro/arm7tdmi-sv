@@ -113,6 +113,11 @@
       "tests": ["verification/qemu_armv4t_reference.py", "tb/integration/arm7tdmis_qemu_diff_tb.sv"],
       "source_sections": ["TASKS.md section 31.10 VAL-001 shared-subset policy"]
     },
+    "VAL-002": {
+      "rtl": ["rtl/core/", "rtl/top/arm7tdmis_top.sv"],
+      "tests": ["verification/constrained_random.py", "tb/integration/arm7tdmis_random_diff_tb.sv", "tb/integration/arm7tdmis_random_policy_tb.sv", "scripts/tests/test_constrained_random_contract.py"],
+      "source_sections": ["TASKS.md section 31.10 VAL-002 constrained-random campaign"]
+    },
     "VAL-009": {
       "rtl": ["rtl/core/", "rtl/top/arm7tdmis_top.sv"],
       "tests": ["verification/compiler/", "tb/integration/arm7tdmis_compiler_tb.sv"],
@@ -149,6 +154,8 @@
     {"glob": "verification/*.sv", "requirements": ["VER-004", "BUS-012"]},
     {"glob": "verification/*.py", "requirements": ["VAL-001"]},
     {"glob": "verification/programs/*", "requirements": ["VAL-001"]},
+    {"glob": "verification/constrained_random.py", "requirements": ["VAL-002"]},
+    {"glob": "tb/integration/arm7tdmis_random_*_tb.sv", "requirements": ["VAL-002"]},
     {"glob": "verification/compiler/*", "requirements": ["VAL-009"]},
     {"glob": "verification/intel_cyclonev_postfit_primitives.sv", "requirements": ["FPGA-006"]},
     {"glob": "tb/postfit/*.sv", "requirements": ["FPGA-006"]},
@@ -156,6 +163,7 @@
     {"glob": "scripts/tests/test_*.py", "requirements": ["VER-002", "VER-005"]},
     {"glob": "scripts/tests/test_fpga_quality_contract.py", "requirements": ["FPGA-004"]},
     {"glob": "scripts/tests/test_postfit_sim_contract.py", "requirements": ["FPGA-006"]},
+    {"glob": "scripts/tests/test_constrained_random_contract.py", "requirements": ["VAL-002"]},
     {"glob": "scripts/tests/test_soak_contract.py", "requirements": ["VAL-010"]}
   ]
 }

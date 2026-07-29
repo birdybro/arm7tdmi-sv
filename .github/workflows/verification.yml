@@ -33,6 +33,8 @@ jobs:
           echo "$GITHUB_WORKSPACE/.tools" >> "$GITHUB_PATH"
       - name: Run fail-hard simulation regression
         run: make -C scripts regress-ci
+      - name: Reproduce quick constrained-random gate
+        run: make -C scripts random-validation-quick
       - name: Measure representative RTL coverage
         run: make -C scripts coverage
       - name: Validate and bundle immutable evidence
@@ -49,6 +51,8 @@ jobs:
             reports/generated/independent-lint.json
             reports/generated/slang-*-diagnostics.json
             reports/generated/cdc-rdc.json
+            reports/generated/constrained-random-report.json
+            reports/generated/constrained_random/
             reports/generated/release-manifest.json
             reports/generated/arm7tdmis-release-evidence-*.tar.gz
             reports/generated/arm7tdmis-release-evidence-*.tar.gz.sha256

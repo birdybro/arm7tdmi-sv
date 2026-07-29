@@ -11,6 +11,9 @@ sign-off gate in `TASKS.md` §31.13.
 - Add an always-regenerated QEMU differential covering 77 consecutive
   ARM/Thumb retirements and final memory effects through the public
   architectural retirement interface.
+- Add a 32-seed constrained-random ARM/Thumb campaign with at least 8,192
+  QEMU-compared retirements, privileged-mode/exception coverage, and separate
+  two-endian ARM7 legacy-unaligned permitted-memory scoreboards.
 - Add a checksum-pinned Arm GNU 14.3.Rel1 compiler gate that executes separate
   ARM and Thumb C units, bidirectional ARMv4T interworking, and mixed-width
   memory signatures on the RTL.

@@ -159,6 +159,7 @@ def collect_metadata(
             ),
             "unit": list(unit_tests),
             "integration": list(integration_tests),
+            "constrained_random": [],
             "soak": [],
             "examples": ["generic-soc"],
             "smoke": ["arm7tdmis_tb_top"],
@@ -296,6 +297,12 @@ def _phases(
         yield _make_phase(f"unit-{test}", f"unit-{test}")
     for test in selected_integration:
         yield _make_phase(f"integration-{test}", f"integ-{test}")
+    if quick:
+        yield _make_phase(
+            "random-validation-quick", "random-validation-quick"
+        )
+    else:
+        yield _make_phase("random-validation", "random-validation")
     if not quick:
         yield _make_phase("soak", "soak")
     yield _make_phase("smoke", "run")
@@ -357,6 +364,9 @@ def main() -> int:
     report["manifest"]["soak"] = (
         [] if args.quick else ["mister-wrapper-256-seed-sanitized"]
     )
+    report["manifest"]["constrained_random"] = [
+        "2-seed-quick" if args.quick else "32-seed-release"
+    ]
     report["status"] = "running"
     report["results"] = []
     write_report(report_path, report)
