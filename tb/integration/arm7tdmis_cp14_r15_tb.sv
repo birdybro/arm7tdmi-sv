@@ -1,7 +1,7 @@
-// CP-002/006 regression: the architected MRC Rd=r15 flags form applies
-// equally to ARM7TDMI-S's internal CP14 DCC control read. The r4p3 control
-// value has version 0111 in bits[31:28], so NZCV must become 0111 while
-// execution continues at the following instruction.
+// CP-002/006 regression: architected r15 register-transfer semantics apply
+// equally to ARM7TDMI-S's internal CP14 path. MCR sends instruction PC+12
+// to DCC TX. The r4p3 DCC control value has version 0111 in bits[31:28],
+// so an MRC flags form must make NZCV=0111 without changing the PC.
 
 `timescale 1ns/1ps
 
@@ -32,6 +32,12 @@ module arm7tdmis_cp14_r15_tb;
         wait (nRESET);
         repeat (120) @(posedge CLK);
         #1;
+
+        if (u_fixture.u_dut.u_ice.dcc_tx_data_q !== 32'h0000_002C) begin
+            $display("[cp14_r15] FAIL MCR pc expected 0000002c got %08x",
+                     u_fixture.u_dut.u_ice.dcc_tx_data_q);
+            errors = errors + 1;
+        end
 
         if ({u_fixture.u_dut.u_core.cpsr.n,
              u_fixture.u_dut.u_core.cpsr.z,
