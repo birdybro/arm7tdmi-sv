@@ -97,9 +97,12 @@ module arm7tdmis_core_pipelined
     input  logic [31:0] dbg_inject_instr,
 
     // §5.3 debug-state boundary. dbg_halt_req is the synchronized final
-    // running cycle; dbg_halted is the subsequent frozen state.
+    // running request; dbg_halt_boundary is HIGH on an edge that legally
+    // completes the current instruction; dbg_halted is the subsequent
+    // frozen state.
     input  logic        dbg_halt_req,
-    input  logic        dbg_halted
+    input  logic        dbg_halted,
+    output logic        dbg_halt_boundary
 );
 
     // =====================================================================
@@ -852,6 +855,13 @@ module arm7tdmis_core_pipelined
             default:      state_next = S_EXEC;
         endcase
     end
+
+    // Every instruction class returns to S_EXEC only after its final
+    // architectural effect: ordinary S_EXEC instructions complete in
+    // place, while load/block/SWP/multiply/coprocessor substates return
+    // only after their destination and base writebacks. ICE uses this
+    // combinational indication on the same enabled edge as the commit.
+    assign dbg_halt_boundary = (state_next == S_EXEC);
 
     // =====================================================================
     // Writeback / commit / flush computation (S_EXEC + memory substates)

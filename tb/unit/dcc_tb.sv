@@ -54,6 +54,7 @@ module dcc_tb;
         .watch_extern       (2'b00),
         .watch_priv         (1'b1),
         .core_trans1        (1'b0),
+        .core_halt_boundary (1'b1),
         .dbg_rq_in          (1'b0),
         .dbg_break_in       (1'b0),
         .tap_restart_req    (1'b0),

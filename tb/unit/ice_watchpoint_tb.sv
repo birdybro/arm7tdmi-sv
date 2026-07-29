@@ -84,6 +84,7 @@ module ice_watchpoint_tb;
         .watch_extern,
         .watch_priv,
         .core_trans1,
+        .core_halt_boundary (1'b1),
         .dbg_rq_in          (1'b0),
         .dbg_break_in       (1'b0),
         .tap_restart_req    (1'b0),

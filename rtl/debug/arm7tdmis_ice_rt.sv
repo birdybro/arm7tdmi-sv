@@ -42,6 +42,7 @@ module arm7tdmis_ice_rt
     input  logic [1:0]  watch_extern,
     input  logic        watch_priv,        // address-phase PROT[1] / nTRANS
     input  logic        core_trans1,       // live core TRANS[1] for Debug Status[3]
+    input  logic        core_halt_boundary,// current instruction commits this edge
     input  logic        dbg_rq_in,         // §22: external DBGRQ pin synced
                                             //      (used for Debug Status[1])
     input  logic        dbg_break_in,      // §22: external DBGBREAK pin
@@ -224,7 +225,7 @@ module arm7tdmis_ice_rt
     wire dbg_break_synced = dbg_break_sync_q[1];
 
     // §22 / §30.22.4: Debug-state FSM. Three-state at the architectural
-    // level (RUNNING / HALTED / MONITOR), but our scaffold only implements
+    // level (RUNNING / HALTED / MONITOR), but this implementation only has
     // the HALTED branch; MONITOR mode (where a debug-abort exception
     // fires instead of stopping the pipeline) is left for the cycle-
     // accuracy pass since it overlaps the DABT exception path.
@@ -237,6 +238,7 @@ module arm7tdmis_ice_rt
     //
     // Exit: TAP RESTART instruction observed (tap_restart_req pulse).
     debug_state_e dbg_state_q;
+    logic         halt_pending_q;
 
     wire ice_dbgrq_force = regs[5'h00][1];
     wire dbgrqi          = (ice_dbgrq_force || dbg_rq_synced) && DBGEN;
@@ -433,13 +435,36 @@ module arm7tdmis_ice_rt
     // ---- Debug-state FSM body
     always_ff @(posedge CLK or negedge DBGnTRST) begin
         if (!DBGnTRST) begin
-            dbg_state_q <= DBG_RUNNING;
+            dbg_state_q    <= DBG_RUNNING;
+            halt_pending_q <= 1'b0;
         end else if (CLKEN) begin
             unique case (dbg_state_q)
-                DBG_RUNNING: if (halt_entry_req) dbg_state_q <= DBG_HALTED;
-                DBG_HALTED:  if (tap_restart_req) dbg_state_q <= DBG_RUNNING;
-                DBG_MONITOR: dbg_state_q <= DBG_MONITOR;     // (no FSM transitions yet)
-                default:     dbg_state_q <= DBG_RUNNING;
+                DBG_RUNNING: begin
+                    if (!DBGEN) begin
+                        halt_pending_q <= 1'b0;
+                    end else if ((halt_pending_q || halt_entry_req)
+                                 && core_halt_boundary) begin
+                        // The core commits its final state on this edge;
+                        // freezing begins immediately after the edge.
+                        dbg_state_q    <= DBG_HALTED;
+                        halt_pending_q <= 1'b0;
+                    end else if (halt_entry_req) begin
+                        halt_pending_q <= 1'b1;
+                    end
+                end
+                DBG_HALTED: begin
+                    halt_pending_q <= 1'b0;
+                    if (tap_restart_req)
+                        dbg_state_q <= DBG_RUNNING;
+                end
+                DBG_MONITOR: begin
+                    halt_pending_q <= 1'b0;
+                    dbg_state_q    <= DBG_MONITOR;
+                end
+                default: begin
+                    dbg_state_q    <= DBG_RUNNING;
+                    halt_pending_q <= 1'b0;
+                end
             endcase
         end
     end
