@@ -1,0 +1,268 @@
+{
+  "schema": "arm7tdmis-formal-map-v1",
+  "toolchain": {
+    "name": "oss-cad-suite",
+    "version": "2026-07-29",
+    "archive_sha256": "89ea1152ea84bc600f18cc685f721d534d1f018e09831662787865a3d79ce4aa"
+  },
+  "proofs": [
+    {
+      "id": "no_ghost_commits",
+      "mode": "prove",
+      "task": "regfile_prove",
+      "engine": "smtbmc boolector",
+      "depth": 4,
+      "property": "architectural GPR storage changes only on an enabled write",
+      "citation": "ARM DDI 0234B architectural-state rules; VAL-007",
+      "source": "tb/formal/arm7tdmis_regfile_formal.sv"
+    },
+    {
+      "id": "condition_suppression",
+      "mode": "prove",
+      "task": "core_safety",
+      "engine": "abc pdr",
+      "depth": 16,
+      "property": "condition-failed ordinary instructions cannot assert passes_cond",
+      "citation": "ARM DDI 0234B conditional execution; VAL-007",
+      "source": "tb/formal/arm7tdmis_core_formal.sv"
+    },
+    {
+      "id": "mode_bank_isolation",
+      "mode": "prove",
+      "task": "regfile_prove",
+      "engine": "smtbmc boolector",
+      "depth": 4,
+      "property": "a write changes only its selected physical register bank",
+      "citation": "ARM DDI 0234B register banking; VAL-007",
+      "source": "tb/formal/arm7tdmis_regfile_formal.sv"
+    },
+    {
+      "id": "pc_alignment",
+      "mode": "prove",
+      "task": "core_alignment",
+      "engine": "abc pdr",
+      "depth": 16,
+      "property": "active word and halfword address phases remain aligned",
+      "citation": "ARM DDI 0234B Chapter 7 bus alignment; VAL-007",
+      "source": "tb/formal/arm7tdmis_core_formal.sv"
+    },
+    {
+      "id": "flag_preservation",
+      "mode": "prove",
+      "task": "psr_prove",
+      "engine": "smtbmc boolector",
+      "depth": 4,
+      "property": "CPSR flags remain stable without an enabled flag-writing operation",
+      "citation": "ARM DDI 0234B CPSR semantics; VAL-007",
+      "source": "tb/formal/arm7tdmis_psr_formal.sv"
+    },
+    {
+      "id": "bus_stability_clken",
+      "mode": "prove",
+      "task": "core_stall",
+      "engine": "smtbmc boolector",
+      "depth": 4,
+      "property": "raw bus payload and pipeline state remain stable through CLKEN holds",
+      "citation": "ARM DDI 0234B CLKEN protocol; VAL-007",
+      "source": "tb/formal/arm7tdmis_core_formal.sv"
+    },
+    {
+      "id": "one_completion_per_request",
+      "mode": "prove",
+      "task": "mister_prove",
+      "engine": "smtbmc boolector",
+      "depth": 16,
+      "property": "the MiSTer bridge permits one outstanding request and consumes its response once",
+      "citation": "VAL-007 canonical MiSTer wrapper contract",
+      "source": "tb/formal/arm7tdmi_mister_formal.sv"
+    },
+    {
+      "id": "lock_lifetime",
+      "mode": "prove",
+      "task": "core_safety",
+      "engine": "abc pdr",
+      "depth": 16,
+      "property": "SWP LOCK covers the write phase and terminates on a read abort",
+      "citation": "ARM DDI 0234B SWP locked-transfer timing; VAL-007",
+      "source": "tb/formal/arm7tdmis_core_formal.sv"
+    },
+    {
+      "id": "exception_priority",
+      "mode": "prove",
+      "task": "core_safety",
+      "engine": "abc pdr",
+      "depth": 16,
+      "property": "at most one priority-resolved exception entry fires per boundary",
+      "citation": "ARM DDI 0234B exception priority; VAL-007",
+      "source": "tb/formal/arm7tdmis_core_formal.sv"
+    },
+    {
+      "id": "abort_suppression",
+      "mode": "prove",
+      "task": "core_safety",
+      "engine": "abc pdr",
+      "depth": 16,
+      "property": "an aborted data phase cannot write a load, block-load, or SWP destination",
+      "citation": "ARM DDI 0234B abort model; VAL-007",
+      "source": "tb/formal/arm7tdmis_core_formal.sv"
+    },
+    {
+      "id": "tap_transitions",
+      "mode": "prove",
+      "task": "jtag_prove",
+      "engine": "smtbmc boolector",
+      "depth": 4,
+      "property": "all IEEE 1149.1 TAP next-state transitions and TDO enables",
+      "citation": "ARM DDI 0234B JTAG state machine; VAL-007",
+      "source": "tb/formal/arm7tdmis_jtag_formal.sv"
+    },
+    {
+      "id": "cdc_reset_assumptions",
+      "mode": "prove",
+      "task": "cdc_reset_prove",
+      "engine": "smtbmc boolector",
+      "depth": 4,
+      "property": "reset release and serialized debug transport preserve their synchronizer contracts",
+      "citation": "ARM DDI 0234B reset/debug interface; VAL-007",
+      "source": "tb/formal/arm7tdmis_cdc_reset_formal.sv"
+    },
+    {
+      "id": "forward_progress",
+      "mode": "live",
+      "task": "core_liveness",
+      "engine": "abc pdr",
+      "depth": 16,
+      "property": "every multicycle instruction returns to execute under bounded interface fairness",
+      "citation": "VAL-007 bounded memory, CLKEN, and coprocessor fairness model",
+      "source": "tb/formal/arm7tdmis_core_formal.sv"
+    },
+    {
+      "id": "no_deadlock",
+      "mode": "live",
+      "task": "mister_prove",
+      "engine": "smtbmc boolector",
+      "depth": 16,
+      "property": "the MiSTer bridge releases every request under bounded CPU and target fairness",
+      "citation": "VAL-007 canonical MiSTer wrapper fairness model",
+      "source": "tb/formal/arm7tdmi_mister_formal.sv"
+    }
+  ],
+  "covers": {
+    "fsm_states": [
+      "S_EXEC",
+      "S_DDATA",
+      "S_BLOCK_DATA",
+      "S_SWP_RDATA",
+      "S_SWP_WDATA",
+      "S_MULL_HI",
+      "S_MUL_BUSY",
+      "S_MULL_ACC",
+      "S_BLOCK_WB",
+      "S_DP_SHIFT",
+      "S_LOAD_WB",
+      "S_SWP_WB",
+      "S_CP_WAIT",
+      "S_CP_MCR_DATA",
+      "S_CP_MRC_DATA",
+      "S_CP_MRC_WB",
+      "S_UNDEF_WAIT"
+    ],
+    "fsm_transitions": [
+      "S_EXEC->S_EXEC",
+      "S_EXEC->S_DDATA",
+      "S_EXEC->S_BLOCK_DATA",
+      "S_EXEC->S_SWP_RDATA",
+      "S_EXEC->S_MUL_BUSY",
+      "S_EXEC->S_MULL_ACC",
+      "S_EXEC->S_DP_SHIFT",
+      "S_EXEC->S_CP_WAIT",
+      "S_EXEC->S_CP_MCR_DATA",
+      "S_EXEC->S_CP_MRC_DATA",
+      "S_EXEC->S_UNDEF_WAIT",
+      "S_DDATA->S_EXEC",
+      "S_DDATA->S_LOAD_WB",
+      "S_LOAD_WB->S_EXEC",
+      "S_BLOCK_DATA->S_BLOCK_DATA",
+      "S_BLOCK_DATA->S_BLOCK_WB",
+      "S_BLOCK_DATA->S_EXEC",
+      "S_BLOCK_WB->S_BLOCK_WB",
+      "S_BLOCK_WB->S_EXEC",
+      "S_SWP_RDATA->S_EXEC",
+      "S_SWP_RDATA->S_SWP_WDATA",
+      "S_SWP_WDATA->S_SWP_WB",
+      "S_SWP_WB->S_EXEC",
+      "S_MUL_BUSY->S_MUL_BUSY",
+      "S_MUL_BUSY->S_MULL_HI",
+      "S_MUL_BUSY->S_EXEC",
+      "S_MULL_ACC->S_MUL_BUSY",
+      "S_MULL_HI->S_EXEC",
+      "S_DP_SHIFT->S_EXEC",
+      "S_CP_WAIT->S_CP_WAIT",
+      "S_CP_WAIT->S_CP_MCR_DATA",
+      "S_CP_WAIT->S_CP_MRC_DATA",
+      "S_CP_WAIT->S_EXEC",
+      "S_CP_MCR_DATA->S_CP_MCR_DATA",
+      "S_CP_MCR_DATA->S_CP_MRC_WB",
+      "S_CP_MCR_DATA->S_EXEC",
+      "S_CP_MRC_DATA->S_CP_MRC_DATA",
+      "S_CP_MRC_DATA->S_CP_MRC_WB",
+      "S_CP_MRC_WB->S_EXEC",
+      "S_UNDEF_WAIT->S_EXEC"
+    ],
+    "exceptions": [
+      "entry.reset",
+      "entry.undefined",
+      "entry.swi",
+      "entry.prefetch_abort",
+      "entry.data_abort",
+      "entry.irq",
+      "entry.fiq",
+      "return.undefined",
+      "return.swi",
+      "return.prefetch_abort",
+      "return.data_abort",
+      "return.irq",
+      "return.fiq"
+    ],
+    "debug": [
+      "entry.breakpoint",
+      "entry.watchpoint",
+      "entry.dbgrq",
+      "entry.external_break",
+      "return.restart",
+      "return.pc_resume",
+      "return.system_speed"
+    ]
+  },
+  "cover_tasks": {
+    "fsm": {
+      "task": "core_cover",
+      "engine": "smtbmc boolector",
+      "depth": 80,
+      "source": "tb/formal/arm7tdmis_core_formal.sv"
+    },
+    "exception": {
+      "task": "core_cover",
+      "engine": "smtbmc boolector",
+      "depth": 80,
+      "source": "tb/formal/arm7tdmis_core_formal.sv"
+    },
+    "debug": {
+      "task": "debug_cover",
+      "engine": "smtbmc boolector",
+      "depth": 32,
+      "source": "tb/formal/arm7tdmis_debug_cover_formal.sv"
+    }
+  },
+  "sources": [
+    "tb/formal/formal.sby",
+    "tb/formal/arm7tdmis_core_formal.sv",
+    "tb/formal/arm7tdmis_top_formal_stub.sv",
+    "tb/formal/arm7tdmi_mister_formal.sv",
+    "tb/formal/arm7tdmis_debug_cover_formal.sv",
+    "tb/formal/arm7tdmis_regfile_formal.sv",
+    "tb/formal/arm7tdmis_psr_formal.sv",
+    "tb/formal/arm7tdmis_jtag_formal.sv",
+    "tb/formal/arm7tdmis_cdc_reset_formal.sv"
+  ]
+}

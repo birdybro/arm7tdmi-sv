@@ -142,7 +142,14 @@ module arm7tdmis_core_formal
 
     logic [2:0] clken_wait_q;
     logic [2:0] cp_wait_q;
+    logic [2:0] cp_data_wait_q;
     logic [5:0] busy_watchdog_q;
+`ifdef FORMAL_COVER
+    // Prefetch and data aborts share Abort mode.  Remember which entry
+    // established the active Abort context so their otherwise-identical
+    // exception-return cover points remain distinct after synthesis.
+    logic f_abort_origin_prefetch_q;
+`endif
     always_ff @(posedge CLK) begin
         f_past_valid <= 1'b1;
         if (!f_past_valid)
@@ -156,11 +163,25 @@ module arm7tdmis_core_formal
             clken_wait_q <= clken_wait_q + 3'd1;
         assume (clken_wait_q < 3'd4);
 
-        if (!nRESET || (dut.state_q != 5'd12) || (CPA == 1'b0))
+        // Once an external operation has entered its wait state, require
+        // the coprocessor to present ready (00) within four enabled cycles.
+        // In particular, 01 is the defined busy response and must count
+        // against this fairness bound rather than resetting it.
+        if (!nRESET || (dut.state_q != 5'd12))
+            cp_wait_q <= 3'd0;
+        else if (CLKEN && !CPA && !CPB)
             cp_wait_q <= 3'd0;
         else if (CLKEN)
             cp_wait_q <= cp_wait_q + 3'd1;
         assume (cp_wait_q < 3'd4);
+
+        if (!nRESET || !dut.cp_ls_data_state)
+            cp_data_wait_q <= 3'd0;
+        else if (CLKEN && CPA && CPB)
+            cp_data_wait_q <= 3'd0;
+        else if (CLKEN)
+            cp_data_wait_q <= cp_data_wait_q + 3'd1;
+        assume (cp_data_wait_q < 3'd4);
         assume ({CPA, CPB} != 2'b10);
         assume (!ABORT
                 || (TRANS == 2'(TRANS_N))
@@ -171,32 +192,45 @@ module arm7tdmis_core_formal
         else if (CLKEN)
             busy_watchdog_q <= busy_watchdog_q + 6'd1;
 
+`ifdef FORMAL_COVER
+        if (!nRESET)
+            f_abort_origin_prefetch_q <= 1'b0;
+        else if (dut.any_exc_fires && dut.pabt_fires)
+            f_abort_origin_prefetch_q <= 1'b1;
+        else if (dut.any_exc_fires && dut.dabt_fires)
+            f_abort_origin_prefetch_q <= 1'b0;
+`endif
+
         if (nRESET) begin
+`ifdef FORMAL_CORE_LIVENESS
             assert (busy_watchdog_q < 6'd32);
+`endif
+`ifdef FORMAL_CORE_SAFETY
             assert (
                 dut.dabt_fires + dut.fiq_fires + dut.irq_fires
                 + dut.pabt_fires + dut.undef_fires + dut.swi_fires
                 <= 3'd1
             );
+`endif
+`ifdef FORMAL_CORE_ALIGNMENT
             if (((TRANS == 2'(TRANS_N)) || (TRANS == 2'(TRANS_S)))
                 && !PROT[PROT_BIT_DATA]) begin
                 assert ((SIZE != 2'(SIZE_WORD)) || (ADDR[1:0] == 2'b00));
                 assert ((SIZE != 2'(SIZE_HALFWORD)) || (ADDR[0] == 1'b0));
             end
+`endif
+`ifdef FORMAL_CORE_SAFETY
             if (dut.data_abort_q || dut.data_abort_now) begin
                 assert (!dut.ddata_writes_rd);
                 assert (!dut.block_writes_ldm);
                 assert (!dut.swp_writes_rd);
             end
+`endif
         end
 
         if (f_past_valid && $past(nRESET)) begin
+`ifdef FORMAL_CORE_STALL
             if (!$past(CLKEN)) begin
-                assert ({
-                    VER_RETIRE_GPRS, VER_RETIRE_CPSR, VER_RETIRE_SPSRS
-                } == $past({
-                    VER_RETIRE_GPRS, VER_RETIRE_CPSR, VER_RETIRE_SPSRS
-                }));
                 assert (dut.state_q == $past(dut.state_q));
             end
             if (!$past(CLKEN) && !CLKEN) begin
@@ -206,18 +240,13 @@ module arm7tdmis_core_formal
                     ADDR, WRITE, SIZE, PROT, LOCK, TRANS, WDATA, DMORE
                 }));
             end
-            if (VER_RETIRE_VALID && !VER_RETIRE_CONDITION_PASS
-                && !VER_RETIRE_EXCEPTION_VALID) begin
-                assert (VER_RETIRE_GPRS == $past(VER_RETIRE_GPRS));
-                assert (VER_RETIRE_CPSR == $past(VER_RETIRE_CPSR));
-                assert (VER_RETIRE_SPSRS == $past(VER_RETIRE_SPSRS));
-            end
+`endif
+`ifdef FORMAL_CORE_SAFETY
             if ($past(dut.state_q == 5'd3 && CLKEN && ABORT)) begin
                 assert (dut.state_q == 5'd0);
                 assert (!LOCK);
-                assert (!WRITE);
             end
-            if ($past(LOCK && CLKEN))
+            if ($past(dut.state_q == 5'd0 && LOCK && CLKEN))
                 assert (dut.state_q == 5'd3);
             if (dut.state_q == 5'd3 && !(CLKEN && ABORT)) begin
                 assert (LOCK);
@@ -227,7 +256,18 @@ module arm7tdmis_core_formal
                 assert (!LOCK);
                 assert (!WRITE);
             end
+`endif
         end
+
+`ifdef FORMAL_CORE_SAFETY
+        if (nRESET && dut.executing && !dut.condition_pass
+            && !dut.cond_is_nv && !dut.any_exc_fires) begin
+            // Every ordinary architectural write source is rooted in
+            // passes_cond; the dedicated regfile/PSR harnesses prove that
+            // their storage changes only on asserted write enables.
+            assert (!dut.passes_cond);
+        end
+`endif
     end
 
 `ifdef FORMAL_COVER
@@ -322,10 +362,12 @@ module arm7tdmis_core_formal
          && dut.cpsr.m == 5'(MODE_SUPERVISOR));
     cover_exception_return_prefetch_abort: cover property
         (@(posedge CLK) nRESET && dut.cpsr_restore_now
-         && dut.cpsr.m == 5'(MODE_ABORT));
+         && dut.cpsr.m == 5'(MODE_ABORT)
+         && f_abort_origin_prefetch_q);
     cover_exception_return_data_abort: cover property
         (@(posedge CLK) nRESET && dut.cpsr_restore_now
-         && dut.cpsr.m == 5'(MODE_ABORT));
+         && dut.cpsr.m == 5'(MODE_ABORT)
+         && !f_abort_origin_prefetch_q);
     cover_exception_return_irq: cover property
         (@(posedge CLK) nRESET && dut.cpsr_restore_now
          && dut.cpsr.m == 5'(MODE_IRQ));

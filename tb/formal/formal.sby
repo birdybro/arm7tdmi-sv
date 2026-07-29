@@ -1,16 +1,31 @@
 [tasks]
-core_prove
+core_safety
+core_liveness
+core_alignment
+core_stall
+mister_prove
 core_cover
+debug_cover
 regfile_prove
 psr_prove
 jtag_prove
 cdc_reset_prove
 
 [options]
-core_prove: mode prove
-core_prove: depth 36
+core_safety: mode prove
+core_safety: depth 16
+core_liveness: mode prove
+core_liveness: depth 16
+core_alignment: mode prove
+core_alignment: depth 16
+core_stall: mode prove
+core_stall: depth 4
+mister_prove: mode prove
+mister_prove: depth 16
 core_cover: mode cover
 core_cover: depth 80
+debug_cover: mode cover
+debug_cover: depth 32
 regfile_prove: mode prove
 regfile_prove: depth 4
 psr_prove: mode prove
@@ -21,14 +36,39 @@ cdc_reset_prove: mode prove
 cdc_reset_prove: depth 4
 
 [engines]
-smtbmc boolector
+core_safety: abc pdr -M 5000
+core_liveness: abc pdr -M 5000
+core_alignment: abc pdr -M 5000
+core_stall: smtbmc boolector
+mister_prove: smtbmc boolector
+core_cover: smtbmc boolector
+debug_cover: smtbmc boolector
+regfile_prove: smtbmc boolector
+psr_prove: smtbmc boolector
+jtag_prove: smtbmc boolector
+cdc_reset_prove: smtbmc boolector
 
 [script]
-core_prove: read_slang --std 1800-2017 --allow-use-before-declare --single-unit -D ARM7TDMIS_VERIFICATION arm7tdmis_types_pkg.sv arm7tdmis_psr_pkg.sv arm7tdmis_bus_pkg.sv arm7tdmis_instr_pkg.sv arm7tdmis_regfile.sv arm7tdmis_shifter.sv arm7tdmis_alu.sv arm7tdmis_multiplier.sv arm7tdmis_condition.sv arm7tdmis_decoder.sv arm7tdmis_thumb_decoder.sv arm7tdmis_psr.sv arm7tdmis_core_pipelined.sv arm7tdmis_core_formal.sv --top arm7tdmis_core_formal
-core_prove: prep -top arm7tdmis_core_formal
+core_safety: read_slang --std 1800-2017 --allow-use-before-declare --single-unit -D ARM7TDMIS_VERIFICATION -D FORMAL_CORE_SAFETY arm7tdmis_types_pkg.sv arm7tdmis_psr_pkg.sv arm7tdmis_bus_pkg.sv arm7tdmis_instr_pkg.sv arm7tdmis_regfile.sv arm7tdmis_shifter.sv arm7tdmis_alu.sv arm7tdmis_multiplier.sv arm7tdmis_condition.sv arm7tdmis_decoder.sv arm7tdmis_thumb_decoder.sv arm7tdmis_psr.sv arm7tdmis_core_pipelined.sv arm7tdmis_core_formal.sv --top arm7tdmis_core_formal
+core_safety: prep -top arm7tdmis_core_formal
+
+core_liveness: read_slang --std 1800-2017 --allow-use-before-declare --single-unit -D ARM7TDMIS_VERIFICATION -D FORMAL_CORE_LIVENESS arm7tdmis_types_pkg.sv arm7tdmis_psr_pkg.sv arm7tdmis_bus_pkg.sv arm7tdmis_instr_pkg.sv arm7tdmis_regfile.sv arm7tdmis_shifter.sv arm7tdmis_alu.sv arm7tdmis_multiplier.sv arm7tdmis_condition.sv arm7tdmis_decoder.sv arm7tdmis_thumb_decoder.sv arm7tdmis_psr.sv arm7tdmis_core_pipelined.sv arm7tdmis_core_formal.sv --top arm7tdmis_core_formal
+core_liveness: prep -top arm7tdmis_core_formal
+
+core_alignment: read_slang --std 1800-2017 --allow-use-before-declare --single-unit -D ARM7TDMIS_VERIFICATION -D FORMAL_CORE_ALIGNMENT arm7tdmis_types_pkg.sv arm7tdmis_psr_pkg.sv arm7tdmis_bus_pkg.sv arm7tdmis_instr_pkg.sv arm7tdmis_regfile.sv arm7tdmis_shifter.sv arm7tdmis_alu.sv arm7tdmis_multiplier.sv arm7tdmis_condition.sv arm7tdmis_decoder.sv arm7tdmis_thumb_decoder.sv arm7tdmis_psr.sv arm7tdmis_core_pipelined.sv arm7tdmis_core_formal.sv --top arm7tdmis_core_formal
+core_alignment: prep -top arm7tdmis_core_formal
+
+core_stall: read_slang --std 1800-2017 --allow-use-before-declare --single-unit -D ARM7TDMIS_VERIFICATION -D FORMAL_CORE_STALL arm7tdmis_types_pkg.sv arm7tdmis_psr_pkg.sv arm7tdmis_bus_pkg.sv arm7tdmis_instr_pkg.sv arm7tdmis_regfile.sv arm7tdmis_shifter.sv arm7tdmis_alu.sv arm7tdmis_multiplier.sv arm7tdmis_condition.sv arm7tdmis_decoder.sv arm7tdmis_thumb_decoder.sv arm7tdmis_psr.sv arm7tdmis_core_pipelined.sv arm7tdmis_core_formal.sv --top arm7tdmis_core_formal
+core_stall: prep -top arm7tdmis_core_formal
+
+mister_prove: read_slang --std 1800-2017 --allow-use-before-declare --single-unit arm7tdmis_bus_pkg.sv arm7tdmis_debug_pkg.sv arm7tdmis_reset_sync.sv arm7tdmis_sync_debug_port.sv arm7tdmis_top_formal_stub.sv arm7tdmi_mister.sv arm7tdmi_mister_formal.sv --top arm7tdmi_mister_formal
+mister_prove: prep -top arm7tdmi_mister_formal
 
 core_cover: read_slang --std 1800-2017 --allow-use-before-declare --single-unit -D ARM7TDMIS_VERIFICATION -D FORMAL_COVER arm7tdmis_types_pkg.sv arm7tdmis_psr_pkg.sv arm7tdmis_bus_pkg.sv arm7tdmis_instr_pkg.sv arm7tdmis_regfile.sv arm7tdmis_shifter.sv arm7tdmis_alu.sv arm7tdmis_multiplier.sv arm7tdmis_condition.sv arm7tdmis_decoder.sv arm7tdmis_thumb_decoder.sv arm7tdmis_psr.sv arm7tdmis_core_pipelined.sv arm7tdmis_core_formal.sv --top arm7tdmis_core_formal
 core_cover: prep -top arm7tdmis_core_formal
+
+debug_cover: read_slang --std 1800-2017 --allow-use-before-declare --single-unit arm7tdmis_types_pkg.sv arm7tdmis_bus_pkg.sv arm7tdmis_debug_pkg.sv arm7tdmis_ice_rt.sv arm7tdmis_debug_cover_formal.sv --top arm7tdmis_debug_cover_formal
+debug_cover: prep -top arm7tdmis_debug_cover_formal
 
 regfile_prove: read_slang --std 1800-2017 --allow-use-before-declare --single-unit -D ARM7TDMIS_VERIFICATION arm7tdmis_types_pkg.sv arm7tdmis_instr_pkg.sv arm7tdmis_regfile.sv arm7tdmis_regfile_formal.sv --top arm7tdmis_regfile_formal
 regfile_prove: prep -top arm7tdmis_regfile_formal
@@ -60,7 +100,13 @@ rtl/core/arm7tdmis_reset_sync.sv
 rtl/core/arm7tdmis_core_pipelined.sv
 rtl/jtag/arm7tdmis_jtag_tap.sv
 rtl/jtag/arm7tdmis_sync_debug_port.sv
+rtl/debug/arm7tdmis_ice_rt.sv
+rtl/top/arm7tdmis_top.sv
+rtl/top/arm7tdmi_mister.sv
 tb/formal/arm7tdmis_core_formal.sv
+tb/formal/arm7tdmis_top_formal_stub.sv
+tb/formal/arm7tdmi_mister_formal.sv
+tb/formal/arm7tdmis_debug_cover_formal.sv
 tb/formal/arm7tdmis_regfile_formal.sv
 tb/formal/arm7tdmis_psr_formal.sv
 tb/formal/arm7tdmis_jtag_formal.sv

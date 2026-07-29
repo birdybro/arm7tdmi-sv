@@ -191,6 +191,8 @@ module arm7tdmi_mister
     logic        request_lock_q;
     logic        request_sequential_q;
     logic        request_more_q;
+    logic [31:0] request_wdata_q;
+    logic        request_wdata_valid_q;
 
     logic        response_valid_q;
     logic [31:0] response_data_q;
@@ -198,7 +200,9 @@ module arm7tdmi_mister
 
     wire raw_active = (raw_trans == 2'(TRANS_N))
                    || (raw_trans == 2'(TRANS_S));
-    wire memory_accept = request_valid_q && MEM_READY;
+    wire request_ready = request_valid_q
+                       && (!request_write_q || request_wdata_valid_q);
+    wire memory_accept = request_ready && MEM_READY;
     wire bus_waiting = request_valid_q || response_valid_q;
     wire response_available = response_valid_q || memory_accept;
 
@@ -244,14 +248,27 @@ module arm7tdmi_mister
             request_lock_q       <= 1'b0;
             request_sequential_q <= 1'b0;
             request_more_q       <= 1'b0;
+            request_wdata_q      <= 32'h0000_0000;
+            request_wdata_valid_q <= 1'b0;
             response_valid_q     <= 1'b0;
             response_data_q      <= 32'h0000_0000;
             response_error_q     <= 1'b0;
         end else begin
+            // Raw write data belongs to the address phase captured on the
+            // preceding enabled edge.  Capture that data phase before
+            // advertising a conventional write request, then own it until
+            // the target accepts the request.
+            if (request_valid_q && request_write_q
+                && !request_wdata_valid_q) begin
+                request_wdata_q       <= raw_wdata;
+                request_wdata_valid_q <= 1'b1;
+            end
+
             // A normal valid/ready target completes independently of CPU_CE.
             // If the core cannot advance on this edge, retain the response.
             if (memory_accept) begin
                 request_valid_q <= 1'b0;
+                request_wdata_valid_q <= 1'b0;
                 if (!core_clken) begin
                     response_valid_q <= 1'b1;
                     response_data_q  <= MEM_RDATA;
@@ -270,6 +287,7 @@ module arm7tdmi_mister
             if (core_clken) begin
                 if (bus_waiting)
                     response_valid_q <= 1'b0;
+                request_wdata_valid_q <= 1'b0;
 
 `ifdef ARM7TDMIS_SAVE_STATE
                 request_valid_q <= state_capture ? 1'b0 : raw_active;
@@ -289,6 +307,13 @@ module arm7tdmi_mister
                     request_sequential_q <=
                         (raw_trans == 2'(TRANS_S));
                     request_more_q       <= raw_dmore;
+                    // WDATA has no meaning for a read.  Canonicalize it
+                    // instead of leaking the preceding write into an
+                    // otherwise deterministic request trace.  A write
+                    // replaces this value from its following raw data phase
+                    // before request_ready can assert.
+                    request_wdata_q       <= 32'h0000_0000;
+                    request_wdata_valid_q <= !raw_write;
                 end
             end
         end
@@ -312,10 +337,10 @@ module arm7tdmi_mister
         end
     endfunction
 
-    assign MEM_VALID       = request_valid_q;
+    assign MEM_VALID       = request_ready;
     assign MEM_ADDR        = request_addr_q;
     assign MEM_WRITE       = request_write_q;
-    assign MEM_WDATA       = raw_wdata;
+    assign MEM_WDATA       = request_wdata_q;
     assign MEM_BYTE_ENABLE = byte_enable(request_size_q,
                                          request_addr_q[1:0]);
     assign MEM_CODE        = !request_prot_q[PROT_BIT_DATA];

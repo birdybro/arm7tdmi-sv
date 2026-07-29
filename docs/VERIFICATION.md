@@ -16,6 +16,51 @@ It always removes the Verilator build directory first, then runs:
 7. The 256-seed sanitizer/X-state soak.
 8. The mixed-instruction smoke test and bidirectional traceability gate.
 
+## Formal proof and reachability evidence
+
+`make -C scripts formal` checksum-installs the Linux x86-64 OSS CAD Suite
+2026-07-29 release and runs the reviewed matrix in
+`verification/formal_requirements.json`. The archive SHA-256 is
+`89ea1152ea84bc600f18cc685f721d534d1f018e09831662787865a3d79ce4aa`;
+the accepted tools are SBY v0.67, Yosys 0.67, and Boolector 3.2.4.
+
+The matrix contains 14 named proof obligations:
+
+- architectural writes, conditional suppression, register-bank isolation,
+  PC alignment, and CPSR flag preservation;
+- CLKEN bus stability, SWP LOCK lifetime, exception priority, and abort
+  writeback suppression;
+- single-outstanding MiSTer request/response ownership, bounded bridge
+  completion, TAP transitions, and reset/debug synchronizer behavior; and
+- whole-core return to Execute under bounded interface fairness.
+
+The core safety, alignment, and liveness tasks use ABC PDR. Stall, bridge,
+register-file, PSR, TAP, and CDC/reset tasks use Boolector bounded proof plus
+k-induction. The MiSTer harness proves the production bridge against an
+arbitrary raw-core output model; it does not assume that the present CPU keeps
+uncaptured raw phases stable. Its fairness model requires `CPU_CE` and an
+advertised memory request to be serviced within four clocks. The core
+liveness model similarly bounds CLKEN and ready/busy coprocessor responses
+while forbidding the architecturally illegal `{CPA,CPB}=2'b10` response.
+
+Reachability is a separate fail-closed result, not inferred from a task's exit
+code. The 80-step core task must name all 17 implemented FSM states, all 40
+implemented transitions, and 13 exception entry/return points in its SBY
+`PASS` summary. The 32-step debug task must name seven debug
+entry/restart/system-speed points. Prefetch- and data-abort returns are
+distinguished by formal-only origin tracking even though both execute in
+Abort mode. The aggregate is therefore 77 exact cover obligations.
+
+`scripts/formal_report.py` writes `reports/generated/formal-report.json` using
+schema `arm7tdmis-formal-v1`. It records the clean commit state, pinned tool
+identities, manifest/SBY hashes, and a source and task-log hash for every
+obligation. A report passes only with all 14 proofs, all 77 covers, and an
+empty uncovered list. Formal is a mandatory non-quick regression phase,
+runs in scheduled/manual CI, and is archived by release evidence.
+`scripts/release_evidence.py` revalidates the report rather than trusting its
+status, rejecting dirty or stale runs, tool drift, missing obligations,
+uncovered points, or hash changes.
+
 The runner stops at the first failing phase and returns nonzero. The intentional
 failure sentinel contains a real SystemVerilog `$fatal`; the enclosing target
 passes only when Verilator propagates that failure as a nonzero process status.
@@ -666,6 +711,7 @@ transfers and their independent responses remain covered by
 Measured structural coverage reporting, exact Chapter 7 legal-equivalence
 cross coverage, mutation testing of architectural controls, independent
 QEMU/compiler execution, constrained-random differential/policy testing, the
-pinned public ARM/Thumb suite, and deterministic sanitizing soak are
-implemented above. Encoding-level required-bin functional coverage and formal
-evidence remain separate open requirements in `TASKS.md` §31.10.
+pinned public ARM/Thumb suite, deterministic sanitizing soak, encoding-level
+required-bin functional coverage, and formal proof/reachability evidence are
+implemented above. The remaining independent-review and physical-integration
+release gates remain explicit in `TASKS.md` §31.

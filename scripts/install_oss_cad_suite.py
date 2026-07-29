@@ -103,11 +103,16 @@ def install_toolchain(root: pathlib.Path) -> pathlib.Path:
     root.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".oss-cad-", dir=root) as raw:
         staging = pathlib.Path(raw)
-        archive = staging / ARCHIVE_NAME
-        print(f"[oss-cad-suite] downloading {URL}")
-        with urllib.request.urlopen(URL, timeout=600) as response:
-            with archive.open("wb") as output:
-                shutil.copyfileobj(response, output)
+        cached_archive = root / ARCHIVE_NAME
+        if cached_archive.is_file():
+            archive = cached_archive
+            print(f"[oss-cad-suite] using cached archive {cached_archive}")
+        else:
+            archive = staging / ARCHIVE_NAME
+            print(f"[oss-cad-suite] downloading {URL}")
+            with urllib.request.urlopen(URL, timeout=600) as response:
+                with archive.open("wb") as output:
+                    shutil.copyfileobj(response, output)
         observed = file_sha256(archive)
         if observed != SHA256:
             raise ValueError(

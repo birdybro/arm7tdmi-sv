@@ -73,6 +73,26 @@ jobs:
       - name: Kill architectural-control mutants
         run: make -C scripts mutation-self-test
 
+  formal:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned formal toolchain
+        run: python3 scripts/install_oss_cad_suite.py
+      - name: Prove safety/liveness and close bounded covers
+        run: make -C scripts formal
+      - name: Preserve formal report, logs, and cover witnesses
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm7tdmis-formal-${{ github.sha }}
+          path: |
+            reports/generated/formal-report.json
+            reports/generated/formal/
+          if-no-files-found: error
+          retention-days: 90
+
   randomized-events:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04

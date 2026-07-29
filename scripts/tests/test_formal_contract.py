@@ -160,6 +160,23 @@ class FormalContractTest(unittest.TestCase):
             }
             for bin_id in proof_ids + cover_ids
         }
+        for index, bin_id in enumerate(cover_ids):
+            result[bin_id]["witnesses"] = [
+                {
+                    "path": (
+                        f"reports/generated/formal/{index}/trace.vcd"
+                    ),
+                    "bytes": 100,
+                    "sha256": "3" * 64,
+                },
+                {
+                    "path": (
+                        f"reports/generated/formal/{index}/trace.yw"
+                    ),
+                    "bytes": 100,
+                    "sha256": "4" * 64,
+                },
+            ]
         return {
             "schema": "arm7tdmis-formal-v1",
             "status": "passed",
@@ -268,6 +285,12 @@ class FormalContractTest(unittest.TestCase):
             "missing source hash": lambda value: value["results"][
                 value["required_covers"][0]
             ]["source"].update({"sha256": ""}),
+            "missing cover witness": lambda value: value["results"][
+                value["required_covers"][1]
+            ]["witnesses"].pop(),
+            "unhashed cover witness": lambda value: value["results"][
+                value["required_covers"][2]
+            ]["witnesses"][0].update({"sha256": ""}),
         }
         for name, mutate in mutations.items():
             weakened = copy.deepcopy(report)

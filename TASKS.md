@@ -3427,13 +3427,40 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   behavior as required bins; mutation tests reject a removed group/bin,
   shortened domain, missing phase, uncited exclusion, stale result, or
   nonzero uncovered set.
-- [ ] **VAL-007:** Add formal properties for no ghost commits, condition suppression,
+- [x] **VAL-007:** Add formal properties for no ghost commits, condition suppression,
   mode/bank isolation, PC alignment, flag preservation, bus stability under CLKEN,
   one completion per request, LOCK lifetime, exception priority, abort suppression,
   TAP transitions, and CDC/reset assumptions. Under fair memory/coprocessor responses,
   also prove forward progress and absence of deadlock.
-- [ ] **VAL-008:** Add bounded formal cover traces for every FSM state/transition and
+  `verification/formal_requirements.json` is the exact 14-obligation proof
+  map. The actual pipeline, register bank, PSR, TAP, reset/debug
+  synchronizers, and canonical MiSTer bridge are elaborated by
+  `tb/formal/formal.sby`; the bridge proof substitutes only a nondeterministic
+  raw-core output model so its ownership rules hold independently of current
+  CPU behavior. Safety/alignment/liveness use ABC PDR, and bounded
+  bridge/stall/small-module proofs use Boolector k-induction. The only
+  liveness assumptions are explicit four-cycle CPU-enable, memory-response,
+  and legal coprocessor-response fairness bounds. Formal counterexamples
+  exposed and closed CLKEN-dependent coprocessor/Undefined behavior,
+  exception-priority masking, and MiSTer write-data ownership under target
+  backpressure.
+  `install_oss_cad_suite.py` checksum-installs OSS CAD Suite 2026-07-29;
+  `formal_report.py` rejects a task without `PASS`, records every source/log
+  hash, and emits schema `arm7tdmis-formal-v1`. Formal is mandatory in the
+  non-quick regression, scheduled/manual CI, traceability, and release
+  evidence; release validation independently rejects dirty, stale, weakened,
+  incomplete, or tool-mismatched reports.
+- [x] **VAL-008:** Add bounded formal cover traces for every FSM state/transition and
   every exception/debug entry and return.
+  The reviewed manifest names all 17 reachable core control states, all 40
+  implemented state transitions, 13 exception entry/return obligations, and
+  seven debug entry/restart obligations. `core_cover` reaches the core and
+  exception set within 80 steps; `debug_cover` reaches the independent
+  EmbeddedICE-RT set within 32. Prefetch- and data-abort returns carry a
+  formal-only origin bit so synthesis cannot merge their shared Abort-mode
+  predicates. The report accepts a cover only when its exact named property
+  appears in the SBY `PASS` summary, producing 77/77 independently hashed
+  traces and an empty uncovered list.
 - [x] **VAL-009:** Add software-level compiler tests built with pinned
   `arm-none-eabi` tools for `-march=armv4t`, in ARM, Thumb, and interworked code.
   `install_arm_toolchain.py` downloads Arm GNU Toolchain 14.3.Rel1 from Arm's

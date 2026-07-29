@@ -138,6 +138,16 @@
       "tests": ["verification/functional_coverage.py", "verification/functional_coverage.json", "tb/unit/reserved_decode_tb.sv", "tb/unit/unpredictable_decode_tb.sv", "scripts/tests/test_functional_coverage_contract.py"],
       "source_sections": ["ARM DDI 0100I ARMv4T encoding maps and TASKS.md section 31.10 VAL-006"]
     },
+    "VAL-007": {
+      "rtl": ["rtl/core/", "rtl/datapath/", "rtl/jtag/", "rtl/top/arm7tdmi_mister.sv"],
+      "tests": ["tb/formal/formal.sby", "tb/formal/arm7tdmis_*_formal.sv", "scripts/formal_report.py", "scripts/tests/test_formal_contract.py"],
+      "source_sections": ["ARM DDI 0234B architectural and interface invariants; TASKS.md section 31.10 VAL-007"]
+    },
+    "VAL-008": {
+      "rtl": ["rtl/core/arm7tdmis_core_pipelined.sv", "rtl/debug/arm7tdmis_ice_rt.sv"],
+      "tests": ["tb/formal/arm7tdmis_core_formal.sv", "tb/formal/arm7tdmis_debug_cover_formal.sv", "scripts/formal_report.py"],
+      "source_sections": ["TASKS.md section 31.10 VAL-008 bounded reachability closure"]
+    },
     "VAL-009": {
       "rtl": ["rtl/core/", "rtl/top/arm7tdmis_top.sv"],
       "tests": ["verification/compiler/", "tb/integration/arm7tdmis_compiler_tb.sv"],

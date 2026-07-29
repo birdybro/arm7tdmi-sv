@@ -117,6 +117,123 @@ def validate_evidence(
             )
 
 
+def _formal_required_covers(manifest: dict[str, Any]) -> set[str]:
+    if manifest.get("schema") != "arm7tdmis-formal-map-v1":
+        raise ValueError("formal requirements manifest has wrong schema")
+    covers = manifest.get("covers", {})
+    result = {
+        f"fsm.state.{value}" for value in covers.get("fsm_states", [])
+    }
+    result.update(
+        f"fsm.transition.{value}"
+        for value in covers.get("fsm_transitions", [])
+    )
+    result.update(
+        f"exception.{value}" for value in covers.get("exceptions", [])
+    )
+    result.update(f"debug.{value}" for value in covers.get("debug", []))
+    return result
+
+
+def validate_formal_evidence(
+    report: dict[str, Any],
+    manifest: dict[str, Any],
+    *,
+    expected_commit: str,
+) -> None:
+    """Reject incomplete, stale, weakened, or unhashed formal evidence."""
+    if report.get("schema") != "arm7tdmis-formal-v1":
+        raise ValueError("formal report has wrong schema")
+    if report.get("status") != "passed" or report.get("failure") is not None:
+        raise ValueError("formal report is not passed")
+    git = report.get("git", {})
+    if git.get("dirty"):
+        raise ValueError("formal report describes a dirty source tree")
+    if git.get("commit") != expected_commit:
+        raise ValueError("formal report commit does not match regression")
+    if report.get("toolchain") != manifest.get("toolchain"):
+        raise ValueError("formal report does not use the pinned toolchain")
+
+    proof_entries = manifest.get("proofs")
+    if (
+        not isinstance(proof_entries, list)
+        or any(not isinstance(entry, dict) for entry in proof_entries)
+    ):
+        raise ValueError("formal proof manifest is malformed")
+    required_proofs = {entry.get("id") for entry in proof_entries}
+    if None in required_proofs or len(required_proofs) != len(proof_entries):
+        raise ValueError("formal proof IDs are missing or duplicated")
+    required_covers = _formal_required_covers(manifest)
+    if (
+        set(report.get("required_proofs", [])) != required_proofs
+        or set(report.get("proven_proofs", [])) != required_proofs
+        or set(report.get("required_covers", [])) != required_covers
+        or set(report.get("covered_covers", [])) != required_covers
+        or report.get("uncovered_covers") != []
+    ):
+        raise ValueError("formal proof or cover closure is incomplete")
+
+    results = report.get("results")
+    required_results = required_proofs | required_covers
+    if not isinstance(results, dict) or set(results) != required_results:
+        raise ValueError("formal result map is incomplete")
+    digest_pattern = re.compile(r"^[0-9a-f]{64}$")
+    for obligation, entry in results.items():
+        if (
+            not isinstance(entry, dict)
+            or entry.get("status") != "passed"
+            or not isinstance(entry.get("engine"), str)
+            or not entry["engine"]
+            or not isinstance(entry.get("depth"), int)
+            or entry["depth"] <= 0
+        ):
+            raise ValueError(f"formal result is not passing: {obligation}")
+        for artifact_name in ("log", "source"):
+            artifact = entry.get(artifact_name)
+            if (
+                not isinstance(artifact, dict)
+                or not isinstance(artifact.get("path"), str)
+                or not artifact["path"]
+                or not isinstance(artifact.get("bytes"), int)
+                or artifact["bytes"] <= 0
+                or digest_pattern.fullmatch(str(artifact.get("sha256", "")))
+                is None
+            ):
+                raise ValueError(
+                    f"formal {obligation} lacks hashed {artifact_name}"
+                )
+        if obligation in required_covers:
+            witnesses = entry.get("witnesses")
+            if (
+                not isinstance(witnesses, list)
+                or len(witnesses) != 2
+                or {
+                    pathlib.PurePosixPath(str(witness.get("path", ""))).suffix
+                    for witness in witnesses
+                    if isinstance(witness, dict)
+                }
+                != {".vcd", ".yw"}
+            ):
+                raise ValueError(
+                    f"formal cover {obligation} lacks its witness pair"
+                )
+            for witness in witnesses:
+                if (
+                    not isinstance(witness, dict)
+                    or not isinstance(witness.get("path"), str)
+                    or not witness["path"]
+                    or not isinstance(witness.get("bytes"), int)
+                    or witness["bytes"] <= 0
+                    or digest_pattern.fullmatch(
+                        str(witness.get("sha256", ""))
+                    )
+                    is None
+                ):
+                    raise ValueError(
+                        f"formal cover {obligation} has an unhashed witness"
+                    )
+
+
 def validate_soak_evidence(
     soak: dict[str, Any],
     *,
@@ -938,6 +1055,64 @@ def _validated_files(
     ):
         raise ValueError(
             "full regression is missing mandatory functional coverage"
+        )
+    if regression.get("mode") == "full" and "formal" not in phase_names:
+        raise ValueError("full regression is missing mandatory formal evidence")
+    if "formal" in phase_names:
+        formal_report_path = REPORT_ROOT / "formal-report.json"
+        formal_manifest_path = (
+            REPO_ROOT / "verification/formal_requirements.json"
+        )
+        if not formal_report_path.is_file():
+            raise ValueError("formal-report.json is missing")
+        if not formal_manifest_path.is_file():
+            raise ValueError("formal requirements manifest is missing")
+        formal_report = json.loads(
+            formal_report_path.read_text(encoding="utf-8")
+        )
+        formal_manifest = json.loads(
+            formal_manifest_path.read_text(encoding="utf-8")
+        )
+        validate_formal_evidence(
+            formal_report,
+            formal_manifest,
+            expected_commit=str(
+                regression.get("git", {}).get("commit", "")
+            ),
+        )
+        for result in formal_report["results"].values():
+            for artifact_name in ("log", "source"):
+                artifact = result[artifact_name]
+                artifact_path = _repo_path(str(artifact["path"]))
+                if (
+                    artifact_path.stat().st_size != artifact["bytes"]
+                    or _sha256(artifact_path) != artifact["sha256"]
+                ):
+                    raise ValueError(
+                        f"formal {artifact_name} artifact hash mismatch"
+                    )
+                candidates.append(artifact_path)
+            for witness in result.get("witnesses", []):
+                witness_path = _repo_path(str(witness["path"]))
+                if (
+                    witness_path.stat().st_size != witness["bytes"]
+                    or _sha256(witness_path) != witness["sha256"]
+                ):
+                    raise ValueError("formal cover witness hash mismatch")
+                candidates.append(witness_path)
+        for artifact_name in ("manifest", "sby_file", "runner_log"):
+            artifact = formal_report.get(artifact_name, {})
+            artifact_path = _repo_path(str(artifact.get("path", "")))
+            if (
+                artifact_path.stat().st_size != artifact.get("bytes")
+                or _sha256(artifact_path) != artifact.get("sha256")
+            ):
+                raise ValueError(
+                    f"formal {artifact_name} artifact hash mismatch"
+                )
+            candidates.append(artifact_path)
+        candidates.extend(
+            (formal_report_path.resolve(), formal_manifest_path.resolve())
         )
     traceability_report = REPORT_ROOT / "traceability-report.json"
     if "traceability" not in phase_names:

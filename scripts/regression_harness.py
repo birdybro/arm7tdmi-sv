@@ -164,6 +164,7 @@ def collect_metadata(
             "functional_coverage": [],
             "constrained_random": [],
             "random_events": [],
+            "formal": [],
             "soak": [],
             "examples": ["generic-soc"],
             "smoke": ["arm7tdmis_tb_top"],
@@ -302,6 +303,7 @@ def _phases(
     for test in selected_integration:
         yield _make_phase(f"integration-{test}", f"integ-{test}")
     if not quick:
+        yield _make_phase("formal", "formal")
         yield _make_phase("table7-cross", "table7-cross")
         yield _make_phase("functional-coverage", "functional-coverage")
     yield _make_phase("public-suite", "public-suite")
@@ -378,6 +380,9 @@ def main() -> int:
     ]
     report["manifest"]["random_events"] = (
         [] if args.quick else ["32-seed-all-class-all-event"]
+    )
+    report["manifest"]["formal"] = (
+        [] if args.quick else ["VAL-007-proofs-and-VAL-008-covers"]
     )
     report["manifest"]["cycle_cross"] = (
         [] if args.quick else ["chapter7-required-crosses"]

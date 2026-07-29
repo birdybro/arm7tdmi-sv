@@ -327,7 +327,8 @@ module arm7tdmis_core_pipelined
                              && (cp_wait_is_ldc_q || cp_wait_is_stc_q);
     wire cp_mrc_wb_state = (state_q == S_CP_MRC_WB)
                          && !cp_ls_cleanup_state;
-    wire cp_wait_debug_pending = (state_q == S_CP_WAIT) && dbg_halt_req;
+    wire cp_wait_debug_pending = CLKEN && (state_q == S_CP_WAIT)
+                               && dbg_halt_req;
     wire block_pc_internal_phase = block_pc_refill_first_q
                                  && (state_q == S_BLOCK_WB);
     wire issue_fetch   = !dbg_inject_active
@@ -1038,9 +1039,9 @@ module arm7tdmis_core_pipelined
     // coprocessor instruction only while it is still busy-waiting. Give
     // that interrupt priority over a coincident CPB-ready transition so
     // the coprocessor cannot commit after the exception has won.
-    wire cp_wait_fiq_pending = (state_q == S_CP_WAIT)
+    wire cp_wait_fiq_pending = CLKEN && (state_q == S_CP_WAIT)
                              && !nFIQ && !cpsr.f;
-    wire cp_wait_irq_pending = (state_q == S_CP_WAIT)
+    wire cp_wait_irq_pending = CLKEN && (state_q == S_CP_WAIT)
                              && !nIRQ && !cpsr.i;
     wire cp_wait_interrupt_pending = cp_wait_fiq_pending
                                    || cp_wait_irq_pending;
@@ -1238,8 +1239,11 @@ module arm7tdmis_core_pipelined
                           || cp14_mcr_data || cp14_mrc_dbgabt
                           || cp14_mcr_dbgabt;
     wire external_cp_request = passes_cond && instr_is_cp && !instr_is_cp14;
-    wire external_cp_ready   = external_cp_request && !CPA && !CPB;
-    wire external_cp_busy    = external_cp_request && !CPA &&  CPB;
+    // CPA/CPB are synchronous response inputs.  Treat them as meaningful
+    // only on an enabled edge so changing a coprocessor response while the
+    // raw bus is stopped cannot alter address-class outputs mid-wait-state.
+    wire external_cp_ready   = external_cp_request && CLKEN && !CPA && !CPB;
+    wire external_cp_busy    = external_cp_request && CLKEN && !CPA &&  CPB;
     wire external_cp_is_mcr  = external_cp_request && instr_is_mcr;
     wire external_cp_is_mrc  = external_cp_request && instr_is_mrc;
     wire external_cp_is_ldc  = external_cp_request
@@ -1248,9 +1252,10 @@ module arm7tdmis_core_pipelined
     wire external_cp_is_stc  = external_cp_request
                              && (dec.instr_class == INSTR_LDC_STC)
                              && !de_q.instr[20];
-    wire cp_wait_ready       = (state_q == S_CP_WAIT) && !CPA && !CPB;
-    wire cp_ls_final         = cp_ls_data_state && CPA && CPB;
-    wire cp_undef_trap = executing && condition_pass && instr_is_cp
+    wire cp_wait_ready       = (state_q == S_CP_WAIT)
+                             && CLKEN && !CPA && !CPB;
+    wire cp_ls_final         = cp_ls_data_state && CLKEN && CPA && CPB;
+    wire cp_undef_trap = CLKEN && executing && condition_pass && instr_is_cp
                       && (instr_is_cp14 ? !cp14_supported : CPA);
 
     // ARM Addressing Mode 5. offset8 is scaled by four; P selects the
@@ -1308,7 +1313,7 @@ module arm7tdmis_core_pipelined
     // entering the vector sequence. Resolve higher-priority events from
     // raw boundary inputs here, independently of state_next, so this FSM
     // decision cannot form a combinational loop through interrupt_pending.
-    wire undef_recognition_starts = undef_pending
+    wire undef_recognition_starts = CLKEN && undef_pending
                                   && !pabt_pending
                                   && !fiq_interlock_fires
                                   && !debug_fiq_pending_q
@@ -1445,14 +1450,14 @@ module arm7tdmis_core_pipelined
     wire fiq_fires   = ((fiq_pending && !fiq_after_dabt_q)
                         || fiq_interlock_fires)
                      && !dabt_fires;
-    wire irq_fires   = irq_pending && !dabt_fires && !fiq_pending;
+    wire irq_fires   = irq_pending && !dabt_fires && !fiq_fires;
     wire pabt_fires  = pabt_pending && !dabt_fires
-                    && !fiq_pending && !irq_pending;
+                    && !fiq_fires && !irq_fires;
     wire undef_fires = (state_q == S_UNDEF_WAIT) && !dabt_fires
-                    && !fiq_pending && !irq_pending && !pabt_pending;
+                    && !fiq_fires && !irq_fires && !pabt_fires;
     wire swi_fires   = swi_pending && !dabt_fires
-                    && !fiq_pending && !irq_pending
-                    && !pabt_pending && !undef_pending;
+                    && !fiq_fires && !irq_fires
+                    && !pabt_fires && !undef_fires;
     wire external_dabt_cause = external_data_abort_q
                              || external_data_abort_now;
     wire debug_dabt_cause = debug_data_abort_q || debug_data_abort_now;

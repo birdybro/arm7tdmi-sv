@@ -297,8 +297,8 @@ module arm7tdmis_mister_savestate_tb;
         for (int index = 0; index < TRACE_LENGTH; index++) begin
             if (trace_second[index] != trace_first[index])
                 $fatal(1,
-                       "[mister_savestate] trace diverged at request %0d",
-                       index);
+                       "[mister_savestate] trace diverged at request %0d: expected %019x got %019x",
+                       index, trace_first[index], trace_second[index]);
         end
         if (memory[64] != first_end_memory)
             $fatal(1, "[mister_savestate] restored RAM result diverged");

@@ -78,6 +78,8 @@ SOAK_SEEDS ?= 256
 SOAK_OBJ_DIR := $(OBJ_DIR)/soak
 SOAK_BIN := $(SOAK_OBJ_DIR)/Varm7tdmis_mister_wrapper_tb
 SOAK_REPORT := ../reports/generated/soak-report.json
+FORMAL_REPORT := ../reports/generated/formal-report.json
+FORMAL_JOBS ?= 2
 ARM_TOOLCHAIN_ROOT := ../.tools
 ARM_TOOLCHAIN := \
 	$(ARM_TOOLCHAIN_ROOT)/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi
@@ -134,6 +136,7 @@ INTEG_RUN_ARGS_compiler = \
         quartus-option-characterization postfit-sim \
         sim run wave clean help regress regress-quick regress-ci \
         coverage release-evidence \
+        formal \
         traceability random-validation-build random-validation \
         random-validation-quick random-events-build random-events \
         public-suite-build public-suite \
@@ -332,6 +335,13 @@ functional-coverage:
 	    --manifest verification/functional_coverage.json \
 	    --regression reports/generated/regression.json \
 	    --output reports/generated/functional-coverage-report.json
+
+# VAL-007/VAL-008 use a release-pinned OSS CAD Suite archive and fail unless
+# every required proof and every named bounded cover statement closes.
+formal:
+	$(PYTHON) install_oss_cad_suite.py
+	PYTHONPATH=. $(PYTHON) formal_report.py \
+	    --jobs $(FORMAL_JOBS) --output $(FORMAL_REPORT)
 
 # VAL-002 builds the scoreboards once, then generates fresh source/reference
 # images and executes every deterministic seed through both oracle lanes.
@@ -572,6 +582,7 @@ help:
 	@echo "  public-suite run pinned MIT ARM and Thumb instruction exercisers"
 	@echo "  table7-cross validate all required Chapter 7 cross evidence in a full regression"
 	@echo "  functional-coverage close all ARMv4T encoding/policy bins"
+	@echo "  formal       prove VAL-007 and reach every VAL-008 cover obligation"
 	@echo "  random-validation run 32 x 256-instruction constrained-random seeds"
 	@echo "  random-events run 32 all-class external-event seeds"
 	@echo "  soak         run 256 deterministic sanitizer/X-propagation seeds"
