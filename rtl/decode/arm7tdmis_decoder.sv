@@ -152,6 +152,7 @@ module arm7tdmis_decoder
                 c = INSTR_UNDEF;
         end else if (c == INSTR_LDRH_STRH) begin
             if ((instr[15:12] == 4'hF)
+             || (!instr[22] && (instr[11:8] != 4'h0))
              || ((!instr[24] || instr[21])
               && ((instr[19:16] == instr[15:12])
                || (instr[19:16] == 4'hF)))
