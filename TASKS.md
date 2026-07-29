@@ -3076,9 +3076,14 @@ number of cycles spent in an internal FSM state.
   Thumb. Expose the documented bus/pipeline information required by ETM7.
 - [ ] **ETM-002:** Provide and test the external ETM wrapper contract, including direct
   RDATA/WDATA visibility, `PROCID=0`, `PROCIDWR=0`, and reset propagation.
-- [ ] **DFT-001:** For the FPGA profile, remove DFT from all "complete" claims and tie
+- [x] **DFT-001:** For the FPGA profile, remove DFT from all "complete" claims and tie
   it off in a named `no_dft` wrapper. If an ASIC profile remains a goal, create a
   separate scan-insertion specification and prove SE/SI/SO rather than tying SO low.
+  The misleading `arm7tdmis_chip` facade has been removed.
+  `arm7tdmis_no_dft` explicitly ignores SE/SI and ties SO LOW, carries no
+  scan-insertion claim, and is excluded from the FPGA file list/QIP. The packaging
+  unit test enforces its name, tie-off, wording, and exclusion. No ASIC DFT profile
+  is claimed.
 
 ## 31.8 Required r4p3 errata matrix
 

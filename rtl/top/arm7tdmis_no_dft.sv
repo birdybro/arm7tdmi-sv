@@ -1,23 +1,13 @@
-// Chip-level wrapper around arm7tdmis_top (TASKS.md §25).
+// Explicit no-DFT compatibility wrapper around arm7tdmis_top.
 //
-// Adds the DFT (Design For Test) pin set that production scan-insertion
-// tools (Quartus Test Bench Generator, Mentor TBX, or Tessent ScanPro)
-// would consume. At the RTL level the scan chain is empty — the wrapper
-// just exposes the pins. Actual scan-flop stitching happens during synth
-// when the tool sees the SE/SI/SO ports and the design's flops.
-//
-// Pin set:
-//   SE  — Scan enable. HIGH switches all scan-DFT flops from functional
-//         to scan mode. Drive from the FPGA pin per §30.25.1.
-//   SI  — Scan in. Per the scan order produced by the synth tool.
-//   SO  — Scan out. Endpoint of the longest scan chain.
-//
-// For our greenfield (no scan-DFT insertion yet) SO is tied LOW and
-// SE/SI are sunk into the unused-signal drain. The pin shapes are
-// stable so that a real scan-insertion flow can swap in later
-// without changing the top-level chip pin list.
+// This facade preserves the legacy SE/SI/SO pin shape for a containing
+// project that needs a deterministic non-scan build. It does not implement,
+// infer, or claim a scan chain: SE and SI are ignored and SO is always LOW.
+// It is excluded from the FPGA source package. A future ASIC DFT profile
+// requires its own insertion specification, generated chain manifest, and
+// structural/shift proof; this wrapper is not a substitute for that work.
 
-module arm7tdmis_chip
+module arm7tdmis_no_dft
     import arm7tdmis_bus_pkg::*, arm7tdmis_debug_pkg::*;
   #(
     parameter logic [3:0]  JTAG_VERSION = JTAG_DEFAULT_VERSION,
@@ -68,7 +58,7 @@ module arm7tdmis_chip
     output logic        DBGnTDOEN,
     output logic        DMORE,
 
-    // DFT pins (TASKS.md §25)
+    // Deliberately nonfunctional legacy scan-shaped pins.
     input  logic        SE,
     input  logic        SI,
     output logic        SO
@@ -121,10 +111,10 @@ module arm7tdmis_chip
         .DMORE          (DMORE)
     );
 
-    // Pre-DFT-insertion: SO ties LOW, SE/SI sunk.
+    // No DFT implementation: deterministic tie-off by contract.
     assign SO = 1'b0;
     /* verilator lint_off UNUSEDSIGNAL */
-    wire _unused_dft = &{1'b0, SE, SI};
+    wire _unused_no_dft = &{1'b0, SE, SI};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule

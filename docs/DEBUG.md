@@ -284,7 +284,7 @@ Standard IEEE 1149.1 16-state controller in `rtl/jtag/arm7tdmis_jtag_tap.sv`. No
 - The default IDCODE is `0x7F1F0F0F` (TRM §5.14.2 for the historical
   r4p3 macrocell). `JTAG_VERSION`, `JTAG_PART_NUMBER`, and
   `JTAG_MANUFACTURER_ID` parameters on `arm7tdmis_top` and
-  `arm7tdmis_chip` let a synthesized product publish its assigned identity.
+  `arm7tdmis_no_dft` let a synthesized product publish its assigned identity.
   IEEE IDCODE bit 0 is always constructed as one and cannot be overridden.
   Integrators must not ship the ARM default as their own vendor identity
   unless they are implementing a compatibility-only internal simulation.

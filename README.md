@@ -206,7 +206,7 @@ rtl/
                arm7tdmis_sync_debug_port.sv (same-CLK FPGA debug transport)
   top/         arm7tdmis_top.sv             (pin-level integration)
                arm7tdmi_mister.sv           (canonical FPGA memory wrapper)
-               arm7tdmis_chip.sv            (chip wrapper with DFT pins)
+               arm7tdmis_no_dft.sv          (excluded tied-off compatibility facade)
 
 tb/
   unit/        per-module SystemVerilog testbenches (10 tests)
