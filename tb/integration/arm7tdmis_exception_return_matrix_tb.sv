@@ -296,7 +296,7 @@ module arm7tdmis_exception_return_matrix_tb
                                         : 2'(SIZE_HALFWORD))
             || PROT !== 2'(PROT_OPC_USR)
             || LOCK !== LOCK_FREE
-            || TRANS !== 2'(TRANS_S))
+            || TRANS !== 2'(TRANS_N))
             fail(mode_idx, state_idx, form_idx, $sformatf(
                 "first target bus A/W/S/P/L/T=%08x/%0b/%02b/%02b/%0b/%02b",
                 ADDR, WRITE, SIZE, PROT, LOCK, TRANS));
@@ -313,20 +313,17 @@ module arm7tdmis_exception_return_matrix_tb
         input logic observed_lock,
         input logic [1:0] observed_trans
     );
-        logic [1:0] expected_trans;
-        expected_trans = (form_idx inside {1, 4})
-                       ? 2'(TRANS_I) : 2'(TRANS_N);
         if (observed_addr !== (TEST_PC + 32'd8)
             || observed_write !== WRITE_READ
             || observed_size !== 2'(SIZE_WORD)
             || observed_prot !== 2'(PROT_OPC_PRIV)
             || observed_lock !== LOCK_FREE
-            || observed_trans !== expected_trans)
+            || observed_trans !== 2'(TRANS_S))
             fail(mode_idx, state_idx, form_idx, $sformatf(
                 "source bus A/W/S/P/L/T=%08x/%0b/%02b/%02b/%0b/%02b expected %08x/0/10/10/0/%02b",
                 observed_addr, observed_write, observed_size,
                 observed_prot, observed_lock, observed_trans,
-                TEST_PC + 32'd8, expected_trans));
+                TEST_PC + 32'd8, TRANS_S));
     endtask
 
     task automatic check_shift_internal_bus(
@@ -339,7 +336,7 @@ module arm7tdmis_exception_return_matrix_tb
             || SIZE !== 2'(SIZE_WORD)
             || PROT !== 2'(PROT_DAT_PRIV)
             || LOCK !== LOCK_FREE
-            || TRANS !== 2'(TRANS_N))
+            || TRANS !== 2'(TRANS_I))
             fail(mode_idx, state_idx, form_idx, $sformatf(
                 "register-shift cycle 2 A/W/S/P/L/T=%08x/%0b/%02b/%02b/%0b/%02b",
                 ADDR, WRITE, SIZE, PROT, LOCK, TRANS));
@@ -355,7 +352,7 @@ module arm7tdmis_exception_return_matrix_tb
             || SIZE !== 2'(SIZE_WORD)
             || PROT !== 2'(PROT_DAT_PRIV)
             || LOCK !== LOCK_FREE
-            || TRANS !== 2'(TRANS_N))
+            || TRANS !== 2'(TRANS_I))
             fail(mode_idx, state_idx, form_idx, $sformatf(
                 "LDM pc+3i cycle A/W/S/P/L/T=%08x/%0b/%02b/%02b/%0b/%02b",
                 ADDR, WRITE, SIZE, PROT, LOCK, TRANS));
@@ -550,18 +547,20 @@ module arm7tdmis_exception_return_matrix_tb
                 await_target_follow = 1'b0;
             end
 
-            if ((TRANS == 2'(TRANS_N) || TRANS == 2'(TRANS_S))
+            if ((TRANS == 2'(TRANS_I)
+                 || TRANS == 2'(TRANS_N)
+                 || TRANS == 2'(TRANS_S))
                 && PROT[PROT_BIT_DATA]) begin
                 if (form_idx inside {1, 4}) begin
                     // Table 7-6's second register-shift cycle is an
-                    // address-only data-class N phase, not a data access
+                    // address-only data-class I phase, not a data access
                     // performed by the data-processing instruction.
                     check_shift_internal_bus(mode_idx, state_idx, form_idx);
                 end else begin
                     if (form_idx != 5)
                         fail(mode_idx, state_idx, form_idx,
                              "data transfer issued by data-processing return");
-                    if (redirect_seen) begin
+                    if (TRANS == 2'(TRANS_I)) begin
                         if (ldm_internal_seen)
                             fail(mode_idx, state_idx, form_idx,
                                  "more than one LDM pc+3i internal address phase");
@@ -571,11 +570,13 @@ module arm7tdmis_exception_return_matrix_tb
                         if (ADDR !== DATA_BASE || TRANS !== 2'(TRANS_N))
                             fail(mode_idx, state_idx, form_idx,
                                  "wrong first LDM data address/cycle");
+                        data_cycles++;
                     end else if (data_cycles == 1) begin
                         if (ADDR !== (DATA_BASE + 32'd4)
                             || TRANS !== 2'(TRANS_S))
                             fail(mode_idx, state_idx, form_idx,
                                  "wrong second LDM data address/cycle");
+                        data_cycles++;
                     end else begin
                         fail(mode_idx, state_idx, form_idx,
                              "too many LDM data address cycles");
@@ -584,8 +585,6 @@ module arm7tdmis_exception_return_matrix_tb
                         || PROT !== 2'(PROT_DAT_PRIV) || LOCK !== LOCK_FREE)
                         fail(mode_idx, state_idx, form_idx,
                              "wrong LDM data bus controls");
-                    if (!redirect_seen)
-                        data_cycles++;
                 end
             end
 
