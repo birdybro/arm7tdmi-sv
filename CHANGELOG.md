@@ -8,6 +8,9 @@ sign-off gate in `TASKS.md` §31.13.
 - Add an opt-in schema-1.0 architectural save-state handshake to the MiSTer
   wrapper, with exact quiescence, all physical register banks, deterministic
   replay, and Thumb BL-boundary restore evidence.
+- Add an always-regenerated QEMU differential covering 77 consecutive
+  ARM/Thumb retirements and final memory effects through the public
+  architectural retirement interface.
 - Complete the remaining independent validation, formal, toolchain,
   MiSTer-framework, PocketStation, and hardware requirements in `TASKS.md`.
 - Freeze v1.0 only after every release-gate statement has durable evidence.

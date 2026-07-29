@@ -10,6 +10,7 @@ release. [`TASKS.md`](../TASKS.md) §31 is the authoritative readiness ledger.
 | `arm7tdmis_top` raw API v1 | Supported for directed integration | ARM DDI 0234B pin semantics, reusable protocol checker, Chapter 7 directed phase matrices, and Quartus conformance profile |
 | Verilator 5.x | Supported simulator and linter | Local release characterization used Verilator 5.048; CI installs its distribution version and records the exact result |
 | Slang 11.0 | Supported independent SystemVerilog frontend | CI verifies the official Linux archive SHA-256 before compiling the generic SoC and records the phase log |
+| QEMU system ARM | Supported independent shared-subset reference | The differential runner records the exact installed version and compares 77 ARMv4T retirements; it does not treat ARM926 extensions or platform behavior as ARM7 evidence |
 | Quartus Lite 17.0.2 | Supported characterization tool | Analysis, synthesis, fit, assembly, and four-corner TimeQuest for Cyclone V `5CSEBA6U23I7` |
 | GNU Make and Python 3 | Supported orchestration | Exact versions are recorded by every regression and release manifest |
 | Icarus Verilog 13.0 | Not supported | Its SystemVerilog frontend rejects package/type syntax used by this RTL |

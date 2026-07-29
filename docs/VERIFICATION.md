@@ -127,6 +127,37 @@ destination, SVC link bank, CPSR, and saved pre-exception SPSR from the public
 snapshots. Memory initialization remains testbench hierarchy; architectural
 CPU observation does not.
 
+## Independent QEMU differential
+
+`make -C scripts integ-qemu_diff` builds
+`verification/programs/qemu_diff.S` for `-march=armv4t`, executes the linked
+image with `qemu-system-arm` on the ARM926 model using one guest instruction
+per translation block, then runs the same image on this RTL. QEMU is an
+external implementation: `qemu_armv4t_reference.py` imports no RTL package,
+decoder, or project expected-value function.
+
+The measured region has 77 consecutive retirements. It crosses ARM and Thumb,
+passed and failed conditions, immediate and register shifts, multiply,
+word/byte/halfword/signed loads and stores, LDM/STM, SWP, ARM BL, Thumb BL,
+and both directions of interworking. For every instruction the RTL
+scoreboard compares the instruction PC/state, post-state r0-r14, and the
+architectural CPSR fields. QEMU represents the ARMv4T two-halfword Thumb BL
+pair as one translated instruction; the generator records this normalization
+and splits that one log event into the architectural prefix LR write and
+suffix branch without replacing QEMU's final state. The scoreboard also
+compares five final memory words to the values independently loaded by QEMU.
+
+The comparison deliberately uses only behavior shared by ARM7TDMI and QEMU's
+ARM926: no ARMv5 encoding, exception/platform behavior, unaligned access, or
+architecturally UNPREDICTABLE input is generated. QEMU's later A bit and
+other non-ARM7 PSR extensions are masked; NZCV, T, I, F, and mode are not.
+Every run writes `metadata.json` beside `program.hex` and `expected.hex` with
+the exact Clang/QEMU identities, symbols, commands, normalization, event
+count, and SHA-256 hashes. Generated files live under
+`reports/generated/qemu_diff/` and are included in release-evidence archives.
+The test is first in `INTEG_TESTS`, so quick open-source CI and full local
+regression both regenerate rather than trusting a committed golden trace.
+
 ## Exhaustive encoding evidence
 
 `reserved_decode_tb` is deliberately exhaustive rather than sample-based. It

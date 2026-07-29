@@ -153,6 +153,15 @@ def _validated_files(
         if not option_report.is_file():
             raise ValueError("option characterization report is missing")
         candidates.append(option_report.resolve())
+    if "integration-qemu_diff" in phase_names:
+        qemu_directory = REPORT_ROOT / "qemu_diff"
+        if not (qemu_directory / "metadata.json").is_file():
+            raise ValueError("QEMU differential metadata is missing")
+        candidates.extend(
+            path.resolve()
+            for path in qemu_directory.rglob("*")
+            if path.is_file()
+        )
     return sorted(set(candidates))
 
 
@@ -167,9 +176,11 @@ def _file_entry(path: pathlib.Path) -> dict[str, Any]:
 
 def _tool_executable_manifest(tools: dict[str, str]) -> dict[str, Any]:
     commands = {
+        "clang": "clang",
         "git": "git",
         "make": "make",
         "python": sys.executable,
+        "qemu": "qemu-system-arm",
         "quartus": "quartus_map",
         "verilator": "verilator",
     }

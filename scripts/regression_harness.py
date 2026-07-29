@@ -48,7 +48,14 @@ def _utc_now() -> str:
 def _source_digest() -> str:
     """Hash every local source/build input, including untracked test files."""
     candidates: list[pathlib.Path] = []
-    for directory in ("rtl", "tb", "scripts", "fpga", "examples"):
+    for directory in (
+        "rtl",
+        "tb",
+        "verification",
+        "scripts",
+        "fpga",
+        "examples",
+    ):
         root = REPO_ROOT / directory
         for path in root.rglob("*"):
             if not path.is_file():
@@ -104,6 +111,8 @@ def collect_metadata(
         },
         "tools": {
             "verilator": _run_text(("verilator", "--version")),
+            "clang": _run_text(("clang", "--version")).splitlines()[0],
+            "qemu": _run_text(("qemu-system-arm", "--version")).splitlines()[0],
             "quartus": (
                 _run_text(("quartus_map", "--version"))
                 if include_fpga

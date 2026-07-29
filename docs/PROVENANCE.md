@@ -10,7 +10,8 @@ make a broader licensing claim. It is not legal advice.
 | `ARM_DDI_0234B_ARM7TDMI-S_r4p3_TRM.pdf` | Arm specification retained with its original notices; used as the behavioral reference and not relicensed by this project | `LicenseRef-Arm-DDI-0234B`; overall SPDX conclusion `NOASSERTION` |
 | Published r4p3 errata notice | Not vendored; `ERRATA.md` records the official URL, size, SHA-256, review date, and derived dispositions | `NOASSERTION` |
 | Test-program `.hex` files | Repository-authored hand encodings used only by the local verification benches | `GPL-3.0-only` |
-| Third-party ARM validation suites or reference emulator code | None vendored or claimed as evidence | `NOASSERTION` until a separately reviewed dependency is added |
+| QEMU differential reference | No QEMU code is vendored. The installed `qemu-system-arm` executable is invoked as an independent tool; each generated metadata file records its exact version, command, and output hashes | Governed by QEMU's upstream license terms; generated register facts are not committed to the repository |
+| Third-party ARM validation suites or other reference emulator code | None vendored or claimed as evidence | `NOASSERTION` until a separately reviewed dependency is added |
 | Firmware, BIOS, ROMs, games, and PocketStation software | None included. Users and downstream projects must supply only material they may lawfully use; it must not be committed to this repository | `NOASSERTION` |
 | GitHub Actions | Workflow references `actions/checkout@v4` and `actions/upload-artifact@v4`; action source is fetched by GitHub and is not vendored here | Governed by each upstream action |
 

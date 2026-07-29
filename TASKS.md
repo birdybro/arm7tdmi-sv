@@ -3286,9 +3286,23 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
 
 ## 31.10 P0/P1 — verification closure
 
-- [ ] **VAL-001:** Add an independent ARMv4T instruction reference model or
+- [x] **VAL-001:** Add an independent ARMv4T instruction reference model or
   differential co-simulation. It must not reuse this RTL's decoder or expected-value
   functions. Normalize documented implementation-defined/UNPREDICTABLE cases.
+  `verification/qemu_armv4t_reference.py` compiles one repository-authored
+  ARM/Thumb program for `-march=armv4t`, runs it independently on QEMU's
+  ARM926 model with one guest instruction per translation block, and converts
+  the external CPU log into post-instruction state without importing RTL,
+  decode packages, or expected-value functions. The shared-subset policy
+  excludes ARMv5 and architecturally UNPREDICTABLE inputs and masks only
+  QEMU-only PSR extension bits. `arm7tdmis_qemu_diff_tb.sv` compares 77
+  consecutive retirements across ARM/Thumb interworking, conditions, shifts,
+  multiply, word/byte/halfword/signed memory operations, block transfers,
+  SWP, ARM BL, and Thumb BL: PC/state, r0-r14, CPSR, and final memory must
+  agree. `make -C scripts integ-qemu_diff` regenerates the reference and
+  records tool/source/output hashes under the generated evidence tree; the
+  release archiver includes those files. It is first in the integration
+  manifest and therefore mandatory in both quick CI and full local regression.
 - [ ] **VAL-002:** Generate constrained-random ARM and Thumb programs with instruction,
   register, flag, mode, memory, exception, alignment, endian, and dependency coverage.
   Compare retirement state and permitted memory effects for long seeded runs.

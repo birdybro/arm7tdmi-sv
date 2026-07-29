@@ -32,7 +32,7 @@ The status words used here have the §31 meanings:
 | External coprocessor and CP14 | **VERIFIED** for §31.6: absent/ready/busy/abandonment, MCR/MRC/CDP/LDC/STC timing, CP14 DCC and Debug Abort Status, corrected errata 14/15 policy, and absence of internal CP15 are tested. |
 | EmbeddedICE-RT, JTAG, and trace boundary | **VERIFIED** for the checked §31.7/§31.8 requirements. The project provides the ARM-side ETM7 boundary, not an ETM macrocell. JTAG-006 real-debugger interoperability remains **PARTIAL**. |
 | FPGA/MiSTer package | **PARTIAL**. The canonical valid/ready wrapper, versioned save states, two public bus adapters, option profiles, CDC/reset contract, DMA arbitration, portable QIP/file lists, and two checked Quartus 17.0.2 flows exist. A real framework build, PocketStation integration, and hardware evidence remain open. |
-| Release evidence | **PARTIAL**. Regressions fail hard; machine-readable regression and structural-coverage reports, mutation tests, and a hashed evidence archive exist. The broader independent validation and FPGA release gates remain open. |
+| Release evidence | **PARTIAL**. Regressions fail hard; an independent 77-retirement QEMU differential, machine-readable regression and structural-coverage reports, mutation tests, and a hashed evidence archive exist. Broader random/formal/suite/compiler/soak validation and FPGA release gates remain open. |
 
 No unchecked §31 requirement is implied by a checked neighboring row. In
 particular, this repository is not yet advertised as a drop-in, issue-free

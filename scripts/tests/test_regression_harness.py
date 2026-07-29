@@ -23,6 +23,8 @@ class RegressionHarnessTest(unittest.TestCase):
         self.assertRegex(metadata["git"]["commit"], r"^[0-9a-f]{40}$")
         self.assertIsInstance(metadata["git"]["dirty"], bool)
         self.assertIn("Verilator", metadata["tools"]["verilator"])
+        self.assertIn("clang", metadata["tools"]["clang"].lower())
+        self.assertIn("QEMU emulator version", metadata["tools"]["qemu"])
         self.assertIn("Quartus", metadata["tools"]["quartus"])
         self.assertIn("Python", metadata["tools"]["python"])
         self.assertEqual(metadata["variant"], "unit-test")
