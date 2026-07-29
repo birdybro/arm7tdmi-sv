@@ -102,6 +102,7 @@ def collect_metadata(
         },
         "tools": {
             "verilator": _run_text(("verilator", "--version")),
+            "quartus": _run_text(("quartus_map", "--version")),
             "python": f"Python {sys.version.replace('\n', ' ')}",
             "make": _run_text(("make", "--version")).splitlines()[0],
             "git": _run_text(("git", "--version")),
@@ -117,6 +118,7 @@ def collect_metadata(
                 "testbench",
             ],
             "harness": ["unit", "expected-failure"],
+            "fpga": ["quartus-analysis"],
             "unit": list(unit_tests),
             "integration": list(integration_tests),
             "smoke": ["arm7tdmis_tb_top"],
@@ -213,6 +215,7 @@ def _phases(
     yield _make_phase("lint-rtl", "lint")
     yield _make_phase("lint-mister-wrapper", "lint-mister")
     yield _make_phase("lint-fpga-package-example", "lint-example")
+    yield _make_phase("quartus-analysis", "quartus-analysis")
     yield _make_phase("lint-testbench", "lint-tb")
     yield _make_phase("harness-unit", "harness-unit")
     yield _make_phase("harness-expected-failure", "harness-self-test")

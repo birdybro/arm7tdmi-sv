@@ -39,10 +39,8 @@
 //   Phase 6: Integration / swap at arm7tdmis_top        [pending]
 
 module arm7tdmis_core_pipelined
-    import arm7tdmis_types_pkg::*;
-    import arm7tdmis_psr_pkg::*;
-    import arm7tdmis_bus_pkg::*;
-    import arm7tdmis_instr_pkg::*;
+    import arm7tdmis_types_pkg::*, arm7tdmis_psr_pkg::*,
+           arm7tdmis_bus_pkg::*, arm7tdmis_instr_pkg::*;
 (
     input  logic        CLK,
     input  logic        CLKEN,
@@ -414,9 +412,7 @@ module arm7tdmis_core_pipelined
     // D stage update.
     always_ff @(posedge CLK) begin
         if (!nRESET) begin
-            de_q <= '{dec:'0, instr:32'h0, pc:32'h0, thumb:1'b0,
-                      pabort:1'b0, breakpoint:1'b0, injected:1'b0,
-                      valid:1'b0};
+            de_q <= '0;
         end else if (dbg_pc_write) begin
             de_q.valid <= 1'b0;
         end else if (CLKEN) begin
@@ -448,7 +444,8 @@ module arm7tdmis_core_pipelined
     // =====================================================================
 
     // Convenience alias for execute logic (mirrors the old core's `dec`).
-    wire decoded_t dec = de_q.dec;
+    decoded_t dec;
+    assign dec = de_q.dec;
 
     // Latches used during memory substates — same set as the non-pipelined
     // core. Snapshotted at end of S_EXEC because de_q.dec is held while in

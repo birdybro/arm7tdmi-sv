@@ -9,8 +9,7 @@
 // and SP/PC forms; only Format 16 carries an explicit condition.
 
 module arm7tdmis_thumb_decoder
-    import arm7tdmis_types_pkg::*;
-    import arm7tdmis_instr_pkg::*;
+    import arm7tdmis_types_pkg::*, arm7tdmis_instr_pkg::*;
 (
     input  logic [15:0] thumb_instr,
     output decoded_t    dec,
@@ -219,7 +218,8 @@ module arm7tdmis_thumb_decoder
             dec.dp_use_imm     = 1'b0;            // operand2 = Rm shifted
             dec.shifter_op     = shift_op_e'(fmt1_op);
             dec.shifter_amount = (fmt1_imm5 == 5'h00
-                                  && (fmt1_op inside {2'b01, 2'b10}))
+                                  && ((fmt1_op == 2'b01)
+                                      || (fmt1_op == 2'b10)))
                                 ? 8'd32 : {3'h0, fmt1_imm5};
             dec.shifter_is_rrx = 1'b0;
             dec.shifter_use_rs = 1'b0;

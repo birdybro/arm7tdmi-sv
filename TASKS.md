@@ -2880,8 +2880,10 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   `scripts/tests/test_fpga_package.py` proves exact source-manifest parity,
   repository-relative paths, public-fragment references, and absence of
   hierarchy-dependent integration; `make -C scripts lint-example` elaborates
-  the complete package as the selected Cyclone V example top. Both checks are
-  release-regression phases.
+  the complete package as the selected Cyclone V example top, and
+  `make -C scripts quartus-analysis` reads the QSF/QIP and successfully
+  analyzes/elaborates it with Quartus 17.0.2 for `5CSEBA6U23I7`. All three
+  checks are release-regression phases. Fit/timing evidence remains FPGA-003.
 - [ ] **MIST-006:** Add a versioned architectural state export/import handshake for
   MiSTer save states. Include all visible registers, banked registers, CPSR/SPSRs,
   pipeline and any in-flight bus/debug state (including a snapshot between Thumb BL

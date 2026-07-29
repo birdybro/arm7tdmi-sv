@@ -143,11 +143,14 @@ From the repository root, run:
 ```sh
 make -C scripts harness-unit
 make -C scripts lint-example
+make -C scripts quartus-analysis
 ```
 
 The first command proves that the plain file list and QIP contain exactly the
 public wrapper dependencies and that all package paths are portable. The
 second elaborates the package and example through the public wrapper only.
+The third reads the checked QSF/QIP with the MiSTer Quartus 17 frontend and
+runs analysis/elaboration for `5CSEBA6U23I7`.
 The supplied SDC assumes a 50 MHz standalone `CLK`; a containing MiSTer
 project must replace boundary delays and the clock period with its selected
 framework constraints while retaining equivalent reset/CDC treatment.
@@ -155,6 +158,9 @@ framework constraints while retaining equivalent reset/CDC treatment.
 ## Evidence and current limits
 
 `make -C scripts lint-mister` elaborates this wrapper as the synthesis top.
+`make -C scripts quartus-analysis` additionally proves that Quartus 17.0.2
+accepts and elaborates the complete public package for the selected Cyclone V.
+This is not a fit or timing-closure claim.
 `make -C scripts integ-mister_wrapper` runs a real ARM program through this
 interface with deterministic randomized CPU enables and memory waits. The
 test checks request stability and exact handshake count, accepts a response

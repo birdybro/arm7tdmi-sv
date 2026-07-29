@@ -7,8 +7,7 @@
 // tracked in TASKS.md §31.
 
 module arm7tdmis_top
-    import arm7tdmis_bus_pkg::*;
-    import arm7tdmis_debug_pkg::*;
+    import arm7tdmis_bus_pkg::*, arm7tdmis_debug_pkg::*;
   #(
     parameter logic [3:0]  JTAG_VERSION = JTAG_DEFAULT_VERSION,
     parameter logic [15:0] JTAG_PART_NUMBER = JTAG_DEFAULT_PART_NUMBER,

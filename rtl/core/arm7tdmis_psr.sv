@@ -26,8 +26,7 @@
 //   bit 3 (_f): bits [31:24] flags
 
 module arm7tdmis_psr
-    import arm7tdmis_psr_pkg::*;
-    import arm7tdmis_types_pkg::*;
+    import arm7tdmis_psr_pkg::*, arm7tdmis_types_pkg::*;
 (
     input  logic        CLK,
     input  logic        CLKEN,

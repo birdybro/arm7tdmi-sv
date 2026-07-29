@@ -162,7 +162,7 @@ features; the complete backlog is `TASKS.md` §31.
 
 | Gap | Why | Re-enable when |
 |---|---|---|
-| **Quartus place-and-route** | Toolchain not installed on the build box. RTL is written to Cyclone V conventions (ALM logic, MLAB/M10K BRAM inference, DSP for `*`); SDC first pass exists. | `§26` FPGA bring-up. |
+| **Quartus place-and-route** | Quartus 17.0.2 analysis/elaboration passes for the portable Cyclone V package; synthesis, fit, TimeQuest, assembly, and hardware evidence remain open. | `§31.11` FPGA closure. |
 | Correct exception, abort, endian, and bus timing | Release-blocking functional work. | Implement and verify §31.3–§31.5. |
 | MiSTer/PocketStation integration | The canonical wrapper and portable FPGA source package exist, but save states, framework/hardware builds, and a reference boot do not. | Complete §31.9. |
 | Formal/differential/coverage closure | Required sign-off evidence is absent. | Implement and verify §31.10. |

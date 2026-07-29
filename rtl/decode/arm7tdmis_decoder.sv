@@ -25,8 +25,7 @@
 //   SWI        : cond 1111 comment24
 
 module arm7tdmis_decoder
-    import arm7tdmis_types_pkg::*;
-    import arm7tdmis_instr_pkg::*;
+    import arm7tdmis_types_pkg::*, arm7tdmis_instr_pkg::*;
 (
     input  logic [31:0] instr,
     output decoded_t    dec,
@@ -186,7 +185,7 @@ module arm7tdmis_decoder
             // shift-by-register: amount = Rs[7:0] — the core picks this up
             // when shifter_use_rs=1.
             if (!instr[4] && instr[11:7] == 5'h00
-                && (instr[6:5] inside {2'b01, 2'b10}))
+                && ((instr[6:5] == 2'b01) || (instr[6:5] == 2'b10)))
                 dec.shifter_amount = 8'd32;
             else
                 dec.shifter_amount = instr[4] ? 8'h00

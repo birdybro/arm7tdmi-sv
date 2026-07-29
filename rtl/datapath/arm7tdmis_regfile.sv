@@ -31,8 +31,7 @@
 //   [29..30] r13_und, r14_und
 
 module arm7tdmis_regfile
-    import arm7tdmis_types_pkg::*;
-    import arm7tdmis_instr_pkg::*;
+    import arm7tdmis_types_pkg::*, arm7tdmis_instr_pkg::*;
 (
     input  logic        CLK,
     input  logic        CLKEN,

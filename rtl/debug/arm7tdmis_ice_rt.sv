@@ -1,8 +1,7 @@
 // EmbeddedICE-RT macrocell (TRM §5.14 / TASKS.md §22).
 
 module arm7tdmis_ice_rt
-    import arm7tdmis_debug_pkg::*;
-    import arm7tdmis_bus_pkg::*;
+    import arm7tdmis_debug_pkg::*, arm7tdmis_bus_pkg::*;
 (
     input  logic        CLK,
     input  logic        CLKEN,
