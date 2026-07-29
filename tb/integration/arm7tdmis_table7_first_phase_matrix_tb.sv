@@ -44,6 +44,7 @@ module arm7tdmis_table7_first_phase_matrix_tb
     logic DBGACK, DBGnEXEC, DBGINSTRVALID;
     logic [1:0] DBGRNG;
     logic DBGCOMMTX, DBGCOMMRX, DBGTDO, DBGnTDOEN, DMORE;
+    int unsigned errors = 0;
 
     arm7tdmis_top u_dut (
         .CLK, .CLKEN(1'b1), .nRESET, .CFGBIGEND(1'b0),
@@ -114,6 +115,10 @@ module arm7tdmis_table7_first_phase_matrix_tb
         endcase
     endfunction
 
+    function automatic logic [1:0] expected_size(input int row);
+        return row inside {7, 8} ? 2'(SIZE_HALFWORD) : 2'(SIZE_WORD);
+    endfunction
+
     function automatic logic expected_lock(input int row);
         return row == 11 ? LOCK_LOCKED : LOCK_FREE;
     endfunction
@@ -166,8 +171,9 @@ module arm7tdmis_table7_first_phase_matrix_tb
     endfunction
 
     task automatic fail(input int row, input string reason);
-        $fatal(1, "[table7_first_phase_matrix] FAIL row %0d %s: %s",
-               row, row_name(row), reason);
+        $display("[table7_first_phase_matrix] FAIL row %0d %s: %s",
+                 row, row_name(row), reason);
+        errors++;
     endtask
 
     task automatic setup_row(input int row);
@@ -221,21 +227,24 @@ module arm7tdmis_table7_first_phase_matrix_tb
 
         if (ADDR !== expected_addr(row)
             || WRITE !== expected_write(row)
-            || SIZE !== 2'(SIZE_WORD)
+            || SIZE !== expected_size(row)
             || PROT !== expected_prot(row)
             || LOCK !== expected_lock(row)
             || TRANS !== expected_trans(row))
             fail(row, $sformatf(
-                "first phase A/W/S/P/L/T=%08x/%0b/%02b/%02b/%0b/%02b expected %08x/%0b/10/%02b/%0b/%02b",
+                "first phase A/W/S/P/L/T=%08x/%0b/%02b/%02b/%0b/%02b expected %08x/%0b/%02b/%02b/%0b/%02b",
                 ADDR, WRITE, SIZE, PROT, LOCK, TRANS,
                 expected_addr(row), expected_write(row),
-                expected_prot(row), expected_lock(row),
+                expected_size(row), expected_prot(row), expected_lock(row),
                 expected_trans(row)));
     endtask
 
     initial begin
         for (int row = 0; row < ROW_COUNT; row++)
             run_row(row);
+        if (errors != 0)
+            $fatal(1, "[table7_first_phase_matrix] FAIL (%0d errors)",
+                   errors);
         $display("[table7_first_phase_matrix] PASS (%0d reset-isolated rows)",
                  ROW_COUNT);
         $finish;
