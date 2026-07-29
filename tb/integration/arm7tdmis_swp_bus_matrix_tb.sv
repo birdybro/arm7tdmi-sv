@@ -131,8 +131,11 @@ module arm7tdmis_swp_bus_matrix_tb
             if (ABORT && CLKEN)
                 seen_abort <= 1'b1;
 
-            if (CLKEN && (TRANS inside {TRANS_N, TRANS_S})
-                && PROT[PROT_BIT_DATA]) begin
+            // Table 7-15's final merged I-S prefetch retains data-class
+            // PROT while LOCK is already released. Count only the locked
+            // pair as SWP data transfers; the unlocked S is checked by the
+            // Table 7 phase matrix.
+            if (CLKEN && (TRANS inside {TRANS_N, TRANS_S}) && LOCK) begin
                 if (ADDR !== DATA_ADDR)
                     fail($sformatf("data address expected %08x got %08x",
                                    DATA_ADDR, ADDR));
