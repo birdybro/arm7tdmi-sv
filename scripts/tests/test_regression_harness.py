@@ -39,6 +39,7 @@ class RegressionHarnessTest(unittest.TestCase):
                 "quartus-compile",
                 "quartus-conformance-compile",
                 "quartus-option-characterization",
+                "postfit-sim",
             ],
         )
         self.assertEqual(metadata["manifest"]["smoke"], ["arm7tdmis_tb_top"])
@@ -65,6 +66,8 @@ class RegressionHarnessTest(unittest.TestCase):
         self.assertIn("quartus-conformance-compile", full)
         self.assertIn("quartus-option-characterization", full)
         self.assertNotIn("quartus-option-characterization", quick)
+        self.assertIn("postfit-sim", full)
+        self.assertNotIn("postfit-sim", quick)
 
     def test_simulation_only_profile_omits_every_quartus_phase(self) -> None:
         phases = [
@@ -78,6 +81,7 @@ class RegressionHarnessTest(unittest.TestCase):
         ]
 
         self.assertFalse(any(name.startswith("quartus-") for name in phases))
+        self.assertNotIn("postfit-sim", phases)
         self.assertIn("lint-rtl", phases)
         self.assertIn("harness-expected-failure", phases)
         self.assertIn("smoke", phases)

@@ -152,6 +152,7 @@ def collect_metadata(
                     "quartus-compile",
                     "quartus-conformance-compile",
                     "quartus-option-characterization",
+                    "postfit-sim",
                 ]
                 if include_fpga
                 else []
@@ -274,6 +275,7 @@ def _phases(
                 "quartus-option-characterization",
                 "quartus-option-characterization",
             )
+            yield _make_phase("postfit-sim", "postfit-sim")
     yield _make_phase("lint-testbench", "lint-tb")
     yield _make_phase("harness-unit", "harness-unit")
     yield _make_phase("harness-expected-failure", "harness-self-test")

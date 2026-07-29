@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -392,6 +393,87 @@ def _validated_files(
                 checker_path,
             )
         )
+    if "postfit-sim" in phase_names:
+        postfit_path = REPORT_ROOT / "postfit-report.json"
+        if not postfit_path.is_file():
+            raise ValueError("post-fit simulation report is missing")
+        postfit = json.loads(postfit_path.read_text(encoding="utf-8"))
+        if (
+            postfit.get("schema") != "arm7tdmis-postfit-v1"
+            or postfit.get("status") != "passed"
+        ):
+            raise ValueError("post-fit simulation report is not passed")
+        if postfit.get("git", {}).get("dirty"):
+            raise ValueError("post-fit report describes a dirty source tree")
+        if postfit.get("git", {}).get("commit") != regression.get(
+            "git", {}
+        ).get("commit"):
+            raise ValueError("post-fit report commit does not match regression")
+        if postfit.get("device") != "5CSEBA6U23I7":
+            raise ValueError("post-fit report targets the wrong device")
+        for tool_name in ("quartus_map", "quartus_fit", "quartus_eda"):
+            if (
+                "Version 17.0.2 Build 602 07/19/2017 SJ Lite Edition"
+                not in postfit.get("tools", {})
+                .get(tool_name, {})
+                .get("version", "")
+            ):
+                raise ValueError(
+                    f"post-fit report used the wrong {tool_name} version"
+                )
+
+        expected_primitives = {
+            "dffeas",
+            "cyclonev_lcell_comb",
+            "cyclonev_io_ibuf",
+            "cyclonev_io_obuf",
+            "cyclonev_clkena",
+        }
+        profiles = postfit.get("profiles", {})
+        if set(profiles) != {"little", "big"}:
+            raise ValueError("post-fit report lacks both endian profiles")
+        for name, expected_big_endian in (("little", False), ("big", True)):
+            profile = profiles[name]
+            metrics = profile.get("metrics", {})
+            netlist = profile.get("netlist", {})
+            if (
+                profile.get("status") != "passed"
+                or profile.get("big_endian") is not expected_big_endian
+                or profile.get("device") != "5CSEBA6U23I7"
+                or profile.get("synthesis_policy", {}).get(
+                    "auto_dsp_recognition"
+                )
+                != "off"
+                or set(profile.get("critical_warning_ids", []))
+                != {"169085", "332012"}
+                or set(netlist.get("primitives", [])) != expected_primitives
+                or not isinstance(netlist.get("bytes"), int)
+                or netlist["bytes"] <= 0
+                or not re.fullmatch(r"[0-9a-f]{64}", str(netlist.get("sha256")))
+                or metrics.get("accepted_transactions", 0) < 30
+                or metrics.get("accepted_while_cpu_ce_low", 0) < 1
+                or metrics.get("longest_wait_cycles", 0) < 2
+            ):
+                raise ValueError(f"post-fit {name} profile is incomplete")
+            for phase in ("map", "fit", "eda", "verilator", "simulation"):
+                log_entry = profile.get("logs", {}).get(phase, {})
+                log_path = _repo_path(str(log_entry.get("path", "")))
+                if (
+                    log_path.stat().st_size != log_entry.get("bytes")
+                    or _sha256(log_path) != log_entry.get("sha256")
+                ):
+                    raise ValueError(
+                        f"post-fit {name}/{phase} log hash mismatch"
+                    )
+                candidates.append(log_path)
+        for path_text, entry in postfit.get("inputs", {}).items():
+            input_path = _repo_path(str(path_text))
+            if (
+                input_path.stat().st_size != entry.get("bytes")
+                or _sha256(input_path) != entry.get("sha256")
+            ):
+                raise ValueError("post-fit input hash mismatch")
+        candidates.append(postfit_path.resolve())
     return sorted(set(candidates))
 
 

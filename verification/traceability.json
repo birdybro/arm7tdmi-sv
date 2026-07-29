@@ -88,6 +88,11 @@
       "tests": ["scripts/independent_lint.py", "scripts/cdc_rdc_check.py", "scripts/tests/test_fpga_quality_contract.py", "tb/integration/arm7tdmis_mister_cdc_reset_tb.sv"],
       "source_sections": ["TASKS.md section 31.11 FPGA-004"]
     },
+    "FPGA-006": {
+      "rtl": ["rtl/top/arm7tdmi_mister.sv", "rtl/core/", "fpga/"],
+      "tests": ["scripts/postfit_sim.py", "scripts/tests/test_postfit_sim_contract.py", "tb/postfit/arm7tdmi_postfit_tb.sv", "verification/intel_cyclonev_postfit_primitives.sv"],
+      "source_sections": ["TASKS.md section 31.11 FPGA-006 fitted-netlist contract"]
+    },
     "MIST-007": {
       "rtl": ["rtl/top/arm7tdmi_mister.sv", "fpga/"],
       "tests": ["OPEN - real MiSTer framework build evidence required"],
@@ -145,8 +150,12 @@
     {"glob": "verification/*.py", "requirements": ["VAL-001"]},
     {"glob": "verification/programs/*", "requirements": ["VAL-001"]},
     {"glob": "verification/compiler/*", "requirements": ["VAL-009"]},
+    {"glob": "verification/intel_cyclonev_postfit_primitives.sv", "requirements": ["FPGA-006"]},
+    {"glob": "tb/postfit/*.sv", "requirements": ["FPGA-006"]},
+    {"glob": "scripts/postfit_sim.py", "requirements": ["FPGA-006"]},
     {"glob": "scripts/tests/test_*.py", "requirements": ["VER-002", "VER-005"]},
     {"glob": "scripts/tests/test_fpga_quality_contract.py", "requirements": ["FPGA-004"]},
+    {"glob": "scripts/tests/test_postfit_sim_contract.py", "requirements": ["FPGA-006"]},
     {"glob": "scripts/tests/test_soak_contract.py", "requirements": ["VAL-010"]}
   ]
 }

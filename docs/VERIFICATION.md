@@ -255,6 +255,46 @@ evidence accepts a full-run soak only when all 256 seeds are unique and
 passing, the report names the same clean commit, and all recorded input
 hashes still match.
 
+## Fitted-netlist architectural simulation
+
+`make -C scripts postfit-sim` creates temporary Quartus Lite 17.0.2 projects
+for `arm7tdmi_mister` on `5CSEBA6U23I7`, one with `BIG_ENDIAN=0` and one with
+`BIG_ENDIAN=1`. Each project runs synthesis, fit, and the EDA netlist writer
+with `--functional`; the generated Verilog is then compiled and executed as a
+structural netlist by Verilator. The runner passes
+`--write_settings_files=off`, so Quartus cannot append simulation assignments
+to a checked production QSF.
+
+The simulation-only synthesis profile sets `AUTO_DSP_RECOGNITION OFF`. This
+keeps its functional netlist to five transparent primitive families:
+`dffeas`, `cyclonev_lcell_comb`, the input/output buffers, and
+`cyclonev_clkena`. The repository-authored clean-room zero-delay models in
+`verification/intel_cyclonev_postfit_primitives.sv` implement only that
+reviewed subset. The runner rejects any new primitive, `cyclonev_mac`,
+encrypted model dependency, or `altera_mf` dependency. Production DSP
+inference, timing, fit, and programming-image generation remain independently
+required by FPGA-003/005; this special profile is functional post-fit
+simulation, not a substitute for those production reports or an SDF timing
+claim.
+
+`arm7tdmi_postfit_tb.sv` observes only the fitted wrapper ports. For each
+endian netlist it cancels a held request with asynchronous reset, accepts a
+response while `CPU_CE` is low, then independently randomizes CPU enables and
+memory readiness. It requires stable valid/ready payloads, multi-cycle
+backpressure, reset-vector fetch, code and data transactions, correct
+byte/halfword endian lanes, an architectural memory signature, IRQ vector
+entry and handler signature, and word/byte/halfword writes.
+
+Schema `arm7tdmis-postfit-v1` records both netlist hashes and primitive
+inventories, all input hashes, exact executable identities, commands,
+transaction metrics, and hashed map/fit/EDA/build/simulation logs in
+`reports/generated/postfit-report.json`. Only the temporary profile's
+intentional missing-board-pin and missing-SDC critical-warning IDs are
+allowed; all other critical warnings fail. The two fitted netlists themselves
+are temporary and are not redistributed. Full regression requires the phase,
+and release evidence requires a passing clean same-commit report with both
+endian profiles and every recorded hash intact.
+
 ## Exhaustive encoding evidence
 
 `reserved_decode_tb` is deliberately exhaustive rather than sample-based. It

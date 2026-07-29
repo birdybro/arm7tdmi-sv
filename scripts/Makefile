@@ -22,6 +22,8 @@ LLVM_OBJCOPY ?= llvm-objcopy
 LLVM_NM   ?= llvm-nm
 QEMU_SYSTEM_ARM ?= qemu-system-arm
 QUARTUS_MAP ?= quartus_map
+QUARTUS_FIT ?= quartus_fit
+QUARTUS_EDA ?= quartus_eda
 QUARTUS_SH  ?= quartus_sh
 QUARTUS_POW ?= quartus_pow
 
@@ -56,6 +58,7 @@ COMPILER_DIR := ../reports/generated/compiler
 TRACEABILITY_REPORT := ../reports/generated/traceability-report.json
 INDEPENDENT_LINT_REPORT := ../reports/generated/independent-lint.json
 CDC_RDC_REPORT := ../reports/generated/cdc-rdc.json
+POSTFIT_REPORT := ../reports/generated/postfit-report.json
 SOAK_SEEDS ?= 256
 SOAK_OBJ_DIR := $(OBJ_DIR)/soak
 SOAK_BIN := $(SOAK_OBJ_DIR)/Varm7tdmis_mister_wrapper_tb
@@ -113,7 +116,7 @@ INTEG_RUN_ARGS_compiler = \
         cdc-rdc fpga-quality sim-generic-soc lint-tb \
         quartus-analysis quartus-compile \
         quartus-conformance-analysis quartus-conformance-compile \
-        quartus-option-characterization \
+        quartus-option-characterization postfit-sim \
         sim run wave clean help regress regress-quick regress-ci \
         coverage release-evidence \
         traceability soak-build soak \
@@ -208,6 +211,16 @@ quartus-option-characterization:
 	    cd ../scripts; \
 	done
 	PYTHONPATH=. $(PYTHON) quartus_option_characterization.py
+
+# FPGA-006 uses temporary little- and big-endian synthesis projects so the
+# production QSFs are never rewritten by the EDA netlist writer.
+postfit-sim:
+	PYTHONPATH=. $(PYTHON) postfit_sim.py \
+	    --output $(POSTFIT_REPORT) \
+	    --quartus-map $(QUARTUS_MAP) \
+	    --quartus-fit $(QUARTUS_FIT) \
+	    --quartus-eda $(QUARTUS_EDA) \
+	    --verilator $(VERILATOR)
 
 lint-tb:
 	$(VERILATOR) --lint-only $(VFLAGS_LINT) --top-module $(TOP_TB) -f $(SIM_F) -f $(TB_F)
@@ -430,6 +443,7 @@ help:
 	@echo "  quartus-conformance-analysis Quartus analysis of the raw/full profile"
 	@echo "  quartus-conformance-compile Full Quartus/power raw/full profile"
 	@echo "  quartus-option-characterization Fit/power all four option profiles"
+	@echo "  postfit-sim  fit/simulate little- and big-endian wrapper netlists"
 	@echo "  lint-tb      Verilator --lint-only including the integration TB"
 	@echo "  sim          build the integration testbench binary"
 	@echo "  run          build and run; emits cycle.csv + waves.fst"

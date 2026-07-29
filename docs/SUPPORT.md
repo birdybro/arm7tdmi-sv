@@ -6,14 +6,14 @@ release. [`TASKS.md`](../TASKS.md) §31 is the authoritative readiness ledger.
 
 | Surface or tool | Status | Checked scope |
 |---|---|---|
-| `arm7tdmi_mister` valid/ready API v1 | Supported for directed integration | Verilator execution, randomized waits and CPU enables, errors, CDC/reset, all option profiles, DMA arbitration, and Quartus characterization |
+| `arm7tdmi_mister` valid/ready API v1 | Supported for directed integration | RTL and two-endian fitted-netlist execution, randomized waits and CPU enables, errors, CDC/reset, all option profiles, DMA arbitration, and Quartus characterization |
 | `arm7tdmis_top` raw API v1 | Supported for directed integration | ARM DDI 0234B pin semantics, reusable protocol checker, Chapter 7 directed phase matrices, and Quartus conformance profile |
 | Synchronous debug-step bridge | Supported project-specific JTAG-006 transport | Same-CLK ready/valid virtual-TCK steps, backpressure, policy isolation, public-wrapper/QIP packaging, and real-TAP scan evidence; no asynchronous pod or GDB process is claimed |
 | Verilator 5.x | Supported simulator and linter | Local release characterization used Verilator 5.048; CI installs its distribution version and records the exact result |
 | Slang 11.0 | Supported independent SystemVerilog frontend | CI verifies the official Linux archive SHA-256; zero-warning elaboration covers all five public synthesis tops and records hashed diagnostics |
 | QEMU system ARM | Supported independent shared-subset reference | The differential runner records the exact installed version and compares 77 ARMv4T retirements; it does not treat ARM926 extensions or platform behavior as ARM7 evidence |
 | Arm GNU Toolchain 14.3.Rel1 | Supported pinned compiler-program tool on Linux x86-64 | The archive SHA-256 and GCC identity are checked; separate ARM and Thumb C units execute bidirectional ARMv4T interworking and a fail-hard memory signature |
-| Quartus Lite 17.0.2 | Supported characterization tool | Analysis, synthesis, fit, assembly, and four-corner TimeQuest for Cyclone V `5CSEBA6U23I7` |
+| Quartus Lite 17.0.2 | Supported characterization and post-fit tool | Analysis, synthesis, fit, assembly, and four-corner TimeQuest for Cyclone V `5CSEBA6U23I7`; temporary little-/big-endian functional netlists execute architectural wrapper scoreboards |
 | GNU Make and Python 3 | Supported orchestration | Exact versions are recorded by every regression and release manifest |
 | Icarus Verilog 13.0 | Not supported | Its SystemVerilog frontend rejects package/type syntax used by this RTL |
 | Yosys/SymbiYosys and other synthesis/formal tools | Not yet verified | FPGA-004 uses the permitted independent-linter path plus structural CDC/RDC; formal closure remains VAL-007/008 |

@@ -3448,8 +3448,25 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   headroom, 28.79/27.24 MHz worst-model Fmax, and explicitly low-confidence
   450.07/457.79 mW estimates. `test_characterization_contract.py` and
   `test_quartus_report_check.py` freeze the flow and schema.
-- [ ] **FPGA-006:** Prove synthesis equivalence or run post-synthesis simulation for
+- [x] **FPGA-006:** Prove synthesis equivalence or run post-synthesis simulation for
   architectural smoke, stalls, reset, endian, exceptions, and wrapper transactions.
+  `scripts/postfit_sim.py` creates isolated Quartus Lite 17.0.2 projects for
+  little- and big-endian `arm7tdmi_mister` instances on `5CSEBA6U23I7`, runs
+  synthesis and fit, emits functional post-fit Verilog without modifying any
+  checked QSF, rejects unmodeled/encrypted primitives, and executes each
+  structural netlist with Verilator. The simulation profile disables automatic
+  DSP recognition solely to use the five repository-authored clean-room
+  zero-delay primitive models in
+  `verification/intel_cyclonev_postfit_primitives.sv`; FPGA-003/005 separately
+  require the production DSP, timing, and programming-image flow.
+  `arm7tdmi_postfit_tb.sv` checks reset during a held request, response
+  buffering while `CPU_CE` is low, randomized independent CPU/memory stalls,
+  stable wrapper payloads, reset and IRQ vectors, handler and architectural
+  signatures, code/data metadata, all write widths, and exact endian lanes
+  through public fitted pins only. `make -C scripts postfit-sim` writes schema
+  `arm7tdmis-postfit-v1` with both netlist/primitive/input/tool/log hashes and
+  transaction metrics. It is mandatory in full regression; release evidence
+  requires a clean same-commit result for both endian profiles.
 - [ ] **FPGA-007:** Perform on-board bring-up with an embedded trace/signature test,
   repeatable programming instructions, and captured evidence; then run the
   PocketStation reference integration on hardware.
