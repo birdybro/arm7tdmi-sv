@@ -146,6 +146,32 @@ module psr_tb
         enter_mode(MODE_USER);
         @(negedge CLK);
         check1("spsr_valid in user", spsr_valid, 1'b0);
+
+        // User mode may write only the condition flags in CPSR. First
+        // prove an _f write is accepted.
+        cpsr_write_data = 32'hA000_0000;
+        cpsr_write_mask = 4'b1000;
+        cpsr_write_en   = 1'b1;
+        @(posedge CLK);
+        @(negedge CLK);
+        cpsr_write_en   = 1'b0;
+        check32("user CPSR flags writable", 32'(cpsr) & 32'hF000_0000,
+                32'hA000_0000);
+
+        // Then attempt to escape User mode and clear both interrupt masks
+        // through CPSR_c. ARMv4T requires all privileged control fields to
+        // remain unchanged.
+        cpsr_write_data      = 32'h0;
+        cpsr_write_data[4:0] = MODE_SUPERVISOR;
+        cpsr_write_mask      = 4'b0001;
+        cpsr_write_en        = 1'b1;
+        @(posedge CLK);
+        @(negedge CLK);
+        cpsr_write_en = 1'b0;
+        check32("user CPSR mode protected", 32'(cpsr.m), 32'(MODE_USER));
+        check1("user CPSR I protected", cpsr.i, 1'b1);
+        check1("user CPSR F protected", cpsr.f, 1'b1);
+
         enter_mode(MODE_SYSTEM);
         @(negedge CLK);
         check1("spsr_valid in system", spsr_valid, 1'b0);
