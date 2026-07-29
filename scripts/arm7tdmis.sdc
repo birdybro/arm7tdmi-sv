@@ -1,49 +1,102 @@
-# ARM7TDMI-S Cyclone V timing constraints (TASKS.md §26 / §30.26).
+# Standalone raw-interface constraints for synthesis top arm7tdmis_top.
 #
-# Target part: Cyclone V (concrete partnumber TBD — see §30.26.1).
-# Conservative initial constraints to allow first-pass place-and-route;
-# tighten once timing closure measurements come back from Quartus.
+# This is intentionally not the DFT chip wrapper and therefore contains no
+# SE/SI/SO constraints. DBGTCKEN is a synchronous enable in the CLK domain;
+# there is no DBGTCK port or generated debug clock in this implementation.
 
-# ---- Main clock (CLK). 100 MHz nominal for first bring-up.
-create_clock -name CLK -period 10.0 [get_ports CLK]
+# Initial raw-core characterization point: 100 MHz.
+create_clock -name CLK -period 10.000 [get_ports {CLK}]
+derive_clock_uncertainty
 
-# JTAG TCK runs much slower than the system clock (typical Multi-ICE
-# settings: 10 MHz). Treat as an asynchronous clock.
-create_clock -name DBGTCK -period 100.0 [get_ports DBGTCK]
+# Both reset pins assert asynchronously. Integration must release each only
+# after CLK is stable; nRESET's architectural release is synchronized inside
+# arm7tdmis_top. Debug state is independently held by DBGnTRST.
+set_false_path -from [get_ports {nRESET DBGnTRST}]
 
-# CLK and DBGTCK are asynchronous to each other.
-set_clock_groups -asynchronous \
-    -group {CLK} \
-    -group {DBGTCK}
+# Every non-reset input below is synchronous to CLK at this raw boundary.
+# In particular, nIRQ/nFIQ and the debug event pins are not synchronized by
+# arm7tdmis_top; an asynchronous board source needs an external synchronizer
+# or the canonical arm7tdmi_mister wrapper.
+set_input_delay -clock CLK -min 0.000 [get_ports {
+    CLKEN
+    CFGBIGEND
+    nIRQ
+    nFIQ
+    ABORT
+    RDATA[*]
+    CPA
+    CPB
+    DBGEN
+    DBGRQ
+    DBGBREAK
+    DBGEXT[*]
+    DBGTCKEN
+    DBGTMS
+    DBGTDI
+}]
+set_input_delay -clock CLK -max 5.000 [get_ports {
+    CLKEN
+    CFGBIGEND
+    nIRQ
+    nFIQ
+    ABORT
+    RDATA[*]
+    CPA
+    CPB
+    DBGEN
+    DBGRQ
+    DBGBREAK
+    DBGEXT[*]
+    DBGTCKEN
+    DBGTMS
+    DBGTDI
+}]
 
-# ---- Async reset paths.
-# nRESET and DBGnTRST are asynchronous resets, synchronized inside the
-# design (arm7tdmis_reset_sync.sv for nRESET; per-stage flops for the
-# JTAG TAP and ICE-RT macrocell). Mark the paths from these pins as
-# false (timing analysis can't bound async assert).
-set_false_path -from [get_ports nRESET]
-set_false_path -from [get_ports DBGnTRST]
-
-# ---- Async control pins.
-# nIRQ / nFIQ / DBGRQ / DBGBREAK / DBGEXT* are asynchronous to CLK and
-# get sampled through 2-flop synchronizers inside the macrocell. Don't
-# constrain the input-delay tightly; mark as false.
-set_false_path -from [get_ports nIRQ]
-set_false_path -from [get_ports nFIQ]
-set_false_path -from [get_ports DBGRQ]
-set_false_path -from [get_ports DBGBREAK]
-set_false_path -from [get_ports DBGEXT[*]]
-
-# ---- I/O timing — relaxed to 5 ns I/O delay for first pass.
-set_input_delay  -clock CLK -max 5.0 [get_ports {RDATA[*] ABORT CPA CPB CFGBIGEND CLKEN DBGEN DBGTCKEN DBGTMS DBGTDI}]
-set_output_delay -clock CLK -max 5.0 [get_ports {ADDR[*] WRITE SIZE[*] PROT[*] LOCK TRANS[*] WDATA[*] CPnMREQ CPSEQ CPnTRANS CPnOPC CPTBIT CPnI DBGACK DBGnEXEC DBGINSTRVALID DBGRNG[*] DBGCOMMTX DBGCOMMRX DMORE}]
-
-# DBGTDO is in the DBGTCK domain.
-set_output_delay -clock DBGTCK -max 20.0 [get_ports {DBGTDO DBGnTDOEN}]
-
-# ---- DFT scan chain — held LOW during functional timing analysis.
-# Scan paths through SE/SI/SO are timed separately by scan-insertion
-# tools (Quartus DFT or Tessent ScanPro).
-set_false_path -from [get_ports SE]
-set_false_path -from [get_ports SI]
-set_false_path -to   [get_ports SO]
+set_output_delay -clock CLK -min 0.000 [get_ports {
+    ADDR[*]
+    WRITE
+    SIZE[*]
+    PROT[*]
+    LOCK
+    TRANS[*]
+    WDATA[*]
+    CPnMREQ
+    CPSEQ
+    CPnTRANS
+    CPnOPC
+    CPTBIT
+    CPnI
+    DBGACK
+    DBGnEXEC
+    DBGINSTRVALID
+    DBGRNG[*]
+    DBGCOMMTX
+    DBGCOMMRX
+    DBGTDO
+    DBGnTDOEN
+    DMORE
+}]
+set_output_delay -clock CLK -max 5.000 [get_ports {
+    ADDR[*]
+    WRITE
+    SIZE[*]
+    PROT[*]
+    LOCK
+    TRANS[*]
+    WDATA[*]
+    CPnMREQ
+    CPSEQ
+    CPnTRANS
+    CPnOPC
+    CPTBIT
+    CPnI
+    DBGACK
+    DBGnEXEC
+    DBGINSTRVALID
+    DBGRNG[*]
+    DBGCOMMTX
+    DBGCOMMRX
+    DBGTDO
+    DBGnTDOEN
+    DMORE
+}]

@@ -2949,9 +2949,14 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
 
 ## 31.11 P0/P1 — synthesis, timing, CDC, and FPGA quality
 
-- [ ] **FPGA-001:** Fix `scripts/arm7tdmis.sdc`: there is no `DBGTCK` port; the design
+- [x] **FPGA-001:** Fix `scripts/arm7tdmis.sdc`: there is no `DBGTCK` port; the design
   uses `CLK` plus `DBGTCKEN`. Select the actual synthesis top before constraining DFT
   pins. Do not false-path synchronous nIRQ/nFIQ inputs as if the RTL synchronized them.
+  The rewritten constraint file explicitly targets `arm7tdmis_top`, defines
+  only `CLK`, treats `DBGTCKEN` and raw interrupt/debug controls as
+  synchronous inputs, and contains no chip-wrapper DFT pins.
+  `scripts/tests/test_sdc_contract.py` checks those invariants and separately
+  checks the canonical FPGA wrapper's real clock/async boundary.
 - [ ] **FPGA-002:** Choose exact MiSTer/Cyclone V part and board clock. Constrain all
   real clocks, generated enables/interfaces, I/O delays, async controls, reset recovery/
   removal, and legitimate CDC paths. Report zero unconstrained endpoints.
