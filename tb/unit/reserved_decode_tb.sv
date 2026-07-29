@@ -49,6 +49,7 @@ module reserved_decode_tb
     int unsigned arm_class_count [0:15];
     int unsigned arm_nv_class_count [0:15];
     int unsigned thumb_reserved_count [0:1];
+    int unsigned thumb_policy_unpredictable_count;
 
     // Independent ARMv4T allocation map for the twelve architectural
     // decode bits.  The order follows the extension-space rules in A3.16,
@@ -148,6 +149,18 @@ module reserved_decode_tb
         word[7:4]   = op_lo;
 
         case (expected)
+            INSTR_MUL: begin
+                word[19:16] = 4'd1;
+                word[15:12] = op_hi[1] ? 4'd2 : 4'd0;
+                word[11:8]  = 4'd3;
+                word[3:0]   = 4'd4;
+            end
+            INSTR_MULL: begin
+                word[19:16] = 4'd1;
+                word[15:12] = 4'd2;
+                word[11:8]  = 4'd3;
+                word[3:0]   = 4'd4;
+            end
             INSTR_MRS: begin
                 word[19:16] = 4'hF;
                 word[11:0]  = 12'h000;
@@ -167,6 +180,7 @@ module reserved_decode_tb
                 word[15:12] = 4'd2;
                 word[3:0]   = 4'd3;
             end
+            INSTR_LDC_STC: word[19:16] = 4'd1;
             default: ;
         endcase
 
@@ -180,6 +194,26 @@ module reserved_decode_tb
             || (word inside {[16'hDE00:16'hDEFF]})
             || (word inside {[16'hE800:16'hEFFF]});
     endfunction
+
+    // These remain allocated ARMv4T format-map rows. Their operand/SBZ
+    // violations are UNPREDICTABLE and separately assigned the project's
+    // precise-Undefined ISA-016 policy.
+    /* verilator lint_off UNUSEDSIGNAL */
+    function automatic logic thumb_policy_unpredictable_v4t(
+        input logic [15:0] word
+    );
+        logic is_fmt5;
+        logic [1:0] op;
+        is_fmt5 = (word[15:10] == 6'b010001);
+        op = word[9:8];
+        return is_fmt5
+            && (((op != 2'b11)
+                 && ((!word[7] && !word[6])
+                  || ((op == 2'b01) && ({word[7], word[2:0]} == 4'd15))))
+             || ((op == 2'b11)
+                 && (word[7] || (word[2:0] != 3'b000))));
+    endfunction
+    /* verilator lint_on UNUSEDSIGNAL */
 
     task automatic fail_arm(
         input logic [7:0] op_hi,
@@ -206,6 +240,7 @@ module reserved_decode_tb
     initial begin
         instr_class_e expected;
         logic expected_reserved;
+        logic expected_policy_unpredictable;
 
         errors = 0;
         arm_instr = 32'h0;
@@ -216,6 +251,7 @@ module reserved_decode_tb
             arm_nv_class_count[i] = 0;
         thumb_reserved_count[0] = 0;
         thumb_reserved_count[1] = 0;
+        thumb_policy_unpredictable_count = 0;
 
         // Exhaust the complete architectural ARM decode-bit domain.
         for (int hi = 0; hi < 256; hi++) begin
@@ -287,11 +323,19 @@ module reserved_decode_tb
         // Exhaust every possible original Thumb instruction.
         for (int word = 0; word < 65536; word++) begin
             expected_reserved = thumb_reserved_v4t(word[15:0]);
+            expected_policy_unpredictable =
+                thumb_policy_unpredictable_v4t(word[15:0]);
             thumb_instr = word[15:0];
             #1;
             thumb_reserved_count[expected_reserved]++;
+            if (expected_policy_unpredictable)
+                thumb_policy_unpredictable_count++;
 
             if (expected_reserved) begin
+                if ((thumb_dec.instr_class !== INSTR_UNDEF)
+                 || (thumb_is_unimplemented !== 1'b1))
+                    fail_thumb(word[15:0], expected_reserved);
+            end else if (expected_policy_unpredictable) begin
                 if ((thumb_dec.instr_class !== INSTR_UNDEF)
                  || (thumb_is_unimplemented !== 1'b1))
                     fail_thumb(word[15:0], expected_reserved);
@@ -306,10 +350,15 @@ module reserved_decode_tb
                      thumb_reserved_count[0], thumb_reserved_count[1]);
             errors++;
         end
+        if (thumb_policy_unpredictable_count != 448) begin
+            $display("FAIL [Thumb policy coverage]: expected 448 got %0d",
+                     thumb_policy_unpredictable_count);
+            errors++;
+        end
 
         if (errors != 0)
             $fatal(1, "reserved_decode_tb: FAIL (%0d errors)", errors);
-        $display("reserved_decode_tb: PASS (4096 ARM decode rows, 65536 Thumb words)");
+        $display("reserved_decode_tb: PASS (4096 ARM decode rows, 65536 Thumb words, 448 policy traps)");
         $finish;
     end
 

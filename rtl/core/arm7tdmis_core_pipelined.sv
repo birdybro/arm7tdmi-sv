@@ -1385,7 +1385,11 @@ module arm7tdmis_core_pipelined
     // a cycle too early.
     wire exec_writes_rf   = (dp_writes_dest && !dp_shift_take_cycle)
                          || branch_link_writes || any_exc_fires;
-    wire writes_flags     = (passes_cond && instr_is_dp && dec.s_bit && !dp_shift_take_cycle)
+    // An S+PC data operation requests CPSR restoration, not an ordinary
+    // ALU flag update. In User/System the selected no-SPSR policy ignores
+    // that restore and therefore leaves CPSR unchanged.
+    wire writes_flags     = (passes_cond && instr_is_dp && dec.s_bit
+                          && !dp_writes_pc && !dp_shift_take_cycle)
                          || mul_writes_flags;
 
     // CPSR := SPSR-of-current-mode fires on:
@@ -2024,7 +2028,8 @@ module arm7tdmis_core_pipelined
                     dp_shift_result_q    <= alu_result;
                     dp_shift_flags_q     <= alu_flags_merged;
                     dp_shift_writes_q    <= dp_writes_dest;
-                    dp_shift_flags_we_q  <= passes_cond && instr_is_dp && dec.s_bit;
+                    dp_shift_flags_we_q  <= passes_cond && instr_is_dp
+                                          && dec.s_bit && !dp_writes_pc;
                     dp_shift_writes_pc_q <= dp_writes_pc;
                     dp_shift_restore_q   <= dp_writes_pc && dec.s_bit;
                 end

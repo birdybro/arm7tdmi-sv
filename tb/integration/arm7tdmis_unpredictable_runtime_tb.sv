@@ -6,6 +6,8 @@
 //   * ARM7TDMI-S register-controlled data operations accept r15 in every
 //     operand position. Rn/Rs use pc+8, Rm uses the r4p3 pc+12 value, and a
 //     destination-PC result is aligned in the current state.
+//   * MOVS pc,<op> in User/System has no SPSR to restore. The selected policy
+//     commits the aligned PC result and leaves CPSR unchanged.
 //   * address arithmetic wraps modulo 2^32.
 //
 // Every case starts from reset. A marker after a redirected instruction must
@@ -19,7 +21,7 @@ module arm7tdmis_unpredictable_runtime_tb
     import arm7tdmis_types_pkg::*;
 ;
 
-    localparam int CASE_COUNT = 5;
+    localparam int CASE_COUNT = 7;
 
     logic CLK;
     initial begin
@@ -152,6 +154,22 @@ module arm7tdmis_unpredictable_runtime_tb
             // At 0xfffffff8, visible PC wraps to zero. Offset +0x40.
             u_mem.mem[254] = 32'hEA00_0010;
             u_mem.mem[255] = 32'hE1A0_0000;
+        end else begin
+            // Seed NZCV, select a mode without an SPSR, then execute the
+            // otherwise-normal exception-return spelling.
+            u_mem.mem[8]  = 32'hE59F_0058; // r0 <- target 0x100
+            u_mem.mem[9]  = 32'hE59F_2058; // r2 <- 0xa0000000
+            u_mem.mem[10] = 32'hE128_F002; // MSR CPSR_f,r2
+            u_mem.mem[11] = (case_id == 6)
+                          ? 32'hE321_F0D0  // User
+                          : 32'hE321_F0DF; // System
+            u_mem.mem[12] = 32'hE1B0_F000; // MOVS pc,r0
+            u_mem.mem[13] = 32'hE3A0_50EE; // flushed successor
+            u_mem.mem[32] = 32'h0000_0102;
+            u_mem.mem[33] = 32'hA000_0000;
+            u_mem.mem[64] = 32'hE10F_6000; // target: MRS r6,CPSR
+            u_mem.mem[65] = 32'hE3A0_7000 | 32'(case_id);
+            u_mem.mem[66] = 32'hEAFF_FFFE;
         end
     endtask
 
@@ -201,7 +219,22 @@ module arm7tdmis_unpredictable_runtime_tb
                 if (!saw_high_fetch || !saw_wrapped_target)
                     fail(case_id, "did not observe high fetch and wrapped target");
             end
-            default: ;
+            6: begin
+                if (u_dut.u_core.u_regfile.regs[6] !== 32'hA000_00D0)
+                    fail(case_id, $sformatf(
+                        "User MOVS pc CPSR expected a00000d0 got %08x",
+                        u_dut.u_core.u_regfile.regs[6]));
+                if (u_dut.u_core.cpsr.m !== 5'(MODE_USER))
+                    fail(case_id, "User MOVS pc changed mode");
+            end
+            default: begin
+                if (u_dut.u_core.u_regfile.regs[6] !== 32'hA000_00DF)
+                    fail(case_id, $sformatf(
+                        "System MOVS pc CPSR expected a00000df got %08x",
+                        u_dut.u_core.u_regfile.regs[6]));
+                if (u_dut.u_core.cpsr.m !== 5'(MODE_SYSTEM))
+                    fail(case_id, "System MOVS pc changed mode");
+            end
         endcase
     endtask
 

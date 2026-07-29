@@ -162,6 +162,52 @@ module arm7tdmis_decoder
                 c = INSTR_UNDEF;
         end
 
+        // Allocated instruction rows still contain architecturally
+        // constrained operand/SBZ fields. ARMv4T calls violations
+        // UNPREDICTABLE rather than Undefined; this implementation gives
+        // every statically detectable violation the same safe outcome as
+        // the transfer policies above: a precise Undefined trap.
+        if (c == INSTR_DP) begin
+            // TST/TEQ/CMP/CMN require Rd=0000. MOV/MVN require Rn=0000.
+            // (Their required S values are already enforced by the
+            // control-extension decode above.)
+            if ((((instr[24:21] inside {4'h8, 4'h9, 4'hA, 4'hB}))
+                  && (instr[15:12] != 4'h0))
+             || (((instr[24:21] == 4'hD) || (instr[24:21] == 4'hF))
+                  && (instr[19:16] != 4'h0)))
+                c = INSTR_UNDEF;
+        end else if (c == INSTR_MUL) begin
+            // MUL's unused accumulator field is SBZ. All four MLA
+            // operands, or all three MUL operands, exclude r15.
+            if ((instr[19:16] == 4'hF)
+             || (instr[11:8]  == 4'hF)
+             || (instr[3:0]   == 4'hF)
+             || (instr[21] && (instr[15:12] == 4'hF))
+             || (!instr[21] && (instr[15:12] != 4'h0)))
+                c = INSTR_UNDEF;
+        end else if (c == INSTR_MULL) begin
+            if ((instr[19:16] == 4'hF)
+             || (instr[15:12] == 4'hF)
+             || (instr[11:8]  == 4'hF)
+             || (instr[3:0]   == 4'hF)
+             || (instr[19:16] == instr[15:12]))
+                c = INSTR_UNDEF;
+        end else if (c == INSTR_MRS) begin
+            if (instr[15:12] == 4'hF)
+                c = INSTR_UNDEF;
+        end else if (c == INSTR_MSR) begin
+            // The assembly syntax requires one or more selected fields.
+            // The register source likewise excludes the PC on r4p3.
+            if ((instr[19:16] == 4'h0)
+             || (!instr[25] && (instr[3:0] == 4'hF)))
+                c = INSTR_UNDEF;
+        end else if (c == INSTR_LDC_STC) begin
+            // Offset/unindexed Rn=pc is defined as pc+8. Either indexed
+            // form (W=1) would write back to r15 and is UNPREDICTABLE.
+            if (instr[21] && (instr[19:16] == 4'hF))
+                c = INSTR_UNDEF;
+        end
+
         // ARMv4 defines cond=1111 as UNPREDICTABLE. ARMv5+ reuses it for
         // unconditional extensions, none of which exist on ARM7TDMI-S.
         // The selected deterministic policy is a precise Undefined trap.

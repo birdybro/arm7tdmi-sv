@@ -534,6 +534,20 @@ module arm7tdmis_thumb_decoder
         end else begin
             dec.instr_class = INSTR_UNDEF;
         end
+
+        // Format 5 has allocated encodings whose operand fields are
+        // nevertheless UNPREDICTABLE before ARMv5/ARMv6. Freeze a precise
+        // Undefined trap for all statically detectable cases:
+        //   * low/low ADD, CMP, or MOV (H1=H2=0);
+        //   * CMP with Rn=r15;
+        //   * the pre-ARMv5 BLX-register spelling (BX H1=1); and
+        //   * nonzero BX SBZ bits[2:0].
+        if ((is_fmt5_hi
+             && ((!thumb_instr[7] && !thumb_instr[6])
+              || ((fmt5_hi_op == 2'b01) && (fmt5_hi_rd == 4'd15))))
+         || (is_fmt5_bx
+             && (thumb_instr[7] || (thumb_instr[2:0] != 3'b000))))
+            dec.instr_class = INSTR_UNDEF;
     end
 
     assign is_dataproc      = (dec.instr_class == INSTR_DP);
