@@ -2770,12 +2770,23 @@ number of cycles spent in an internal FSM state.
   synthesis parameter. `arm7tdmis_raw_bus_checker` rejects a change outside reset,
   its mutation matrix proves the assertion, and `docs/RAW_BUS.md` defines the
   raw-integrator violation policy.
-- [ ] **BUS-002:** Add a phase-aware scoreboard for every clock:
+- [x] **BUS-002:** Add a phase-aware scoreboard for every clock:
   `ADDR/WRITE/SIZE/PROT/LOCK/TRANS/WDATA/RDATA/ABORT/DMORE`, CP signals, CLKEN, PC,
   CPSR, instruction state, and exception/debug events.
-- [ ] **BUS-003:** Re-derive and implement N/S/I/C sequences for every Table 7-2
+  `table7_core_phase_matrix` now independently scores the full named signal set,
+  delayed memory response, architectural identity/state, and events on every phase
+  of 17 reset-isolated base-family rows. The reusable raw checker remains bound on
+  every clock of every pin-level integration test, and the specialized matrix in
+  `docs/TABLE7_MATRIX.md` extends the oracle across redirects, exceptions, aborts,
+  stalls, multiplier termination, and coprocessor handshakes.
+- [x] **BUS-003:** Re-derive and implement N/S/I/C sequences for every Table 7-2
   category and detailed Table 7-3–7-23 row. Include DP-to-PC, LDR/LDM-to-PC, BX,
   condition fail, exceptions, all multiply m values, and coprocessor busy cases.
+  `docs/TABLE7_MATRIX.md` records the direct DDI 0234B derivation, Table 7-2
+  counts, all 21 detailed rows, state-machine path, and registered fail-hard
+  benches. `test_table7_contract.py` rejects a missing/duplicate table, an
+  unregistered citation, an incomplete central signal oracle, or reopened task
+  evidence.
 - [x] **BUS-004:** Reconcile Table 7-2's STM `+I` with Table 7-14's visible bus rows in
   a checked design note; do the same for every apparent summary/detail discrepancy.
   `docs/RAW_BUS.md` gives detailed pin rows precedence over summary occupancy tokens

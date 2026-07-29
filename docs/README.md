@@ -8,6 +8,9 @@ because they agree with each other.
 ## Documents
 
 - **[PIPELINE.md](PIPELINE.md)** — 3-stage F/D/E pipeline structure, stage registers, bus-cycle overlap in the E substate FSM, the `issue_fetch` `state_next` gate (one of the load-bearing decisions of the whole design), `de_q` staleness traps and the latch protocol.
+- **[TABLE7_MATRIX.md](TABLE7_MATRIX.md)** — audited Table 7-2 summary
+  and detailed Tables 7-3 through 7-23 mapped to the full-phase oracle and
+  registered specialized evidence.
 
 - **[DEBUG.md](DEBUG.md)** — EmbeddedICE-RT macrocell (r4p3 register map, WP comparators with TRM-correct XNOR+mask shape, CHAIN/RANGE coupling, debug-state FSM), JTAG TAP (16-state controller, IDCODE, scan chains 1+2), scan-chain-1 instruction-injection runtime path, CP14 DCC data flow.
 - **[COPROCESSOR.md](COPROCESSOR.md)** — bare-core ownership and exact CP14
