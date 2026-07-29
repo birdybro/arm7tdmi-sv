@@ -152,10 +152,23 @@ module arm7tdmis_core_pipelined
                                  // S_EXEC so abort restart preserves Rn)
         S_DP_SHIFT   = 4'd9,    // §18: DP shift-by-reg I cycle (TRM 1S+1I)
         S_LOAD_WB    = 4'd10,   // §18: LDR/LDRB writeback I cycle (TRM 1S+1N+1I)
-        S_SWP_WB     = 4'd11    // §18: SWP Rd writeback I cycle (TRM 1S+2N+1I)
+        S_SWP_WB     = 4'd11,   // §18: SWP Rd writeback I cycle (TRM 1S+2N+1I)
+        S_CP_WAIT    = 4'd12,   // external CP accepted but busy
+        S_CP_MCR_DATA = 4'd13,  // ARM register -> CP data phase
+        S_CP_MRC_DATA = 4'd14,  // CP -> ARM register data phase
+        S_CP_MRC_WB   = 4'd15   // MRC register writeback/fetch phase
     } state_e;
 
     state_e state_q;
+
+    // External coprocessor register-transfer state survives the initial
+    // S_EXEC edge, where Decode advances to the following instruction.
+    logic [31:0] cp_instr_pc_q;
+    logic [31:0] cp_mcr_data_q;
+    logic [31:0] cp_mrc_data_q;
+    logic [3:0]  cp_mrc_rd_q;
+    logic        cp_wait_is_mcr_q;
+    logic        cp_wait_is_mrc_q;
 
     // =====================================================================
     // F stage
@@ -747,6 +760,13 @@ module arm7tdmis_core_pipelined
                                      : mull_accum_take_cycle ? S_MULL_ACC
                                      : mul_take_busy         ? S_MUL_BUSY
                                      : dp_shift_take_cycle   ? S_DP_SHIFT
+                                     : external_cp_busy      ? S_CP_WAIT
+                                     : (external_cp_ready
+                                        && external_cp_is_mcr)
+                                                            ? S_CP_MCR_DATA
+                                     : (external_cp_ready
+                                        && external_cp_is_mrc)
+                                                            ? S_CP_MRC_DATA
                                                              : S_EXEC;
             S_DDATA:      state_next = ls_load_q ? S_LOAD_WB : S_EXEC;
             S_LOAD_WB:    state_next = S_EXEC;
@@ -770,6 +790,13 @@ module arm7tdmis_core_pipelined
                                        : S_MUL_BUSY;
             S_MULL_ACC:   state_next = S_MUL_BUSY;
             S_DP_SHIFT:   state_next = S_EXEC;
+            S_CP_WAIT:    state_next = !cp_wait_ready ? S_CP_WAIT
+                                     : cp_wait_is_mcr_q ? S_CP_MCR_DATA
+                                     : cp_wait_is_mrc_q ? S_CP_MRC_DATA
+                                                       : S_EXEC;
+            S_CP_MCR_DATA: state_next = S_EXEC;
+            S_CP_MRC_DATA: state_next = S_CP_MRC_WB;
+            S_CP_MRC_WB:   state_next = S_EXEC;
             default:      state_next = S_EXEC;
         endcase
     end
@@ -834,6 +861,12 @@ module arm7tdmis_core_pipelined
     wire cp14_supported   = cp14_mrc_control || cp14_mrc_data
                           || cp14_mcr_data || cp14_mrc_dbgabt
                           || cp14_mcr_dbgabt;
+    wire external_cp_request = passes_cond && instr_is_cp && !instr_is_cp14;
+    wire external_cp_ready   = external_cp_request && !CPA && !CPB;
+    wire external_cp_busy    = external_cp_request && !CPA &&  CPB;
+    wire external_cp_is_mcr  = external_cp_request && instr_is_mcr;
+    wire external_cp_is_mrc  = external_cp_request && instr_is_mrc;
+    wire cp_wait_ready       = (state_q == S_CP_WAIT) && !CPA && !CPB;
     wire cp_undef_trap = executing && condition_pass && instr_is_cp
                       && (instr_is_cp14 ? !cp14_supported : CPA);
 
@@ -1138,6 +1171,10 @@ module arm7tdmis_core_pipelined
             rf_write_addr = swp_rd_q;
             rf_write_data = swp_load_value;
             rf_write_en   = 1'b1;
+        end else if (state_q == S_CP_MRC_WB) begin
+            rf_write_addr = cp_mrc_rd_q;
+            rf_write_data = cp_mrc_data_q;
+            rf_write_en   = 1'b1;
         end else if (any_exc_fires) begin
             rf_write_addr = 4'd14;
             rf_write_data = exception_lr_value;
@@ -1316,8 +1353,29 @@ module arm7tdmis_core_pipelined
                 dp_shift_flags_we_q      <= 1'b0;
                 dp_shift_writes_pc_q     <= 1'b0;
                 load_value_q             <= 32'h0;
+                cp_instr_pc_q            <= 32'h0;
+                cp_mcr_data_q            <= 32'h0;
+                cp_mrc_data_q            <= 32'h0;
+                cp_mrc_rd_q              <= 4'h0;
+                cp_wait_is_mcr_q         <= 1'b0;
+                cp_wait_is_mrc_q         <= 1'b0;
         end else if (CLKEN) begin
                 state_q <= state_next;
+
+                // Snapshot an external CP request before the normal
+                // pipeline advances at the end of S_EXEC. Busy requests
+                // retain the same identity throughout S_CP_WAIT.
+                if (state_q == S_EXEC
+                    && (external_cp_busy || external_cp_ready)) begin
+                    cp_instr_pc_q    <= de_q.pc;
+                    cp_mcr_data_q    <= rf_rc_data;
+                    cp_mrc_rd_q      <= dec.rd;
+                    cp_wait_is_mcr_q <= external_cp_is_mcr;
+                    cp_wait_is_mrc_q <= external_cp_is_mrc;
+                end
+
+                if (state_q == S_CP_MRC_DATA)
+                    cp_mrc_data_q <= RDATA;
 
                 // L/S micro-op snapshot at end of S_EXEC.
                 if (state_q == S_EXEC && ls_take_data_cycle) begin
@@ -1575,6 +1633,19 @@ module arm7tdmis_core_pipelined
                     SIZE  = dec.ls_byte ? 2'(SIZE_BYTE) : 2'(SIZE_WORD);
                     PROT  = {is_priv, 1'b1};
                     LOCK  = LOCK_LOCKED;
+                end else if (external_cp_request) begin
+                    // The first external-CP handshake occupies the normal
+                    // pc+8 prefetch slot. Register transfers advertise C;
+                    // ready CDP/LDC/STC operations advertise their N cycle.
+                    ADDR = de_q.pc + 32'd8;
+                    SIZE = 2'(SIZE_WORD);
+                    PROT = {is_priv, 1'b0};
+                    if (external_cp_ready) begin
+                        TRANS = (external_cp_is_mcr || external_cp_is_mrc)
+                              ? 2'(TRANS_C) : 2'(TRANS_N);
+                    end else begin
+                        TRANS = 2'(TRANS_I);
+                    end
                 end else begin
                     // Standard fetch.
                     ADDR  = fetch_pc_q;
@@ -1718,6 +1789,42 @@ module arm7tdmis_core_pipelined
                 SIZE  = fetch_size_w;
                 PROT  = {is_priv, 1'b0};
             end
+            S_CP_WAIT: begin
+                ADDR = cp_instr_pc_q + 32'd8;
+                SIZE = 2'(SIZE_WORD);
+                PROT = {is_priv, 1'b1};
+                if (cp_wait_ready) begin
+                    TRANS = (cp_wait_is_mcr_q || cp_wait_is_mrc_q)
+                          ? 2'(TRANS_C) : 2'(TRANS_N);
+                end
+            end
+            S_CP_MCR_DATA: begin
+                // Register-transfer data is routed to the coprocessor while
+                // the address class begins the next opcode fetch.
+                ADDR  = fetch_pc_q;
+                WRITE = WRITE_WRITE;
+                SIZE  = 2'(SIZE_WORD);
+                PROT  = {is_priv, 1'b1};
+                TRANS = 2'(TRANS_N);
+                WDATA = cp_mcr_data_q;
+            end
+            S_CP_MRC_DATA: begin
+                // Coprocessor drives RDATA during this internal data phase.
+                ADDR  = fetch_pc_q;
+                WRITE = WRITE_READ;
+                SIZE  = 2'(SIZE_WORD);
+                PROT  = {is_priv, 1'b1};
+                TRANS = 2'(TRANS_I);
+            end
+            S_CP_MRC_WB: begin
+                // Write the latched CP word to Rd while completing the
+                // merged following fetch.
+                ADDR  = fetch_pc_q;
+                WRITE = WRITE_READ;
+                SIZE  = 2'(SIZE_WORD);
+                PROT  = {is_priv, 1'b1};
+                TRANS = 2'(TRANS_S);
+            end
             default: ;
         endcase
 
@@ -1760,7 +1867,7 @@ module arm7tdmis_core_pipelined
     // separately to indicate that the current decode is a coprocessor op.
     //
     //   CPnMREQ : active LOW when this cycle is a memory access (TRANS=N|S)
-    //   CPSEQ   : active HIGH when this cycle is sequential (TRANS=S)
+    //   CPSEQ   : TRANS[0], HIGH for sequential and C cycles
     //   CPnTRANS: LOW in User mode, HIGH in privileged modes
     //   CPnOPC  : active LOW when the access is an opcode fetch
     //   CPTBIT  : current CPSR.T (state of the executing instruction stream)
@@ -1769,14 +1876,13 @@ module arm7tdmis_core_pipelined
     //              accept or refuse.
 
     wire trans_is_active = (TRANS == 2'(TRANS_N)) || (TRANS == 2'(TRANS_S));
-    wire trans_is_seq    = (TRANS == 2'(TRANS_S));
-
     assign CPnMREQ = !trans_is_active;
-    assign CPSEQ   =  trans_is_seq;
+    assign CPSEQ   =  TRANS[0];
     assign CPnTRANS = is_priv;
     assign CPnOPC   =  PROT[PROT_BIT_DATA];   // mirror — opcode fetch → CPnOPC=0
     assign CPTBIT   = cpsr.t;
-    assign CPnI     = !(passes_cond && instr_is_cp);
+    assign CPnI     = !((passes_cond && instr_is_cp)
+                      || (state_q == S_CP_WAIT));
 
     // =====================================================================
     // §24: ETM-facing pipeline-state outputs
