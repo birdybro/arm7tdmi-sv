@@ -1304,7 +1304,7 @@ module arm7tdmis_core_pipelined
         end
     end
 
-    wire any_exc_fires    = nRESET
+    wire any_exc_fires    = nRESET && CLKEN
                          && (swi_fires || undef_fires || irq_fires || fiq_fires
                              || pabt_fires || dabt_fires);
     wire cp_wait_interrupt_fires = (state_q == S_CP_WAIT)
