@@ -552,34 +552,41 @@ module arm7tdmis_exception_return_matrix_tb
 
             if ((TRANS == 2'(TRANS_N) || TRANS == 2'(TRANS_S))
                 && PROT[PROT_BIT_DATA]) begin
-                if (form_idx != 5)
-                    fail(mode_idx, state_idx, form_idx,
-                         "data transfer issued by data-processing return");
-                if (redirect_seen) begin
-                    if (ldm_internal_seen)
-                        fail(mode_idx, state_idx, form_idx,
-                             "more than one LDM pc+3i internal address phase");
-                    check_ldm_internal_bus(mode_idx, state_idx, form_idx);
-                    ldm_internal_seen = 1'b1;
-                end else if (data_cycles == 0) begin
-                    if (ADDR !== DATA_BASE || TRANS !== 2'(TRANS_N))
-                        fail(mode_idx, state_idx, form_idx,
-                             "wrong first LDM data address/cycle");
-                end else if (data_cycles == 1) begin
-                    if (ADDR !== (DATA_BASE + 32'd4)
-                        || TRANS !== 2'(TRANS_S))
-                        fail(mode_idx, state_idx, form_idx,
-                             "wrong second LDM data address/cycle");
+                if (form_idx inside {1, 4}) begin
+                    // Table 7-6's second register-shift cycle is an
+                    // address-only data-class N phase, not a data access
+                    // performed by the data-processing instruction.
+                    check_shift_internal_bus(mode_idx, state_idx, form_idx);
                 end else begin
-                    fail(mode_idx, state_idx, form_idx,
-                         "too many LDM data address cycles");
+                    if (form_idx != 5)
+                        fail(mode_idx, state_idx, form_idx,
+                             "data transfer issued by data-processing return");
+                    if (redirect_seen) begin
+                        if (ldm_internal_seen)
+                            fail(mode_idx, state_idx, form_idx,
+                                 "more than one LDM pc+3i internal address phase");
+                        check_ldm_internal_bus(mode_idx, state_idx, form_idx);
+                        ldm_internal_seen = 1'b1;
+                    end else if (data_cycles == 0) begin
+                        if (ADDR !== DATA_BASE || TRANS !== 2'(TRANS_N))
+                            fail(mode_idx, state_idx, form_idx,
+                                 "wrong first LDM data address/cycle");
+                    end else if (data_cycles == 1) begin
+                        if (ADDR !== (DATA_BASE + 32'd4)
+                            || TRANS !== 2'(TRANS_S))
+                            fail(mode_idx, state_idx, form_idx,
+                                 "wrong second LDM data address/cycle");
+                    end else begin
+                        fail(mode_idx, state_idx, form_idx,
+                             "too many LDM data address cycles");
+                    end
+                    if (WRITE !== WRITE_READ || SIZE !== 2'(SIZE_WORD)
+                        || PROT !== 2'(PROT_DAT_PRIV) || LOCK !== LOCK_FREE)
+                        fail(mode_idx, state_idx, form_idx,
+                             "wrong LDM data bus controls");
+                    if (!redirect_seen)
+                        data_cycles++;
                 end
-                if (WRITE !== WRITE_READ || SIZE !== 2'(SIZE_WORD)
-                    || PROT !== 2'(PROT_DAT_PRIV) || LOCK !== LOCK_FREE)
-                    fail(mode_idx, state_idx, form_idx,
-                         "wrong LDM data bus controls");
-                if (!redirect_seen)
-                    data_cycles++;
             end
 
             if (u_dut.u_core.flush) begin
