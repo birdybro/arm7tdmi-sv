@@ -177,6 +177,33 @@ register, and writeback to the source exception-mode SP after CPSR restoration.
 The focused `arm7tdmis_ldm_pc_tb` and
 `arm7tdmis_pc_write_alignment_tb` provide independent neighboring coverage.
 
+## Instruction-sequence evidence
+
+`arm7tdmis_sequence_dependencies_tb` runs 15 reset-per-case programs rather
+than isolated instructions. It places consumers immediately after producers
+for DP Rn, shifted Rm, register-controlled Rs, flags, LDR data, post-index
+bases, MUL, both UMULL halves, LDM data/writeback, and store data. A separate
+mode sequence changes System → FIQ → Supervisor and uses each banked SP in
+the immediately following instruction.
+
+The redirect rows chain B to `MOV pc` to B, B to `LDR pc` to B, and ARM BX to
+Thumb BX to ARM B. They count and validate every destination and reject any
+retirement of a flushed successor. The self-modifying row overwrites an
+opcode that was already eligible for prefetch, executes an explicit branch
+refill, and requires the patched instruction rather than the stale captured
+word. This checks the code-coherence contract in `INTEGRATION.md`; it does not
+claim implicit snooping of instructions already in the pipeline.
+
+`arm7tdmis_thumb_bl_boundary_tb` separately permits an IRQ after the prefix
+has committed and injects PABT on the suffix fetch. Both handlers return to
+the suffix, which reaches the same target and link value using the preserved
+User LR. A third row enters an orphan suffix with a seeded LR. That last
+outcome freezes an implementation policy for architecturally UNPREDICTABLE
+software, not a portable ARM guarantee. Together the rows demonstrate that
+there is no required hidden inter-halfword BL state. Four consecutive
+external MRC transfers and their independent responses remain covered by
+`arm7tdmis_cp_erratum15_tb`.
+
 Functional/line/toggle coverage reporting, mutation testing of architectural
 controls, differential testing, and formal evidence remain separate open
 requirements in `TASKS.md` §31.

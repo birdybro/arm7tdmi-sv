@@ -73,6 +73,24 @@ A completing response and the already-present next raw address phase may be
 consumed/captured on the same CPU-enabled edge. This permits back-to-back
 requests without duplicating either transaction.
 
+### Unified-memory and self-modifying-code contract
+
+The CPU has no instruction or data cache and presents one unified request
+stream, but it does have prefetched instructions in its three-stage pipeline.
+An accepted store updates external memory according to the handshake above;
+it does not snoop or rewrite an opcode that was fetched before that store
+completed. Software that modifies code must execute a PC-changing instruction
+after the store and before relying on the modified location. The redirect
+flushes all younger pipeline entries and refetches the destination. The
+memory target must then return the bytes written by the completed store.
+
+No extra cache-maintenance operation is required because this core has no
+cache. Conversely, ordinary sequential fall-through is not a coherence
+barrier and integrators must not promise that an already-prefetched opcode
+changes retroactively. `arm7tdmis_sequence_dependencies_tb` patches such an
+opcode with STR, branches to force a refill, and requires execution of the
+new word while rejecting the stale one.
+
 ### Byte lanes
 
 `MEM_WDATA` uses the same lane placement as the raw ARM bus. The byte enables

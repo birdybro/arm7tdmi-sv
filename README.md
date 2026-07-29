@@ -97,6 +97,12 @@ Abort, and Undefined modes to both ARM and Thumb. The matrix covers direct and
 register-controlled `MOVS/SUBS PC` paths plus `LDMIA sp!,{...,pc}^`, including
 complete CPSR restore, target alignment/width/privilege, physical SPSR/LR/SP
 bank selection, source-bank LDM writeback, and sequential-successor flushing.
+Sequence regressions additionally cover adjacent producer/consumer hazards,
+mode-bank transitions, self-modifying code followed by an explicit refill,
+chained PC changes, consecutive MRCs, and IRQ/PABT between the two Thumb BL
+halfwords. Thumb BL carries its inter-halfword value solely in architectural
+LR; an orphan suffix has a deterministic LR-based project policy but remains
+architecturally UNPREDICTABLE.
 The broader exception/abort release gate remains open in `TASKS.md` §31.4.
 
 ### Pipeline structure and current cycle harness

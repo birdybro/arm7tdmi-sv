@@ -65,6 +65,23 @@ covered by the r15 and public-scan regressions named in `TASKS.md` ISA-005.
 
 ABORT is sampled at the F-stage RDATA latch, not at E-stage execute. Without `pabort` per-instruction, the abort signal would be lost between fetch and execute (the original ARM7TDMI memory bus model has them many cycles apart in the steady state). When the aborted instruction reaches E, `pabt_fires` triggers via `executing && de_q.pabort`.
 
+### Thumb BL has no hidden pair state
+
+The two ARMv4T Thumb BL halfwords communicate only through architectural
+`r14`. The prefix is decoded as `ADD lr,pc,high_offset` and commits through
+the ordinary register-file write port. The suffix is decoded as a link branch
+whose base operand is the current banked LR. It computes the destination from
+that value and replaces LR with `(suffix_pc + 2) | 1`.
+
+This implementation permits an exception between the halfwords. IRQ
+preemption at the suffix boundary and PABT attached to the suffix fetch both
+flush the pipeline, enter their ARM-state handlers, and can return to retry
+the suffix; the prefix value remains in the interrupted mode's LR bank. A
+suffix entered without a prefix likewise uses the current LR. ARMv4T labels
+that orphan case UNPREDICTABLE, so the deterministic result is an
+implementation policy rather than an architectural promise. The three
+fail-hard scenarios are in `arm7tdmis_thumb_bl_boundary_tb`.
+
 ## Bus protocol
 
 ARM7TDMI has a **pipelined bus**: address-class signals (ADDR/WRITE/SIZE/PROT/LOCK/TRANS) drive in cycle N, the matching data appears (or commits, for stores) in cycle N+1. The memory model (`tb/integration/arm7tdmis_memory.sv`) latches addr-class at posedge and produces RDATA combinationally next cycle.

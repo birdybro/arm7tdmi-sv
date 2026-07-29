@@ -2590,11 +2590,26 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   restored destination bank. The older `arm7tdmis_ldm_pc_tb`,
   `arm7tdmis_pc_write_alignment_tb`, block-transfer matrices, and PSR tests
   remain independent neighboring evidence.
-- [ ] **ISA-015:** Test instruction sequences, not only isolated opcodes: forwarding/
+- [x] **ISA-015:** Test instruction sequences, not only isolated opcodes: forwarding/
   dependency pairs, self-modifying stores under the documented memory contract,
-  back-to-back PC changes, back-to-back MRC, and mode/bank transitions. Include an
-  interrupt/exception between Thumb BL prefix and suffix and an orphan suffix; prove
-  whether architectural LR alone carries all required inter-halfword state.
+  back-to-back PC changes, back-to-back MRC, and mode/bank transitions.
+  `arm7tdmis_sequence_dependencies_tb` executes 15 reset-per-case programs covering
+  adjacent DP Rn/Rm/Rs and flag consumers; LDR, post-index, MUL, UMULL, LDM, and
+  store-data consumers; immediate System/FIQ/Supervisor bank transitions; an
+  already-prefetched opcode patched by STR and then explicitly refetched; three
+  consecutive PC redirects through branch, DP, load, and ARM/Thumb BX paths; and
+  successor suppression. `arm7tdmis_cp_erratum15_tb` independently executes four
+  consecutive external MRCs, including opcode1=x1x and early CPA/CPB behavior, with
+  distinct responses and writebacks. `arm7tdmis_thumb_bl_boundary_tb` adds IRQ
+  preemption and a suffix-fetch PABT between the Thumb BL halves, returns to retry
+  the suffix, and enters an orphan suffix with a seeded User LR. The exception rows
+  prove the committed architectural User LR survives complete exception flushes;
+  the orphan row proves the suffix consumes LR without hidden prefix state. This
+  implementation permits exceptions between the halves. A standalone suffix remains
+  architecturally UNPREDICTABLE; the frozen project policy is the deterministic
+  LR-based result, not an ARM software guarantee. The unified-memory coherence and
+  required explicit PC-changing refill contract are published in
+  `docs/INTEGRATION.md`.
 - [ ] **ISA-016:** Give every architecturally UNPREDICTABLE case a stable policy
   (`trap`, deterministic result, or real-r4p3 behavior). Tests must never accidentally
   elevate that chosen behavior into an ARM architectural guarantee.
