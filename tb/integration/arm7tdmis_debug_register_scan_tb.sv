@@ -21,6 +21,11 @@ module arm7tdmis_debug_register_scan_tb
     localparam logic [31:0] DEBUG_STM =
         32'hE880_0000 | 32'(REGISTER_MASK);
     localparam logic [31:0] DEBUG_NOP = 32'hE1A0_8008;
+    localparam logic [31:0] DEBUG_MRS_CPSR = 32'hE10F_0000;
+    localparam logic [31:0] DEBUG_MRS_SPSR = 32'hE14F_0000;
+    localparam logic [31:0] DEBUG_STR_R0_PC = 32'hE58F_0000;
+    localparam logic [31:0] CPSR_TEST_VALUE = 32'hA000_00D3;
+    localparam logic [31:0] SPSR_TEST_VALUE = 32'h5000_0012;
 
     logic CLK = 1'b0;
     initial forever #5 CLK = ~CLK;
@@ -200,6 +205,47 @@ module arm7tdmis_debug_register_scan_tb
         data = chain1_parallel_data(captured);
     endtask
 
+    function automatic logic [31:0] msr_immediate(
+        input logic [7:0] immediate,
+        input logic [3:0] rotate,
+        input logic [3:0] field_mask,
+        input logic       spsr
+    );
+        logic [31:0] instruction;
+        instruction = 32'hE320_F000;
+        instruction[22]    = spsr;
+        instruction[19:16] = field_mask;
+        instruction[11:8]  = rotate;
+        instruction[7:0]   = immediate;
+        return instruction;
+    endfunction
+
+    task automatic write_xpsr(
+        input logic [31:0] value,
+        input logic        spsr
+    );
+        // Exact OpenOCD arm7tdmi_write_xpsr() scan schedule.
+        clock_out(msr_immediate(value[7:0],   4'h0, 4'h1, spsr));
+        clock_out(msr_immediate(value[15:8],  4'hC, 4'h2, spsr));
+        clock_out(msr_immediate(value[23:16], 4'h8, 4'h4, spsr));
+        clock_out(DEBUG_NOP);
+        clock_out(msr_immediate(value[31:24], 4'h4, 4'h8, spsr));
+        repeat (5)
+            clock_out(DEBUG_NOP);
+    endtask
+
+    task automatic read_xpsr(
+        input  logic        spsr,
+        output logic [31:0] value
+    );
+        // Exact OpenOCD arm7tdmi_read_xpsr() scan schedule.
+        clock_out(spsr ? DEBUG_MRS_SPSR : DEBUG_MRS_CPSR);
+        clock_out(DEBUG_STR_R0_PC);
+        clock_out(DEBUG_NOP);
+        clock_out(DEBUG_NOP);
+        clock_data_in(value);
+    endtask
+
     initial begin : run_test
         logic [31:0] observed;
 
@@ -249,6 +295,27 @@ module arm7tdmis_debug_register_scan_tb
                     "r%0d expected %08x, scanned %08x",
                     reg_index, expected[reg_index], observed));
         end
+
+        // OpenOCD-compatible CPSR/SPSR write and readback. These are
+        // legal debug-speed instructions and their STR data phase belongs
+        // on scan chain 1, never on the external memory interface.
+        write_xpsr(CPSR_TEST_VALUE, 1'b0);
+        read_xpsr(1'b0, observed);
+        if (observed !== CPSR_TEST_VALUE)
+            fail($sformatf(
+                "CPSR expected %08x, scanned %08x",
+                CPSR_TEST_VALUE, observed));
+
+        write_xpsr(SPSR_TEST_VALUE, 1'b1);
+        read_xpsr(1'b1, observed);
+        if (observed !== SPSR_TEST_VALUE)
+            fail($sformatf(
+                "SPSR expected %08x, scanned %08x",
+                SPSR_TEST_VALUE, observed));
+        read_xpsr(1'b0, observed);
+        if (observed !== CPSR_TEST_VALUE)
+            fail($sformatf(
+                "SPSR traffic changed CPSR to %08x", observed));
 
         monitor_debug_bus = 1'b0;
         if (external_debug_transfers != 0)
