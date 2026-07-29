@@ -31,7 +31,7 @@ OBJ_DIR        := obj_dir
 TB_BIN         := $(OBJ_DIR)/V$(TOP_TB)
 RUN_ARTIFACTS  := cycle.csv waves.fst
 
-UNIT_TESTS := regfile psr reset_sync shifter alu multiplier condition decoder thumb_decoder jtag_tap jtag_idcode_config ice_rt ice_watchpoint dcc
+UNIT_TESTS := regfile psr reset_sync shifter alu multiplier condition decoder thumb_decoder jtag_tap jtag_idcode_config sync_debug_port ice_rt ice_watchpoint dcc
 
 INTEG_TESTS := umull umlal cp15_undef cp14_decode cp14_dcc cp14_r15 cp_pipeline_follow cp_cdp_protocol cp_reg_transfer cp_reg_r15 cp_ldc_stc cp_ldc_stc_abort cp_erratum14 cp_erratum15 cp_busy_interrupt cp_busy_dbgrq cpntrans debug_status debug_control_sync debug_reserved_regs debug_software_breakpoint debug_watchpoint_completion debug_watchpoint_priority debug_breakpoint_pabt debug_breakpoint_interrupt debug_dbgrq_exception debug_pc_modify_dbgrq debug_breakpoint_flush debug_breakpoint_execute debug_external_break debug_inject_handshake debug_inject_matrix debug_dbgen_gating debug_dbgen_sources debug_entry_cause debug_system_speed debug_register_scan debug_pc_capture debug_pc_resume debug_monitor_mode abort_inactive abort_clken endian_data endian_thumb translated_ls cond_suppress reset_clken fetch_sequence bus_burst abort irq fiq exception_priority dabt_fiq thumb_exception_lr ldm_pc pabt pabt_pipeline ldm_abort ldm_abort_base_list stm_abort stm_base_list ls_abort_modes swp_read_abort cycles swi undef thumb bx_interwork swpb_data flags_preserve mull_flags
 
