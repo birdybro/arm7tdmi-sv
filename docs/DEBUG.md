@@ -147,9 +147,12 @@ Trap fires when `!watch_nopc` (opcode fetch) AND `watch_addr` matches one of the
 ```
 
 `halt_entry_req` = any of (gated by DBGEN):
-- `dbg_break_internal` (WP/VC hit)
-- synced external `DBGBREAK` pin
+- an aligned data watchpoint from WP0/WP1 or external `DBGBREAK`
 - `DBGRQI` = force-DBGRQ (ctrl[1]) OR synced external `DBGRQ`
+
+WP0/WP1 or external opcode breakpoints do not use the generic request path:
+they are carried as tags with the fetched instruction and stop only if that
+instruction reaches Execute.
 
 `tap_restart_req` is sampled on the edge that enters Run-Test/Idle with
 IR=RESTART, matching TRM §5.13.5.
@@ -193,11 +196,17 @@ Per §5.19.2 IRQ/FIQ are forced disabled internally during debug-state regardles
 
 ## Current debug-input synchronization
 
-The current FPGA-facing implementation passes DBGRQ and DBGBREAK through
-CLKEN-qualified two-flop chains with asynchronous DBGnTRST clear. That describes
-the RTL; it is not yet a release-level claim that every r4p3 pin's sampling rule
-or an off-chip debugger clock domain is reproduced. Exact pin sampling and the
-published synchronous FPGA transport remain open under `DBG-001` and `JTAG-004`.
+`DBGBREAK` is sampled on the rising edge with the address/control phase and
+carried with that transaction. Opcode pulses become flushable pipeline tags;
+data pulses remain pending through the marked instruction's completion boundary.
+`tb/integration/arm7tdmis_debug_external_break_tb.sv` covers one-cycle opcode
+and final-LDM-beat pulses, restart, completion ordering, and entry cause.
+
+The current implementation still passes DBGRQ through a CLKEN-qualified two-flop
+chain with asynchronous DBGnTRST clear. That describes the RTL; Appendix B says
+the ARM7TDMI-S soft-core DBGRQ input must instead be synchronized externally.
+The remaining DBGRQ/control-register sampling work and the published synchronous
+FPGA transport remain open under `DBG-001` and `JTAG-004`.
 
 ## JTAG TAP
 

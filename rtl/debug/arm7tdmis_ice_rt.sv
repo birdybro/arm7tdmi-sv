@@ -212,23 +212,18 @@ module arm7tdmis_ice_rt
     assign dcc_tx_empty = !dcc_tx_full_q;
     assign dcc_rx_full  = dcc_rx_full_q;
 
-    // §30.22.6: 2-flop synchronizer for asynchronous DBGRQ. The external
-    // DBGRQ pin can fire any time relative to CLK; metastability mitigated
-    // with the standard two-flop chain. Reset shared with the rest of the
-    // macrocell (DBGnTRST async clear).
+    // The current DBGRQ path is sampled separately below. DBGBREAK is not
+    // passed through this path: on ARM7TDMI-S it is synchronous to CLK and
+    // must remain aligned with the memory access it marks (TRM §8.1.4).
     logic [1:0] dbg_rq_sync_q;
-    logic [1:0] dbg_break_sync_q;
     always_ff @(posedge CLK or negedge DBGnTRST) begin
         if (!DBGnTRST) begin
-            dbg_rq_sync_q    <= 2'b00;
-            dbg_break_sync_q <= 2'b00;
+            dbg_rq_sync_q <= 2'b00;
         end else if (CLKEN) begin
-            dbg_rq_sync_q    <= {dbg_rq_sync_q[0], dbg_rq_in};
-            dbg_break_sync_q <= {dbg_break_sync_q[0], dbg_break_in};
+            dbg_rq_sync_q <= {dbg_rq_sync_q[0], dbg_rq_in};
         end
     end
-    wire dbg_rq_synced    = dbg_rq_sync_q[1];
-    wire dbg_break_synced = dbg_break_sync_q[1];
+    wire dbg_rq_synced = dbg_rq_sync_q[1];
 
     // §22 / §30.22.4: Debug-state FSM. Monitor mode is a comparator-output
     // policy, not a halted core state: enabled breakpoint/watchpoint hits
@@ -238,7 +233,7 @@ module arm7tdmis_ice_rt
     //
     // Entry conditions (any of):
     //   - dbg_break_internal (WP/VC hit, see above)
-    //   - dbg_break_in (external DBGBREAK pin, synced)
+    //   - an aligned data watchpoint, including external DBGBREAK
     //   - DBGRQI = Debug Control[1] OR dbg_rq_synced
     // All gated by DBGEN.
     //
@@ -271,12 +266,8 @@ module arm7tdmis_ice_rt
     wire ice_dbgrq_force = regs[DEBUG_CTRL_ADDR][1];
     wire dbgrqi          = (ice_dbgrq_force || dbg_rq_synced) && DBGEN;
     wire halt_entry_req  = DBGEN
-                         && (watchpoint_halt_pre
-                             || (dbg_break_synced && !monitor_mode)
-                             || dbgrqi);
-    wire halt_entry_watchpoint = watchpoint_halt_pre
-                               || (dbg_break_synced && !monitor_mode
-                                   && watch_nopc_q);
+                         && (watchpoint_halt_pre || dbgrqi);
+    wire halt_entry_watchpoint = watchpoint_halt_pre;
 
     // dbg_break_internal_pre exists so we can use it BEFORE the wires
     // below see the FSM output — recursive feedback otherwise.
@@ -325,6 +316,7 @@ module arm7tdmis_ice_rt
     logic [1:0]  watch_size_q;
     logic        watch_priv_q;
     logic [1:0]  watch_extern_q;
+    logic        watch_break_q;
 
     always_ff @(posedge CLK or negedge DBGnTRST) begin
         if (!DBGnTRST) begin
@@ -335,6 +327,7 @@ module arm7tdmis_ice_rt
             watch_size_q   <= 2'b00;
             watch_priv_q   <= 1'b0;
             watch_extern_q <= 2'b00;
+            watch_break_q  <= 1'b0;
         end else if (CLKEN) begin
             watch_valid_q  <= core_trans1;
             watch_addr_q   <= watch_addr;
@@ -343,6 +336,7 @@ module arm7tdmis_ice_rt
             watch_size_q   <= watch_size;
             watch_priv_q   <= watch_priv;
             watch_extern_q <= watch_extern;
+            watch_break_q  <= dbg_break_in;
         end
     end
 
@@ -492,13 +486,16 @@ module arm7tdmis_ice_rt
                            && wp1_enable && wp1_monitor_supported
                            && wp1_addr_match && wp1_monitor_ctrl_match;
     wire monitor_enabled_wp_match = monitor_wp0_match || monitor_wp1_match;
+    wire external_break_match = DBGEN && watch_valid_q && watch_break_q;
 
     assign breakpoint_fetch_pre =
         monitor_mode
         ? (monitor_enabled_wp_match && !watch_nopc_q)
-        : (comparators_enabled
-           && ((enabled_wp_match && !watch_nopc_q) || vec_catch_hit));
-    wire data_watchpoint_pre = enabled_wp_match && watch_nopc_q;
+        : ((comparators_enabled
+            && ((enabled_wp_match && !watch_nopc_q) || vec_catch_hit))
+           || (external_break_match && !watch_nopc_q));
+    wire data_watchpoint_pre = (enabled_wp_match || external_break_match)
+                             && watch_nopc_q;
     assign monitor_data_abort = monitor_mode
                               && monitor_enabled_wp_match
                               && watch_nopc_q;

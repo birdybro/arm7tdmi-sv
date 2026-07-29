@@ -2573,6 +2573,11 @@ number of cycles spent in an internal FSM state.
   Catch, Debug Abort Status, DBGRQ/DBGBREAK priority, and all DBGEN gating. Follow each
   pin's specified sampling/synchronization behavior rather than applying a blanket
   two-flop policy.
+  Same-edge external DBGBREAK sampling, opcode pipeline tagging/restart, and a
+  final-beat LDM data watchpoint are covered by
+  `tb/integration/arm7tdmis_debug_external_break_tb.sv`. The soft-core DBGRQ path,
+  control-bit-1 Run-Test/Idle synchronization, status semantics, and remaining
+  simultaneous-priority cases keep this item open.
 - [ ] **DBG-002:** Feed Debug Status TRANS from the actual `TRANS[1]`, not PROT.
   Align address/control and read/write data before data-dependent watchpoint comparison.
 - [ ] **DBG-003:** Implement exact WP0/WP1 value/mask, XNOR, size, read/write,
@@ -2581,6 +2586,13 @@ number of cycles spent in an internal FSM state.
 - [ ] **DBG-004:** Qualify breakpoints with valid, non-flushed instructions.
   Watchpoints enter debug only after the access and all architectural writeback
   complete; cover LDM/STM, aborts, exceptions, and simultaneous DBGRQ.
+  Internal opcode execute/restart and flush cancellation are covered by
+  `tb/integration/arm7tdmis_debug_breakpoint_execute_tb.sv` and
+  `tb/integration/arm7tdmis_debug_breakpoint_flush_tb.sv`. Internal and external
+  multibeat LDM completion are covered by
+  `tb/integration/arm7tdmis_debug_watchpoint_completion_tb.sv` and
+  `tb/integration/arm7tdmis_debug_external_break_tb.sv`; abort, other-exception,
+  STM, and simultaneous-DBGRQ cases remain open.
 - [x] **DBG-005:** Implement monitor-mode restrictions and generated PABT/DABT,
   including `DbgAbt` and external ABORT precedence.
   `tb/integration/arm7tdmis_debug_monitor_mode_tb.sv` programs the mode and

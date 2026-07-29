@@ -217,8 +217,8 @@ module arm7tdmis_top
         .core_trans1        (TRANS[1]),    // live Debug Status[3]
         .core_halt_boundary (ice_halt_boundary),
         .core_breakpoint_execute(ice_breakpoint_execute),
-        .dbg_rq_in          (DBGRQ),       // §22: synchronized inside ICE-RT
-        .dbg_break_in       (DBGBREAK),    // §22: synchronized inside ICE-RT
+        .dbg_rq_in          (DBGRQ),
+        .dbg_break_in       (DBGBREAK),    // synchronous, bus-phase aligned
         .tap_restart_req    (tap_restart_req),
         .tap_chain1_capture (tap_chain1_capture),
         .chain1_capture_break(ice_chain1_capture_break),

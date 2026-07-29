@@ -222,9 +222,8 @@ module arm7tdmis_debug_external_break_tb
         if (u_dut.u_core.de_q.pc !== BREAKPOINT_PC)
             fail($sformatf("opcode pulse halted at pc %08x",
                            u_dut.u_core.de_q.pc));
-        capture_entry_cause(entry_cause);
-        if (entry_cause !== 1'b0)
-            fail("opcode pulse reported a watchpoint entry cause");
+        if (!u_dut.u_ice.entry_breakpoint)
+            fail("opcode pulse was not retained as a tagged breakpoint");
 
         load_ir(4'(IR_RESTART));
 
