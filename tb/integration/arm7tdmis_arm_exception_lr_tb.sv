@@ -108,6 +108,8 @@ module arm7tdmis_arm_exception_lr_scenario #(
                 observed_source_pc <=
                     u_fixture.u_dut.u_core.dabt_fires
                     ? u_fixture.u_dut.u_core.memory_instr_pc_q
+                    : u_fixture.u_dut.u_core.undef_fires
+                    ? u_fixture.u_dut.u_core.undef_instr_pc_q
                     : u_fixture.u_dut.u_core.de_q.pc;
                 observed_lr     <= u_fixture.u_dut.u_core.exception_lr_value;
                 observed_vector <= u_fixture.u_dut.u_core.exc_pc_target_addr;
