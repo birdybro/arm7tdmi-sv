@@ -2413,12 +2413,20 @@ Build a requirements/encoding matrix covering every valid ARM and Thumb encoding
 every reserved hole, every condition, register choice, shift amount, addressing mode,
 and defined boundary value. Each row links ARM ARM text to RTL and at least one test.
 
-- [ ] **ISA-001:** Fix immediate `LSR #0` and `ASR #0` to mean shift by 32, and verify
+- [x] **ISA-001:** Fix immediate `LSR #0` and `ASR #0` to mean shift by 32, and verify
   `ROR #0` as RRX. Cover immediate and register-specified 0/1/31/32/>32 amounts and
-  carry behavior in both states.
-- [ ] **ISA-002:** Honor the ALU/shifter flag-write mask. Logical/test/move/shift
+  carry behavior in both states. `tb/unit/shifter_tb.sv` exhausts every boundary
+  amount and both carry inputs through the shared ARM/Thumb datapath;
+  `tb/unit/decoder_tb.sv` proves the three ARM encoded-zero cases and the distinct
+  register-shift-zero path; `tb/unit/thumb_decoder_tb.sv` proves Thumb immediate
+  LSR/ASR zero and register-shift selection.
+- [x] **ISA-002:** Honor the ALU/shifter flag-write mask. Logical/test/move/shift
   instructions preserve V; arithmetic writes NZCV; instructions whose S bit is clear
-  preserve all flags.
+  preserve all flags. `tb/unit/alu_tb.sv` checks every logical/test/move and
+  arithmetic ALU operation and its exact per-flag mask, while
+  `tb/integration/arm7tdmis_flags_preserve_tb.sv` observes the resulting CPSR through
+  MRS after an overflowing arithmetic operation, a logical/move S operation, and an
+  S-clear arithmetic operation.
 - [ ] **ISA-003:** Commit N/Z correctly for `UMLALS` and `SMLALS` after the final
   accumulated 64-bit result. Cover all six multiply forms, S/non-S, aliasing, signed
   extrema, and m=1/2/3/4 timing.
