@@ -267,8 +267,9 @@ The fourth performs synthesis, fit, assembly, and four-corner TimeQuest, then
 fails on critical warnings, ignored constraints, unconstrained endpoints,
 negative slack, a missing image, or a resource-budget overrun. For the
 trimmed profile characterized on Quartus Lite 17.0.2, the checked result is
-3,311 ALMs, 2,611 registers, six DSPs, no memory bits, +7.638 ns worst setup
-slack, and +0.165 ns worst hold slack.
+3,491 ALMs, 2,512 registers, six DSPs, no memory bits, +5.265 ns worst setup
+slack, and +0.167 ns worst hold slack. Fmax, clock-enable, and qualified
+PowerPlay figures are in [PERFORMANCE.md](PERFORMANCE.md).
 The fifth and sixth commands perform the corresponding analysis-only and full
 checked flows for the raw, feature-complete conformance profile.
 The supplied SDC assumes a timing-verified 25 MHz standalone `CLK` and a
@@ -276,8 +277,8 @@ The supplied SDC assumes a timing-verified 25 MHz standalone `CLK` and a
 must replace boundary delays and the clock period with its selected framework
 constraints while retaining equivalent reset/CDC treatment.
 The raw conformance profile uses the same clock and input-window assumptions.
-Its checked Quartus Lite 17.0.2 result is 4,750 ALMs, 3,766 registers, six
-DSPs, no memory bits, +5.182 ns worst setup slack, and +0.151 ns worst hold
+Its checked Quartus Lite 17.0.2 result is 4,889 ALMs, 3,823 registers, six
+DSPs, no memory bits, +3.287 ns worst setup slack, and +0.164 ns worst hold
 slack.
 
 ## Evidence and current limits

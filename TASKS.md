@@ -3231,6 +3231,11 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
 - [ ] **MIST-011:** Publish maximum CPU rate, master-clock/CE ratios, latency rules,
   resource budget, required memories/DSPs, reset duration, endian configuration, and
   optional-feature costs.
+  `docs/PERFORMANCE.md` now publishes every requested clock, latency,
+  resource, power, reset, and endian property from checked reports.
+  This remains open only because fitted debug-only and coprocessor-only
+  deltas have not yet been measured; the trimmed/full top difference is not
+  mislabeled as an isolated option cost.
 - [x] **MIST-012:** Test coexistence with DMA/bus arbitration, including SWP LOCK,
   LDM/STM DMORE, stalls, and abort/error responses.
   `arm7tdmis_mister_dma_arbitration_tb` runs a real ARM program against a
@@ -3328,14 +3333,17 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
 - [ ] **FPGA-004:** Run an independent synthesizer/linter where supported and CDC/RDC
   analysis. Resolve combinational loops, inferred latches, multiple drivers,
   simulation/synthesis mismatches, unsafe synchronizers, and reset-domain crossings.
-- [ ] **FPGA-005:** Verify RAM/DSP/clock-enable inference in reports. Publish ALM,
+- [x] **FPGA-005:** Verify RAM/DSP/clock-enable inference in reports. Publish ALM,
   register, MLAB/M10K, DSP, clock, power estimate, and Fmax data with budget headroom.
-  The trimmed profile currently fits in 3,311 ALMs, 2,611 registers, six DSP
-  blocks, and zero memory bits against enforced limits of 5,000/4,096/8/0.
-  The full raw profile fits in 4,750 ALMs, 3,766 registers, six DSP blocks,
-  and zero memory bits against enforced limits of 7,500/6,000/8/0.
-  Optional-feature deltas, explicit clock-enable inference, power, and maximum
-  frequency characterization remain open.
+  Both complete flows now run vectorless PowerPlay before
+  `scripts/quartus_report_check.py`, which fails on absent Fmax, power,
+  confidence, or clock-enable fields in addition to the existing fit/timing
+  gates. `docs/PERFORMANCE.md` publishes the checked 3,491-ALM/2,512-register
+  trimmed and 4,889-ALM/3,823-register full fits, 2,109/3,099
+  clock-enable registers, zero MLAB/M10K bits, six DSP blocks, budget
+  headroom, 28.79/27.24 MHz worst-model Fmax, and explicitly low-confidence
+  450.07/457.79 mW estimates. `test_characterization_contract.py` and
+  `test_quartus_report_check.py` freeze the flow and schema.
 - [ ] **FPGA-006:** Prove synthesis equivalence or run post-synthesis simulation for
   architectural smoke, stalls, reset, endian, exceptions, and wrapper transactions.
 - [ ] **FPGA-007:** Perform on-board bring-up with an embedded trace/signature test,

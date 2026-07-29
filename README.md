@@ -96,6 +96,8 @@ evidence. The §31 ledger remains authoritative if a summary conflicts with it.
   corrected-default evidence.
 - [`docs/SUPPORT.md`](docs/SUPPORT.md): supported API, simulator, FPGA-tool,
   framework, and system-integration profiles.
+- [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md): checked Cyclone V clock,
+  CPU-enable, transaction-latency, resource, Fmax, and power data.
 - [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md): concise prerelease blockers
   linked to the authoritative task IDs.
 - [`docs/PROVENANCE.md`](docs/PROVENANCE.md): license, specification,

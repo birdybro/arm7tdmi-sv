@@ -16,6 +16,7 @@ GTKWAVE   ?= gtkwave
 PYTHON    ?= python3
 QUARTUS_MAP ?= quartus_map
 QUARTUS_SH  ?= quartus_sh
+QUARTUS_POW ?= quartus_pow
 
 SIM_F     := sim.f
 TB_F      := tb.f
@@ -102,6 +103,9 @@ quartus-analysis:
 # Complete selected-device flow: synthesis, fit, TimeQuest, and assembly.
 quartus-compile:
 	cd ../fpga && $(QUARTUS_SH) --flow compile arm7tdmi_mister
+	cd ../fpga && $(QUARTUS_POW) arm7tdmi_mister \
+	    --read_settings_files=on --write_settings_files=off \
+	    --use_vectorless_estimation=on
 	PYTHONPATH=. $(PYTHON) quartus_report_check.py ../fpga/output_files
 
 quartus-conformance-analysis:
@@ -111,6 +115,9 @@ quartus-conformance-analysis:
 
 quartus-conformance-compile:
 	cd ../fpga && $(QUARTUS_SH) --flow compile arm7tdmis_conformance
+	cd ../fpga && $(QUARTUS_POW) arm7tdmis_conformance \
+	    --read_settings_files=on --write_settings_files=off \
+	    --use_vectorless_estimation=on
 	PYTHONPATH=. $(PYTHON) quartus_report_check.py \
 	    --project arm7tdmis_conformance \
 	    --top arm7tdmis_top \
@@ -301,9 +308,9 @@ help:
 	@echo "  lint-mister  Verilator --lint-only on the canonical FPGA wrapper"
 	@echo "  lint-example Verilator --lint-only on the portable FPGA example"
 	@echo "  quartus-analysis Quartus analysis/elaboration of the FPGA package"
-	@echo "  quartus-compile Full Quartus synth/fit/timing/assembly flow"
+	@echo "  quartus-compile Full Quartus synth/fit/timing/assembly/power flow"
 	@echo "  quartus-conformance-analysis Quartus analysis of the raw/full profile"
-	@echo "  quartus-conformance-compile Full Quartus flow for the raw/full profile"
+	@echo "  quartus-conformance-compile Full Quartus/power raw/full profile"
 	@echo "  lint-tb      Verilator --lint-only including the integration TB"
 	@echo "  sim          build the integration testbench binary"
 	@echo "  run          build and run; emits cycle.csv + waves.fst"

@@ -33,6 +33,8 @@ because they agree with each other.
   `arm7tdmis-regression-v1` machine-readable result schema.
 - **[SUPPORT.md](SUPPORT.md)** — supported API, simulator, synthesis-tool,
   MiSTer, and PocketStation profiles.
+- **[PERFORMANCE.md](PERFORMANCE.md)** — checked Cyclone V clock/CE,
+  transaction-latency, resource, Fmax, power, reset, and endian budgets.
 - **[LIMITATIONS.md](LIMITATIONS.md)** — prerelease limitations mapped to the
   authoritative open requirements.
 - **[PROVENANCE.md](PROVENANCE.md)** — SPDX/license inventory and rules for

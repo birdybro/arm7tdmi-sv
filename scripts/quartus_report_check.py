@@ -20,6 +20,7 @@ DEFAULT_RESOURCE_LIMITS = {
     "dsp": 8,
     "memory_bit": 0,
 }
+ALLOWED_POWER_CRITICAL_WARNING_CODES = {"215050"}
 
 
 def _read(path: pathlib.Path, errors: list[str]) -> str:
@@ -37,6 +38,28 @@ def _integer_field(text: str, label: str) -> int | None:
     return int(match.group(1).replace(",", ""))
 
 
+def _table_integer_field(text: str, label: str) -> int | None:
+    match = re.search(
+        rf"^\s*;\s*{re.escape(label)}\s*;\s*([\d,]+)\s*;",
+        text,
+        re.MULTILINE,
+    )
+    if match is None:
+        return None
+    return int(match.group(1).replace(",", ""))
+
+
+def _float_field(text: str, label: str, unit: str) -> float | None:
+    match = re.search(
+        rf"^{re.escape(label)}\s*:\s*(-?\d+(?:\.\d+)?)\s*{re.escape(unit)}",
+        text,
+        re.MULTILINE,
+    )
+    if match is None:
+        return None
+    return float(match.group(1))
+
+
 def validate_reports(
     output_dir: pathlib.Path,
     *,
@@ -52,11 +75,14 @@ def validate_reports(
     prefix = output_dir / project
     flow = _read(prefix.with_suffix(".flow.rpt"), errors)
     map_summary = _read(prefix.with_suffix(".map.summary"), errors)
+    map_report = _read(prefix.with_suffix(".map.rpt"), errors)
     fit_summary = _read(prefix.with_suffix(".fit.summary"), errors)
     fit_report = _read(prefix.with_suffix(".fit.rpt"), errors)
     asm_report = _read(prefix.with_suffix(".asm.rpt"), errors)
     sta_summary = _read(prefix.with_suffix(".sta.summary"), errors)
     sta_report = _read(prefix.with_suffix(".sta.rpt"), errors)
+    power_summary = _read(prefix.with_suffix(".pow.summary"), errors)
+    power_report = _read(prefix.with_suffix(".pow.rpt"), errors)
 
     required_markers = (
         (flow, "Flow Status", "Successful", "full flow"),
@@ -64,6 +90,18 @@ def validate_reports(
         (fit_summary, "Fitter Status", "Successful", "fit"),
         (asm_report, "Assembler was successful", "", "assembly"),
         (sta_report, "TimeQuest Timing Analyzer was successful", "", "TimeQuest"),
+        (
+            power_summary,
+            "PowerPlay Power Analyzer Status",
+            "Successful",
+            "PowerPlay",
+        ),
+        (
+            power_report,
+            "PowerPlay Power Analyzer was successful",
+            "",
+            "PowerPlay report",
+        ),
     )
     for text, marker, value, phase in required_markers:
         if marker not in text or (value and value not in text):
@@ -84,10 +122,23 @@ def validate_reports(
     if "fully constrained for hold requirements" not in sta_report:
         errors.append("hold paths are not fully constrained")
 
-    for report_name, text in (("fit", fit_report), ("sta", sta_report)):
+    power_warning_waivers: list[str] = []
+    for report_name, text in (
+        ("fit", fit_report),
+        ("sta", sta_report),
+        ("power", power_report),
+    ):
         for line in text.splitlines():
             if "Critical Warning" in line:
-                errors.append(f"{report_name}: {line.strip()}")
+                code_match = re.search(r"Critical Warning \((\d+)\)", line)
+                code = code_match.group(1) if code_match else ""
+                if (
+                    report_name == "power"
+                    and code in ALLOWED_POWER_CRITICAL_WARNING_CODES
+                ):
+                    power_warning_waivers.append(line.strip())
+                else:
+                    errors.append(f"{report_name}: {line.strip()}")
             if "Warning (332174): Ignored filter" in line:
                 errors.append(f"{report_name}: {line.strip()}")
 
@@ -117,6 +168,51 @@ def validate_reports(
         elif value > limit:
             errors.append(f"{resource} budget exceeded: {value} > {limit}")
 
+    clock_enable_registers = _table_integer_field(
+        map_report,
+        "Number of registers using Clock Enable",
+    )
+    if clock_enable_registers is None:
+        errors.append("missing clock-enable register inference field")
+    elif clock_enable_registers == 0:
+        errors.append("no registers inferred with clock enable")
+
+    fmax_values = [
+        float(value)
+        for value in re.findall(
+            r"^\s*;\s*(\d+(?:\.\d+)?)\s+MHz\s*;"
+            r"\s*\d+(?:\.\d+)?\s+MHz\s*;\s*CLK\s*;",
+            sta_report,
+            re.MULTILINE,
+        )
+    ]
+    if not fmax_values:
+        errors.append("no CLK Fmax entries found")
+
+    power_fields = {
+        "total": "Total Thermal Power Dissipation",
+        "core_dynamic": "Core Dynamic Thermal Power Dissipation",
+        "core_static": "Core Static Thermal Power Dissipation",
+        "io": "I/O Thermal Power Dissipation",
+    }
+    power_mw = {
+        key: _float_field(power_summary, label, "mW")
+        for key, label in power_fields.items()
+    }
+    for field, value in power_mw.items():
+        if value is None:
+            errors.append(f"missing power field: {field}")
+    confidence_match = re.search(
+        r"^Power Estimation Confidence\s*:\s*(.+)$",
+        power_summary,
+        re.MULTILINE,
+    )
+    power_confidence = (
+        confidence_match.group(1).strip() if confidence_match else None
+    )
+    if power_confidence is None:
+        errors.append("missing power estimation confidence")
+
     sof = prefix.with_suffix(".sof")
     if not sof.is_file() or sof.stat().st_size == 0:
         errors.append(f"missing or empty programming image: {project}.sof")
@@ -128,6 +224,14 @@ def validate_reports(
         "device": device,
         "resources": resources,
         "resource_limits": limits,
+        "clock_enable_registers": clock_enable_registers,
+        "fmax_mhz": {
+            "corners": fmax_values,
+            "minimum": min(fmax_values) if fmax_values else None,
+        },
+        "power_mw": power_mw,
+        "power_confidence": power_confidence,
+        "power_warning_waivers": power_warning_waivers,
         "timing": slack_entries,
         "status": "passed" if not errors else "failed",
     }
