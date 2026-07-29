@@ -23,7 +23,7 @@ Known release blockers include:
   removed.
 - Debug: EmbeddedICE-RT and JTAG still contain deferred behavior, including missing
   monitor mode, system-speed scan execution, chain-1 entry-cause capture, and DBGEN
-  transport gating.
+  off-chip TCK synchronization/RTCK transport.
 - Verification: several benches print `FAIL` then exit zero; there is no exhaustive,
   differential, coverage, formal, synthesis, or hardware closure. The 2026-07-28
   `make unit integ run` audit returned 0 even though smoke printed two failures.

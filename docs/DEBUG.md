@@ -174,6 +174,9 @@ DBGRQ and DBGBREAK pins are asynchronous to CLK on real silicon. Each goes throu
 Standard IEEE 1149.1 16-state controller in `rtl/jtag/arm7tdmis_jtag_tap.sv`. Notable wrinkles:
 
 - Uses CLK with DBGTCKEN as enable (off-chip TCK synchronizer per §30.23.9 deferred).
+- The top-level DBGEN gate freezes TCK/TMS/TDI, forces DBGTDO LOW, and forces
+  DBGnTDOEN HIGH immediately while debug is disabled. DBGnTRST remains
+  asynchronous and ungated.
 - DBGnTRST resets the TAP to Test-Logic-Reset AND force-loads IR with IDCODE (IEEE §6.1).
 - IDCODE = `0x7F1F0F0F` (TRM §5.14.2 for r4p3).
 

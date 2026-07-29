@@ -2585,7 +2585,9 @@ number of cycles spent in an internal FSM state.
   atomicity, and chain-1 bit 33's entry-cause/debug-speed/system-speed meanings.
 - [ ] **JTAG-004:** Gate TMS/TDI/TCKEN/TDO/TDOEN as specified by DBGEN. Implement the
   required TCK synchronization/RTCK convention or publish a proven synchronous-only
-  FPGA debug-port wrapper with a different, explicit interface name.
+  FPGA debug-port wrapper with a different, explicit interface name. DBGEN gating is
+  fail-hard verified by `tb/integration/arm7tdmis_debug_dbgen_gating_tb.sv`; the
+  synchronization/wrapper half remains open.
 - [ ] **JTAG-005:** Run end-to-end scan scripts that halt, read/write every register
   and memory through legal debug instructions, use a system-speed access with stalls,
   restart, exercise DCC both directions, set break/watchpoints, and enter monitor mode.

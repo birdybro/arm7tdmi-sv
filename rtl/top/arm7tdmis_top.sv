@@ -263,6 +263,19 @@ module arm7tdmis_top
     logic [31:0] tap_inject_instr;
     logic        tap_inject_break;
     logic        tap_inject_we;
+    logic        tap_tdo;
+    logic        tap_ntdoen;
+
+    // Appendix A: the complete external scan transport is enabled only when
+    // DBGEN is HIGH. DBGnTRST remains independent so the TAP and ICE D-types
+    // can always be cleared asynchronously. Output isolation is combinational
+    // so dropping DBGEN cannot leave the shared TDO pad driven until another
+    // CLK edge.
+    wire tap_tcken = DBGEN && DBGTCKEN;
+    wire tap_tms   = DBGEN && DBGTMS;
+    wire tap_tdi   = DBGEN && DBGTDI;
+    assign DBGTDO    = DBGEN ? tap_tdo : 1'b0;
+    assign DBGnTDOEN = !DBGEN || tap_ntdoen;
 
     // tap_inject_break (DBGBREAK control cell from chain 1) consumed by
     // the debug-state FSM later; the actual instruction routing happens
@@ -270,12 +283,12 @@ module arm7tdmis_top
 
     arm7tdmis_jtag_tap u_tap (
         .CLK              (CLK),
-        .DBGTCKEN         (DBGTCKEN),
+        .DBGTCKEN         (tap_tcken),
         .DBGnTRST         (DBGnTRST),
-        .DBGTMS           (DBGTMS),
-        .DBGTDI           (DBGTDI),
-        .DBGTDO           (DBGTDO),
-        .DBGnTDOEN        (DBGnTDOEN),
+        .DBGTMS           (tap_tms),
+        .DBGTDI           (tap_tdi),
+        .DBGTDO           (tap_tdo),
+        .DBGnTDOEN        (tap_ntdoen),
         .current_ir       (tap_current_ir),
         .in_shift_dr      (tap_in_shift_dr),
         .in_update_dr     (tap_in_update_dr),
