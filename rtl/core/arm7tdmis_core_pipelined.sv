@@ -841,6 +841,9 @@ module arm7tdmis_core_pipelined
                            || cp_undef_trap);
     wire irq_pending   = executing && !nIRQ && !cpsr.i;
     wire fiq_pending   = executing && !nFIQ && !cpsr.f;
+    logic fiq_after_dabt_q;
+    wire  fiq_interlock_fires = fiq_after_dabt_q
+                              && (state_q == S_EXEC);
 
     // §17: the prefetch-abort metadata travels with the fetched
     // instruction. It remains a request even when that instruction also
@@ -852,7 +855,7 @@ module arm7tdmis_core_pipelined
     // not merely overlapping requests. Data Abort is generated only in a
     // non-S_EXEC memory substate, so it is mutually exclusive here; the
     // DABT+FIQ interlock is handled separately at its abort boundary.
-    wire fiq_fires   = fiq_pending;
+    wire fiq_fires   = fiq_pending || fiq_interlock_fires;
     wire irq_fires   = irq_pending && !fiq_pending;
     wire pabt_fires  = pabt_pending && !fiq_pending && !irq_pending;
     wire undef_fires = undef_pending && !fiq_pending && !irq_pending
@@ -893,6 +896,25 @@ module arm7tdmis_core_pipelined
     wire dabt_fires = (data_abort_q || data_abort_now)
                    && (state_next == S_EXEC)
                    && (state_q != S_EXEC);
+
+    // TRM §2.9.10 DABT+FIQ interlock. DABT must save the interrupted
+    // program first, without setting CPSR.F. The immediately following
+    // boundary then enters FIQ from Abort mode even if nFIQ was only low
+    // for the coincident enabled cycle. Returning from FIQ resumes the
+    // untouched Data Abort vector.
+    always_ff @(posedge CLK) begin
+        if (!nRESET) begin
+            fiq_after_dabt_q <= 1'b0;
+        end else if (CLKEN) begin
+            if (fiq_interlock_fires)
+                fiq_after_dabt_q <= 1'b0;
+            // Sample at the actual failed data response. Loads and LDMs
+            // can spend later writeback/completion cycles before
+            // dabt_fires, by which time a one-cycle nFIQ pulse is gone.
+            else if (data_abort_now && !nFIQ && !cpsr.f)
+                fiq_after_dabt_q <= 1'b1;
+        end
+    end
 
     wire any_exc_fires    = swi_fires || undef_fires || irq_fires || fiq_fires
                          || pabt_fires || dabt_fires;
@@ -1082,7 +1104,10 @@ module arm7tdmis_core_pipelined
             rf_write_en   = 1'b1;
         end else if (any_exc_fires) begin
             rf_write_addr = 4'd14;
-            rf_write_data = de_q.pc + 32'd4;
+            // A FIQ immediately following DABT must return to the first
+            // Abort-vector instruction: SUBS pc,lr_fiq,#4 -> 0x10.
+            rf_write_data = fiq_interlock_fires ? 32'h0000_0014
+                                                : (de_q.pc + 32'd4);
             rf_write_en   = 1'b1;
         end else if (branch_link_writes) begin
             rf_write_addr = 4'd14;
