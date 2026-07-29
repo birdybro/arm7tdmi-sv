@@ -171,7 +171,7 @@ module arm7tdmis_cp_busy_interrupt_scenario #(
     initial begin
         wait (nRESET);
         wait (u_dut.u_core.state_q == 4'd12 && !CPnI);
-        repeat (3) @(posedge CLK);
+        wait (busy_cycles_q >= 3);
         if (IS_FIQ)
             nFIQ = 1'b0;
         else
