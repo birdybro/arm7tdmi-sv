@@ -183,6 +183,25 @@ def write_report(path: pathlib.Path, report: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
+def resolve_report_path(
+    path: pathlib.Path, *, require_repo_local: bool
+) -> pathlib.Path:
+    """Resolve a report path and reject locations aggregate gates cannot consume."""
+    resolved = (
+        path.resolve()
+        if path.is_absolute()
+        else (REPO_ROOT / path).resolve()
+    )
+    if require_repo_local:
+        try:
+            resolved.relative_to(REPO_ROOT)
+        except ValueError as error:
+            raise ValueError(
+                f"full regression report must be inside {REPO_ROOT}"
+            ) from error
+    return resolved
+
+
 def expected_failure(command: Sequence[str]) -> bool:
     """Return true only when *command* exits nonzero."""
     result = subprocess.run(
@@ -247,8 +266,10 @@ def _run_phase(
     }
 
 
-def _make_phase(name: str, target: str) -> tuple[str, tuple[str, ...]]:
-    return name, ("make", "-C", str(SCRIPT_DIR), target)
+def _make_phase(
+    name: str, target: str, *make_arguments: str
+) -> tuple[str, tuple[str, ...]]:
+    return name, ("make", "-C", str(SCRIPT_DIR), target, *make_arguments)
 
 
 def _phases(
@@ -257,6 +278,7 @@ def _phases(
     *,
     quick: bool,
     include_fpga: bool = True,
+    regression_report: pathlib.Path | None = None,
 ) -> Iterable[tuple[str, tuple[str, ...]]]:
     yield _make_phase("clean", "clean")
     yield _make_phase("lint-rtl", "lint")
@@ -303,9 +325,19 @@ def _phases(
     for test in selected_integration:
         yield _make_phase(f"integration-{test}", f"integ-{test}")
     if not quick:
+        selected_report = regression_report or (
+            REPO_ROOT / "reports/generated/regression.json"
+        )
+        report_assignment = f"REGRESSION_REPORT={selected_report}"
         yield _make_phase("formal", "formal")
-        yield _make_phase("table7-cross", "table7-cross")
-        yield _make_phase("functional-coverage", "functional-coverage")
+        yield _make_phase(
+            "table7-cross", "table7-cross", report_assignment
+        )
+        yield _make_phase(
+            "functional-coverage",
+            "functional-coverage",
+            report_assignment,
+        )
     yield _make_phase("public-suite", "public-suite")
     if quick:
         yield _make_phase(
@@ -358,9 +390,13 @@ def main() -> int:
     args = _parse_args()
     unit_tests = tuple(args.unit_tests.split())
     integration_tests = tuple(args.integration_tests.split())
-    report_path = args.report
-    if not report_path.is_absolute():
-        report_path = REPO_ROOT / report_path
+    try:
+        report_path = resolve_report_path(
+            args.report, require_repo_local=not args.quick
+        )
+    except ValueError as error:
+        print(f"[regression] FAIL: {error}", file=sys.stderr)
+        return 2
     log_directory = report_path.parent / "logs"
 
     report = collect_metadata(
@@ -410,6 +446,7 @@ def main() -> int:
             integration_tests,
             quick=args.quick,
             include_fpga=not args.simulation_only,
+            regression_report=report_path,
         ):
             result = _run_phase(
                 name=name,

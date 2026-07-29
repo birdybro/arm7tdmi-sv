@@ -80,6 +80,10 @@ SOAK_BIN := $(SOAK_OBJ_DIR)/Varm7tdmis_mister_wrapper_tb
 SOAK_REPORT := ../reports/generated/soak-report.json
 FORMAL_REPORT := ../reports/generated/formal-report.json
 FORMAL_JOBS ?= 2
+# Full-regression aggregate gates must consume the report currently being
+# written by the harness. The harness overrides this for alternate repo-local
+# report paths; direct Make invocations retain the release default.
+REGRESSION_REPORT ?= reports/generated/regression.json
 ARM_TOOLCHAIN_ROOT := ../.tools
 ARM_TOOLCHAIN := \
 	$(ARM_TOOLCHAIN_ROOT)/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi
@@ -324,7 +328,7 @@ public-suite: public-suite-build
 table7-cross:
 	PYTHONPATH=../verification $(PYTHON) ../verification/table7_cross.py \
 	    --manifest verification/table7_cross.json \
-	    --regression reports/generated/regression.json \
+	    --regression $(REGRESSION_REPORT) \
 	    --output reports/generated/table7-cross-report.json
 
 # VAL-006 consumes the exhaustive decoder/policy phases from the current
@@ -333,7 +337,7 @@ functional-coverage:
 	PYTHONPATH=../verification $(PYTHON) \
 	    ../verification/functional_coverage.py \
 	    --manifest verification/functional_coverage.json \
-	    --regression reports/generated/regression.json \
+	    --regression $(REGRESSION_REPORT) \
 	    --output reports/generated/functional-coverage-report.json
 
 # VAL-007/VAL-008 use a release-pinned OSS CAD Suite archive and fail unless
