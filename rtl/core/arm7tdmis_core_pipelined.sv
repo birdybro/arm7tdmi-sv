@@ -776,7 +776,8 @@ module arm7tdmis_core_pipelined
     // ARM register-controlled shifts read Rm one internal cycle later than
     // ordinary operands, so Rm=r15 exposes the instruction address +12
     // rather than the regfile's normal +8 view (TRM §7.5.4). Keep this
-    // exception local to Rm: Rn in the same instruction still reads +8.
+    // exception applies to every PC operand consumed after that internal
+    // cycle: both Rm and Rn expose +12.
     wire [31:0] op2_register_value = (!de_q.thumb
                                       && dec.shifter_use_rs
                                       && (dec.rm == 4'd15))
@@ -812,8 +813,14 @@ module arm7tdmis_core_pipelined
     // regfile already adds the +4 Thumb pipeline offset for r15 reads, so
     // we just mask bits[1:0] here. For all other DP ops (and ARM in
     // general) dp_pc_align is 0 and op_a passes through unchanged.
-    wire [31:0] alu_op_a = dec.dp_pc_align ? (rf_ra_data & 32'hFFFFFFFC)
-                                            : rf_ra_data;
+    wire [31:0] dp_rn_value = (!de_q.thumb
+                               && dec.shifter_use_rs
+                               && (dec.rn == 4'd15))
+                              ? (de_q.pc + 32'd12)
+                              : rf_ra_data;
+    wire [31:0] alu_op_a = dec.dp_pc_align
+                         ? (dp_rn_value & 32'hFFFFFFFC)
+                         : dp_rn_value;
 
     arm7tdmis_alu u_alu (
         .op            (dec.alu_op),

@@ -2470,7 +2470,7 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   register-specified shift (+12 case), store-data r15, branch link, PC-relative Thumb
   operations, and debug-state instructions. The reset-per-program
   `tb/integration/arm7tdmis_pc_operands_tb.sv` checks ordinary ARM +8, the distinct
-  register-controlled-shift Rm +12 value, scalar and block-store +12 data, BL link,
+  register-controlled-shift Rm and Rn +12 values, scalar and block-store +12 data, BL link,
   ordinary Thumb +4, and word-aligned Thumb literal/ADD bases at a halfword address.
   The block-store path now uses the latched instruction PC rather than accidentally
   borrowing the following decode-stage PC. `tb/integration/arm7tdmis_cp14_r15_tb.sv`

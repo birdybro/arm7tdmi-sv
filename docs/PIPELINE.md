@@ -46,7 +46,7 @@ instruction address explicitly:
 | Consumer | Value |
 |---|---|
 | Ordinary ARM operand / ARM PC-relative base | `de_q.pc + 8` |
-| ARM register-controlled shift `Rm=r15` | `de_q.pc + 12` |
+| ARM register-controlled shift `Rm=r15` or `Rn=r15` | `de_q.pc + 12` |
 | ARM `STR`/`STM` store data for r15 | instruction PC `+ 12` |
 | ARM `BL` link | `de_q.pc + 4` |
 | Thumb ordinary operand | `de_q.pc + 4` |
