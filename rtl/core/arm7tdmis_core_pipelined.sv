@@ -393,6 +393,7 @@ module arm7tdmis_core_pipelined
     logic [31:0]  mull_op_a_q;            // rf_rb_data (= Rm)  at S_EXEC time
     logic [31:0]  mull_op_b_q;            // rf_rc_data (= Rs) at S_EXEC time
     logic         mull_signed_q;          // dec.mul_signed at S_EXEC time
+    logic         mull_s_q;               // dec.s_bit at S_EXEC time
 
     // ---- PSR + exception entry plumbing ----
     psr_t         spsr_value;
@@ -585,10 +586,8 @@ module arm7tdmis_core_pipelined
 
     // §9d: is_long=1 for MULL forms (UMULL/SMULL/UMLAL/SMLAL); is_signed=1
     // for SMULL/SMLAL (decoder sets dec.mul_signed accordingly). MUL/MLA
-    // keep is_long=0 / is_signed=0. UMLAL/SMLAL accumulate forms aren't
-    // wired yet — they need a 4th regfile read port (RdHi as accumulator
-    // high half) which the 3-port regfile can't supply in one cycle. Path
-    // for those gets added when the cycle-shaping work (§18) lengthens E.
+    // keep is_long=0 / is_signed=0. UMLAL/SMLAL use the dedicated
+    // S_MULL_ACC cycle below to read the accumulator high half.
     wire instr_class_is_mull = (dec.instr_class == INSTR_MULL);
 
     // §9c UMLAL/SMLAL routing. In S_MULL_ACC: op_a/op_b come from
@@ -888,13 +887,15 @@ module arm7tdmis_core_pipelined
 
     // §9d: MUL/MLA write Rd at bits[19:16] (= dec.rn) in S_EXEC.
     // UMULL/SMULL write RdLo at bits[15:12] (= dec.rd) in S_EXEC and
-    // RdHi at bits[19:16] (= dec.rn) in S_MULL_HI. Flag updates (NZ from
-    // the full result) happen in S_EXEC for both — the multiplier's
-    // result_hi is combinational, so we can sample flags in the first
-    // execute cycle even though RdHi commits a cycle later.
+    // RdHi at bits[19:16] (= dec.rn) in S_MULL_HI. Non-accumulating flag
+    // updates happen in S_EXEC because both product halves are already
+    // combinational. UMLAL/SMLAL defer N/Z until S_MULL_ACC, when both
+    // accumulator halves are available and the final 64-bit sum exists.
     wire mul_writes_dest  = passes_cond && instr_is_mul;
     wire mull_writes_lo   = mull_take_cycle;
-    wire mul_writes_flags = (mul_writes_dest || mull_take_cycle) && dec.s_bit;
+    wire mull_accum_writes_flags = (state_q == S_MULL_ACC) && mull_s_q;
+    wire mul_writes_flags = ((mul_writes_dest || mull_take_cycle) && dec.s_bit)
+                          || mull_accum_writes_flags;
 
     wire writes_pc_exec   = (dp_writes_pc && !dp_shift_take_cycle)
                           || ((state_q == S_DP_SHIFT) && dp_shift_writes_pc_q)
@@ -1222,6 +1223,7 @@ module arm7tdmis_core_pipelined
                 mull_op_a_q              <= 32'h0;
                 mull_op_b_q              <= 32'h0;
                 mull_signed_q            <= 1'b0;
+                mull_s_q                 <= 1'b0;
                 dp_shift_rd_q            <= 4'h0;
                 dp_shift_result_q        <= 32'h0;
                 dp_shift_flags_q         <= 4'h0;
@@ -1305,6 +1307,7 @@ module arm7tdmis_core_pipelined
                     mull_op_a_q              <= rf_rb_data;
                     mull_op_b_q              <= rf_rc_data;
                     mull_signed_q            <= dec.mul_signed;
+                    mull_s_q                 <= dec.s_bit;
                     mull_accumulate_active_q <= 1'b1;
                     mull_active_q            <= 1'b1;
                 end
