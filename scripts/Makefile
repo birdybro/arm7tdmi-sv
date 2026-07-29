@@ -24,9 +24,10 @@ FPGA_EXAMPLE := ../fpga/example/arm7tdmi_mister_example_top.sv
 TOP_RTL   := arm7tdmis_top
 TOP_TB    := arm7tdmis_tb_top
 
-# Verilator flags. -Wall enables every warning category. UNUSEDPARAM is
-# suppressed while package constants are being introduced ahead of their
-# consumers; re-enable once each constant has at least one user.
+# Verilator warnings are fatal by default. The only global RTL exception is
+# UNUSEDPARAM because each elaborated top consumes a different subset of the
+# shared public package API. Integration builds additionally allow the audited
+# mixed-use testbench reset net. See docs/WARNING_POLICY.md.
 VFLAGS_COMMON := -Wall -Wno-UNUSEDPARAM --assert --timescale 1ns/1ps
 VFLAGS_LINT   := $(VFLAGS_COMMON)
 VFLAGS_BUILD  := $(VFLAGS_COMMON) --binary --trace-fst -j 0
@@ -148,7 +149,7 @@ unit: $(addprefix unit-, $(UNIT_TESTS))
 define INTEG_RULE
 integ-$(1):
 	mkdir -p $$(OBJ_DIR)
-	$$(VERILATOR) $$(VFLAGS_BUILD) -Wno-SYNCASYNCNET -Wno-UNOPTFLAT \
+	$$(VERILATOR) $$(VFLAGS_BUILD) -Wno-SYNCASYNCNET \
 	    $$(INTEG_EXTRA_FLAGS_$(1)) \
 	    --top-module arm7tdmis_$(1)_tb \
 	    --Mdir $$(OBJ_DIR)/integ_$(1) -f $$(SIM_F) \

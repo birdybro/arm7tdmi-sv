@@ -2388,8 +2388,13 @@ No functional claim can become VERIFIED until every item here is complete.
   opt-in RTL mutants to fail through their intended architectural diagnostics;
   a surviving mutant, compile failure, or unrelated test failure fails the
   mutation command. GitHub Actions runs this suite weekly and on manual dispatch.
-- [ ] **VER-006:** Treat assertions and simulator errors as fatal. Remove unsupported
+- [x] **VER-006:** Treat assertions and simulator errors as fatal. Remove unsupported
   warning suppressions or give each one an owner, rationale, and expiry.
+  Every compile uses fatal `-Wall`, every simulation enables `--assert`, and
+  no RTL/test source uses `$error`. The stale blanket `UNOPTFLAT` waiver was
+  removed. `docs/WARNING_POLICY.md` owns the two command-line and three inline
+  classes with rationale and expiry conditions; `test_warning_policy.py`
+  mechanically rejects new classes, unpaired pragmas, or weakened fatal flags.
 - [x] **VER-007:** Stop treating `ABORT` during I/C as illegal testbench stimulus.
   Assert that the core ignores it there, as the TRM requires.
   `tb/integration/arm7tdmis_abort_inactive_tb.sv` injects ABORT during I/C

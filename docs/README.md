@@ -28,6 +28,9 @@ because they agree with each other.
 - **[VERIFICATION.md](VERIFICATION.md)** — fail-hard regression ordering,
   intentional-failure sentinel, reproducibility metadata, and the
   `arm7tdmis-regression-v1` machine-readable result schema.
+- **[WARNING_POLICY.md](WARNING_POLICY.md)** — mechanically enforced fatal
+  warning/assertion policy and the owner, rationale, and expiry condition for
+  every command-line or inline suppression class.
 - **[PSR.md](PSR.md)** — CPSR/SPSR bit map, MSR field and privilege rules,
   deterministic invalid-mode and absent-SPSR policy, and the frozen CPSR.T
   behavior.
