@@ -332,11 +332,11 @@ module arm7tdmis_core_pipelined
     logic         block_user_mode_q;     // LDM/STM ^ — force user-bank regs
     logic         block_has_pc_q;        // r15 in this block's reg list?
 
-    // §17 LDM/STM restart-safety: Rn writeback is deferred to a dedicated
-    // S_BLOCK_WB cycle (was: committed at S_EXEC) so that if any beat
-    // aborts, Rn stays at its original value and the LDM can be restarted
-    // by the abort handler. Latched at S_EXEC end alongside the rest of
-    // the block state.
+    // §17 block-transfer writeback state. LDM defers Rn writeback until
+    // all beats have completed (or the final abort boundary). STM commits
+    // Rn in its setup cycle, before any data abort can be returned, as
+    // required by the ARM7TDMI-S abort model. Latched values are retained
+    // for the LDM paths and for block-transfer iteration.
     logic         block_writeback_q;
     logic [31:0]  block_writeback_addr_q;
     logic [3:0]   block_rn_q;
@@ -693,18 +693,14 @@ module arm7tdmis_core_pipelined
                                    && block_writeback_q
                                    && (data_abort_q || data_abort_now);
 
-    // §18: STM Rn-writeback path. TRM Table 7-15 gives STM n+1 cycles
-    // (1S+(n-1)S+1N, no I cycle), vs LDM's n+2. To match, STM commits
-    // Rn in the *last* S_BLOCK_DATA cycle and skips S_BLOCK_WB. The
-    // regfile write port is free in that cycle because STM has no load
-    // to commit (block_writes_ldm is gated by block_load_q). Aborts
-    // suppress (preserves Rn for the abort handler — §17 restart).
-    wire block_stm_does_writeback = (state_q == S_BLOCK_DATA)
-                                  && !block_has_more
-                                  && !block_load_q
-                                  && block_writeback_q
-                                  && !data_abort_q
-                                  && !data_abort_now;
+    // §17/§18: STM modifies Rn in the setup cycle. This is before the
+    // first data response, so an abort on any beat still leaves the
+    // requested writeback visible. It also preserves STM's n+1 timing
+    // because no separate writeback state is introduced.
+    wire block_stm_early_writeback = (state_q == S_EXEC)
+                                   && block_take_cycle
+                                   && !dec.block_load
+                                   && dec.block_writeback;
 
     wire swp_take_cycle = passes_cond && (dec.instr_class == INSTR_SWP);
 
@@ -1089,15 +1085,13 @@ module arm7tdmis_core_pipelined
             rf_write_addr = dec.rn;
             rf_write_data = ls_data_addr_calc;
             rf_write_en   = 1'b1;
+        end else if (block_stm_early_writeback) begin
+            rf_write_addr = dec.rn;
+            rf_write_data = block_writeback_addr;
+            rf_write_en   = 1'b1;
         end else if (block_does_writeback) begin
             // dec.* is stale by S_BLOCK_WB (de_q advanced); use latched
             // block_rn_q and block_writeback_addr_q snapshotted at S_EXEC.
-            rf_write_addr = block_rn_q;
-            rf_write_data = block_writeback_addr_q;
-            rf_write_en   = 1'b1;
-        end else if (block_stm_does_writeback) begin
-            // STM Rn writeback in the last S_BLOCK_DATA beat — gives
-            // STM the TRM-correct n+1 cycle count (no I cycle).
             rf_write_addr = block_rn_q;
             rf_write_data = block_writeback_addr_q;
             rf_write_en   = 1'b1;
