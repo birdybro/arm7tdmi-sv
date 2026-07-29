@@ -1,6 +1,7 @@
 // BUS-005/BUS-011 regression: the first opcode access after reset is
-// nonsequential, a taken branch advertises its discarded pc+2i prefetch as
-// N, and Table 7-3 explicitly classifies both target refill fetches as S.
+// nonsequential, the discarded pc+2i prefetch remains part of the incoming
+// S burst, and Table 7-3 drives target/N, target+i/S, and target+2i/S on
+// the raw address-class pins while the three branch cycles execute.
 
 module arm7tdmis_fetch_sequence_tb
     import arm7tdmis_bus_pkg::*;
@@ -27,18 +28,20 @@ module arm7tdmis_fetch_sequence_tb
     logic seen_first;
     logic [31:0] first_addr;
     logic [1:0] first_trans;
-    logic seen_source_n;
-    logic seen_target_s;
-    logic seen_following_s;
+    logic seen_source_s;
+    logic seen_target_n;
+    logic seen_target_plus_i_s;
+    logic seen_target_plus_2i_s;
 
     always_ff @(posedge CLK or negedge nRESET) begin
         if (!nRESET) begin
             seen_first       <= 1'b0;
             first_addr       <= 32'h0;
             first_trans      <= TRANS_I;
-            seen_source_n    <= 1'b0;
-            seen_target_s    <= 1'b0;
-            seen_following_s <= 1'b0;
+            seen_source_s         <= 1'b0;
+            seen_target_n         <= 1'b0;
+            seen_target_plus_i_s  <= 1'b0;
+            seen_target_plus_2i_s <= 1'b0;
         end else if (u_fixture.u_dut.core_nreset
                      && (u_fixture.TRANS inside {TRANS_N, TRANS_S})) begin
             if (!seen_first) begin
@@ -47,16 +50,20 @@ module arm7tdmis_fetch_sequence_tb
                 first_trans <= u_fixture.TRANS;
             end
             if (u_fixture.ADDR == 32'h00000008
-                && u_fixture.TRANS == TRANS_N)
-                seen_source_n <= 1'b1;
-            if (seen_source_n
-                && u_fixture.ADDR == 32'h00000020
                 && u_fixture.TRANS == TRANS_S)
-                seen_target_s <= 1'b1;
-            if (seen_target_s
+                seen_source_s <= 1'b1;
+            if (seen_source_s
+                && u_fixture.ADDR == 32'h00000020
+                && u_fixture.TRANS == TRANS_N)
+                seen_target_n <= 1'b1;
+            if (seen_target_n
                 && u_fixture.ADDR == 32'h00000024
                 && u_fixture.TRANS == TRANS_S)
-                seen_following_s <= 1'b1;
+                seen_target_plus_i_s <= 1'b1;
+            if (seen_target_plus_i_s
+                && u_fixture.ADDR == 32'h00000028
+                && u_fixture.TRANS == TRANS_S)
+                seen_target_plus_2i_s <= 1'b1;
         end
     end
 
@@ -73,18 +80,18 @@ module arm7tdmis_fetch_sequence_tb
             errors = errors + 1;
         end
 
-        if (!seen_source_n) begin
-            $display("[fetch_sequence] FAIL discarded branch pc+8 was not N");
+        if (!seen_source_s) begin
+            $display("[fetch_sequence] FAIL discarded branch pc+8 was not S");
             errors = errors + 1;
         end
 
-        if (!seen_target_s) begin
-            $display("[fetch_sequence] FAIL branch target 0x20 was not S");
+        if (!seen_target_n) begin
+            $display("[fetch_sequence] FAIL branch target 0x20 was not N");
             errors = errors + 1;
         end
 
-        if (!seen_following_s) begin
-            $display("[fetch_sequence] FAIL following fetch 0x24 was not S");
+        if (!seen_target_plus_i_s || !seen_target_plus_2i_s) begin
+            $display("[fetch_sequence] FAIL branch S refill at 0x24/0x28 was incomplete");
             errors = errors + 1;
         end
 
