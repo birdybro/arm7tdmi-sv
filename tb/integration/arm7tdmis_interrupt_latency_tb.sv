@@ -3,9 +3,9 @@
 // Both rows put the raw synchronous nFIQ pin behind the same two-flop
 // active-high event synchronizer used by arm7tdmi_mister. Latency is counted
 // in rising processor-clock edges beginning with the first synchronizer
-// sampling edge and ending when the first FIQ-vector address phase is
-// accepted. This pin-level endpoint avoids adding behavioral-memory response
-// latency to the TRM's processor-cycle definition.
+// sampling edge and ending when the first FIQ-vector opcode response is
+// presented to the core. This is Table 7-16's final refill cycle and does
+// not include the core's later Decode/Execute pipeline bookkeeping.
 //
 // MIN: synchronizer (2) + FIQ entry (2) = 4 cycles.
 // MAX: synchronizer (2) + 16-register LDM including PC (20) +
@@ -223,11 +223,14 @@ module arm7tdmis_interrupt_latency_scenario #(
                     fiq_cycle <= latency_cycles + 1;
             end
 
+            // Table 7-16's final refill cycle presents the first vector
+            // opcode response.  Use the core's address-phase response tag,
+            // not Decode/Execute residency (which adds two pipeline stages)
+            // or a mixed pre-edge vector address/post-edge CPSR condition.
             if (counting && !vector_seen
-                && (TRANS inside {TRANS_N, TRANS_S})
-                && !PROT[0]
-                && (ADDR == 32'h0000_001C)
-                && (u_dut.u_core.cpsr.m == 5'(MODE_FIQ))) begin
+                && u_dut.u_core.inflight_valid_q
+                && u_dut.u_core.inflight_pc_q == 32'h0000_001C
+                && u_dut.u_core.cpsr.m == 5'(MODE_FIQ)) begin
                 vector_seen      <= 1'b1;
                 measured_latency <= latency_cycles + 1;
             end
