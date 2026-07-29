@@ -4,11 +4,13 @@
 > debug-speed register/PSR transfer, staged system-speed access, and the bidirectional
 > CP14 DCC have fail-hard directed coverage. Monitor-mode breakpoint/watchpoint
 > aborts, CP14 Debug Abort Status coupling, synchronous DBGRQ/DBGBREAK sampling,
-> and halt-mode watchpoint/exception ordering are also covered end to end. A
-> synchronous FPGA debug-port wrapper, ETM closure, the remaining collision
-> matrix, and other release blockers are tracked in `TASKS.md` §31.6–§31.8.
+> halt-mode watchpoint/exception ordering, and the synchronous FPGA debug transport
+> are also covered end to end. ETM closure and other release blockers are tracked
+> in `TASKS.md` §31.6–§31.8.
 
-EmbeddedICE-RT + JTAG TAP + CP14 DCC, as implemented in `rtl/debug/arm7tdmis_ice_rt.sv` and `rtl/jtag/arm7tdmis_jtag_tap.sv`. The TRM chapters are 5.13–5.27.
+EmbeddedICE-RT + JTAG TAP + CP14 DCC, as implemented in
+`rtl/debug/arm7tdmis_ice_rt.sv`, `rtl/jtag/arm7tdmis_jtag_tap.sv`, and
+`rtl/jtag/arm7tdmis_sync_debug_port.sv`. The TRM chapters are 5.13–5.27.
 
 ## Top-level data flow
 
@@ -39,7 +41,11 @@ EmbeddedICE-RT + JTAG TAP + CP14 DCC, as implemented in `rtl/debug/arm7tdmis_ice
                         └──────────┘  (MRC p14 c1 ← RX buffer)
 ```
 
-The TAP runs on the system CLK gated by DBGTCKEN (off-chip TCK synchronizer deferred). The core runs on CLK gated by `CLKEN && !core_halt`. This means the TAP keeps cycling JTAG state while the core is frozen — exactly what a debugger needs.
+The TAP runs on the system CLK gated by DBGTCKEN. Physical asynchronous TCK is
+not a port on this soft core. FPGA integrations either supply the documented
+same-clock step transport below or provide and verify their own CDC bridge.
+The core runs on CLK gated by `CLKEN && !core_halt`. This means the TAP keeps
+cycling JTAG state while the core is frozen — exactly what a debugger needs.
 
 ## EmbeddedICE-RT register bank
 
@@ -269,7 +275,8 @@ covered by `tb/integration/arm7tdmis_debug_dbgrq_exception_tb.sv`.
 
 Standard IEEE 1149.1 16-state controller in `rtl/jtag/arm7tdmis_jtag_tap.sv`. Notable wrinkles:
 
-- Uses CLK with DBGTCKEN as enable (off-chip TCK synchronizer per §30.23.9 deferred).
+- Uses CLK with DBGTCKEN as its synchronous enable; it does not accept an
+  asynchronous TCK.
 - The top-level DBGEN gate freezes TCK/TMS/TDI, forces DBGTDO LOW, and forces
   DBGnTDOEN HIGH immediately while debug is disabled. DBGnTRST remains
   asynchronous and ungated.
@@ -281,6 +288,35 @@ Standard IEEE 1149.1 16-state controller in `rtl/jtag/arm7tdmis_jtag_tap.sv`. No
   IEEE IDCODE bit 0 is always constructed as one and cannot be overridden.
   Integrators must not ship the ARM default as their own vendor identity
   unless they are implementing a compatibility-only internal simulation.
+
+### Synchronous FPGA transport
+
+`arm7tdmis_sync_debug_port` gives an FPGA framework a transport whose name and
+ports cannot be mistaken for asynchronous IEEE 1149.1 pins. Every signal on
+its `STEP_*` interface is synchronous to `CLK`:
+
+1. The host holds `STEP_VALID`, `STEP_TMS`, and `STEP_TDI` until
+   `STEP_READY` is high on a rising `CLK` edge.
+2. That handshake emits exactly one `DBGTCKEN` pulse. The adapter samples the
+   pre-edge TAP `DBGTDO` and active-low `DBGnTDOEN` on the same edge.
+3. On a later cycle it presents `STEP_RSP_VALID`, `STEP_TDO`, and active-high
+   `STEP_TDO_OE`. These remain stable until `STEP_RSP_READY` is high.
+4. A response may be consumed and replaced by a new step on the same edge.
+   Otherwise a full response slot holds `STEP_READY` low and prevents duplicate
+   TAP events.
+
+`PORT_ENABLE` must use the same security/policy source as the wrapped core's
+`DBGEN`. Low refuses commands, forces all raw request pins and visible response
+signals low, and clears buffered response state at the next clock. `nRESET`
+clears the transport; the integration must also route its intended TAP reset
+policy to `DBGnTRST`.
+
+This module is not a TCK synchronizer and exposes no RTCK claim. A board-level
+asynchronous JTAG pod therefore requires a separately specified and verified
+CDC bridge. The provided interface avoids that clock domain entirely.
+`tb/unit/sync_debug_port_tb.sv` checks backpressure and replacement, exact
+event count, reset/disable isolation, and an end-to-end 32-bit IDCODE scan
+through the real TAP.
 
 ### IR opcodes (TRM §5.13)
 
@@ -485,8 +521,11 @@ Don't add them.
 
 - `rtl/debug/arm7tdmis_ice_rt.sv` — EmbeddedICE-RT macrocell (register bank + comparators + debug FSM + inject FSM + sync chains).
 - `rtl/jtag/arm7tdmis_jtag_tap.sv` — JTAG TAP controller + scan chain shift registers.
+- `rtl/jtag/arm7tdmis_sync_debug_port.sv` — same-CLK ready/valid virtual-TCK transport.
 - `rtl/arm7tdmis_debug_pkg.sv` — IR opcodes, IDCODE value, debug state enum, scan chain widths.
 - `tb/unit/ice_rt_tb.sv` — Watchpoint match + scan chain 2 R/W unit test.
 - `tb/unit/jtag_tap_tb.sv` — IDCODE shift-out + BYPASS IR-load unit test.
+- `tb/unit/sync_debug_port_tb.sv` — synchronous transport protocol, isolation,
+  event-count, and end-to-end IDCODE test.
 - `tb/unit/dcc_tb.sv` — Independent DCC ownership/races and Debug Abort Status storage.
 - `tb/integration/arm7tdmis_cp14_dcc_tb.sv` — Public CP14/JTAG DCC round trip and pins.

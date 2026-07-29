@@ -22,6 +22,7 @@
 ../rtl/core/arm7tdmis_core_pipelined.sv
 
 ../rtl/jtag/arm7tdmis_jtag_tap.sv
+../rtl/jtag/arm7tdmis_sync_debug_port.sv
 
 ../rtl/debug/arm7tdmis_ice_rt.sv
 

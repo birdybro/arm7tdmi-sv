@@ -135,7 +135,8 @@ See [docs/PIPELINE.md](docs/PIPELINE.md) for the detailed FSM, bus-overlap reaso
   transitions, public/default instructions, SCAN_N, and the physical chain-1/2
   wire orders are fail-hard tested. Chain-1 entry causes, debug-speed transfers,
   scan-loaded resume, and staged bit-33 system-speed access have public-pin tests;
-  off-chip TCK synchronization and full debugger integration remain incomplete.
+  the explicitly same-CLK FPGA transport is protocol-tested. An asynchronous
+  pod needs a separate CDC bridge, and real-debugger integration remains open.
 - **ETM-facing instrumentation**: `DBGnEXEC` and `DBGINSTRVALID` exist, but their full
   commit semantics and the external ETM contract are unverified.
 
@@ -185,6 +186,7 @@ rtl/
                arm7tdmis_condition.sv       (16 ARM condition codes)
   debug/       arm7tdmis_ice_rt.sv          (EmbeddedICE-RT macrocell)
   jtag/        arm7tdmis_jtag_tap.sv        (IEEE 1149.1 TAP + scan chains)
+               arm7tdmis_sync_debug_port.sv (same-CLK FPGA debug transport)
   top/         arm7tdmis_top.sv             (pin-level integration)
                arm7tdmis_chip.sv            (chip wrapper with DFT pins)
 

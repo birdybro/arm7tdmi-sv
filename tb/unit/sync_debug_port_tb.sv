@@ -10,7 +10,8 @@ module sync_debug_port_tb
     import arm7tdmis_debug_pkg::*;
 ;
 
-    logic CLK = 1'b0;
+    logic CLK;
+    initial CLK = 1'b0;
     always #5 CLK = ~CLK;
 
     logic nRESET;
@@ -147,6 +148,8 @@ module sync_debug_port_tb
         logic ignored_tdo;
         logic ignored_oe;
         step(tms, 1'b0, ignored_tdo, ignored_oe);
+        check(!$isunknown({ignored_tdo, ignored_oe}),
+              "control step returned an unknown response");
     endtask
 
     initial begin
@@ -206,6 +209,7 @@ module sync_debug_port_tb
         // generate precisely one new TAP event.
         @(negedge CLK);
         STEP_RSP_READY = 1'b1;
+        #1;
         check(STEP_READY && DBGTCKEN,
               "transport could not replace a consumed response");
         @(posedge CLK);
@@ -264,6 +268,12 @@ module sync_debug_port_tb
               $sformatf("IDCODE mismatch: got %08x", idcode));
         check(current_ir == IR_IDCODE, "IDCODE instruction changed");
         check(tap_run_idle, "TAP did not return to Run-Test/Idle");
+        check(!$isunknown({
+                  in_shift_dr, in_update_dr, in_capture_dr,
+                  ice_scan_addr, ice_scan_wdata, ice_scan_we, ice_scan_re,
+                  ice_chain1_capture, ice_inject_instr, ice_inject_break,
+                  ice_inject_we, tap_restart_req
+              }), "TAP auxiliary outputs contained unknown state");
 
         if (errors != 0)
             $fatal(1, "sync_debug_port_tb: FAIL (%0d errors)", errors);

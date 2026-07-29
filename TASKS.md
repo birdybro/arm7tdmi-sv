@@ -2764,11 +2764,16 @@ number of cycles spent in an internal FSM state.
   system-speed sequence, CLKEN stall, temporary `DBGACK`, IRQ masking, automatic
   re-entry, and high re-entry cause are verified by
   `tb/integration/arm7tdmis_debug_system_speed_tb.sv`.
-- [ ] **JTAG-004:** Gate TMS/TDI/TCKEN/TDO/TDOEN as specified by DBGEN. Implement the
+- [x] **JTAG-004:** Gate TMS/TDI/TCKEN/TDO/TDOEN as specified by DBGEN. Implement the
   required TCK synchronization/RTCK convention or publish a proven synchronous-only
   FPGA debug-port wrapper with a different, explicit interface name. DBGEN gating is
-  fail-hard verified by `tb/integration/arm7tdmis_debug_dbgen_gating_tb.sv`; the
-  synchronization/wrapper half remains open.
+  fail-hard verified by `tb/integration/arm7tdmis_debug_dbgen_gating_tb.sv`.
+  `rtl/jtag/arm7tdmis_sync_debug_port.sv` is the explicitly named,
+  same-`CLK` command/response transport: it emits exactly one `DBGTCKEN` event
+  for each accepted step and deliberately does not claim asynchronous JTAG
+  compatibility. Backpressure, disable/reset isolation, event accounting, and
+  a complete default-IDCODE scan through the real TAP are verified by
+  `tb/unit/sync_debug_port_tb.sv`; its timing contract is in `docs/DEBUG.md`.
 - [x] **JTAG-005:** Run end-to-end scan scripts that halt, read/write every register
   and memory through legal debug instructions, use a system-speed access with stalls,
   restart, exercise DCC both directions, set break/watchpoints, and enter monitor mode.
