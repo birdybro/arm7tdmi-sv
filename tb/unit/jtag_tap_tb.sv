@@ -12,6 +12,8 @@ module jtag_tap_tb
     import arm7tdmis_debug_pkg::*;
 ;
 
+    localparam logic [31:0] CHAIN1_CAPTURE_DATA = 32'h1357_9BDF;
+
     logic CLK = 1'b0;
     initial forever #5 CLK = ~CLK;
 
@@ -35,6 +37,7 @@ module jtag_tap_tb
     logic [31:0] ice_inject_instr;
     logic        ice_inject_break;
     logic        ice_inject_we;
+    logic        ice_chain1_capture;
     logic        tap_restart_req;
 
     arm7tdmis_jtag_tap dut (
@@ -55,6 +58,9 @@ module jtag_tap_tb
         .ice_scan_re,
         .ice_scan_rdata,
         .ice_scan_raddr,
+        .ice_chain1_capture_data (CHAIN1_CAPTURE_DATA),
+        .ice_chain1_capture_break(1'b0),
+        .ice_chain1_capture,
         .ice_inject_instr,
         .ice_inject_break,
         .ice_inject_we,
@@ -353,6 +359,11 @@ module jtag_tap_tb
             serial_in[i + 1] = inject_word[31 - i];
         count_before = inject_we_count;
         scan_dr(SCAN_CHAIN1_WIDTH, serial_in, serial_out);
+        check(serial_out[0] == 1'b0,
+              "chain 1 did not capture the DBGBREAK input");
+        for (int i = 0; i < 32; i++)
+            check(serial_out[i + 1] == CHAIN1_CAPTURE_DATA[31 - i],
+                  "chain 1 physical ordering corrupted captured data");
         check(inject_we_count == count_before + 1,
               "chain 1 did not produce exactly one Update-DR pulse");
         check(ice_inject_instr == inject_word,
@@ -438,7 +449,8 @@ module jtag_tap_tb
     end
 
     /* verilator lint_off UNUSEDSIGNAL */
-    wire _unused = &{1'b0, in_shift_dr, in_update_dr, in_capture_dr};
+    wire _unused = &{1'b0, in_shift_dr, in_update_dr, in_capture_dr,
+        ice_chain1_capture};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule

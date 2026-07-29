@@ -1,28 +1,4 @@
-// EmbeddedICE-RT macrocell scaffold (TRM §5.14 / TASKS.md §22).
-//
-// At this milestone:
-//   • Full register bank for both watchpoint units (WP0 + WP1) plus the
-//     Debug Control / Debug Status / Vector Catch / DCC registers.
-//   • Watchpoint comparators (address/data/control with XNOR+mask per
-//     TRM §5.20.2 — common implementation bug is to use AND; we use
-//     OR over (value XNOR input) OR mask).
-//   • DBGBREAK_internal asserted on any enabled WP match.
-//   • DBGRNG[1:0] outputs reflect each WP's address+control match
-//     *independent* of the ENABLE bit (so trace observers can see
-//     range hits without forcing debug entry — TRM §30.22.3).
-//
-// Deferred (lands when scan chain 2 wires in alongside the TAP):
-//   • Register read/write through TAP scan chain 2.
-//   • CHAIN / RANGE coupling between WP1 and WP0 (latch on chain out;
-//     power-of-2 range comparison).
-//   • Debug state machine (entry, halt-mode, monitor-mode, debug-state
-//     instruction scan-in path).
-//   • IFEN/INTDIS/force-DBGRQ/force-DBGACK interrupt-mask logic.
-//   • CP14 DCC data/control register transfers (§20).
-//
-// Without scan chain 2, the registers stay at reset (all zero), which
-// keeps ENABLE = 0 and watchpoints disabled. The module produces zero
-// DBGBREAK output and zero DBGRNG until scan plumbing wires in.
+// EmbeddedICE-RT macrocell (TRM §5.14 / TASKS.md §22).
 
 module arm7tdmis_ice_rt
     import arm7tdmis_debug_pkg::*;
@@ -50,6 +26,9 @@ module arm7tdmis_ice_rt
     input  logic        tap_restart_req,   // §22: TAP RESTART instruction
                                             //      pulse (Update-IR with
                                             //      IR_RESTART loaded)
+    input  logic        tap_chain1_capture,// first Capture-DR consumes the
+                                            //      latched entry-cause bit
+    output logic        chain1_capture_break,
 
     // §20: CP14 DCC and Debug Abort Status paths. Processor c1 writes fill
     // TX; processor c1 reads consume RX. c0 returns live version/W/R status.
@@ -66,10 +45,9 @@ module arm7tdmis_ice_rt
     output logic        dcc_rx_full,
 
     // §22 scan-chain-1 instruction injection. TAP latches a 33-bit value
-    // on Update-DR (instruction + break flag); ice_rt buffers it,
-    // un-halts the core for a fixed window, and pulses dbg_inject_we
-    // for one cycle so the core's F-stage overrides fd_q with the
-    // injected instruction.
+    // on Update-DR (instruction + break flag); ice_rt buffers it and uses
+    // accepted/retired handshakes to release the core for exactly the
+    // injected instruction's lifetime.
     input  logic        tap_inject_we,
     input  logic [31:0] tap_inject_instr,
     input  logic        core_inject_accept,
@@ -244,13 +222,17 @@ module arm7tdmis_ice_rt
     // Exit: TAP RESTART instruction observed (tap_restart_req pulse).
     debug_state_e dbg_state_q;
     logic         halt_pending_q;
+    logic         halt_watchpoint_q;
     logic         breakpoint_halt_q;
     logic         breakpoint_resume_q;
+    logic         entry_watchpoint_q;
 
     wire ice_dbgrq_force = regs[5'h00][1];
     wire dbgrqi          = (ice_dbgrq_force || dbg_rq_synced) && DBGEN;
     wire halt_entry_req  = DBGEN
                          && (watchpoint_halt_pre || dbg_break_synced || dbgrqi);
+    wire halt_entry_watchpoint = watchpoint_halt_pre
+                               || (dbg_break_synced && watch_nopc_q);
 
     // dbg_break_internal_pre exists so we can use it BEFORE the wires
     // below see the FSM output — recursive feedback otherwise.
@@ -453,67 +435,95 @@ module arm7tdmis_ice_rt
         if (!DBGnTRST) begin
             dbg_state_q       <= DBG_RUNNING;
             halt_pending_q    <= 1'b0;
+            halt_watchpoint_q <= 1'b0;
             breakpoint_halt_q <= 1'b0;
             breakpoint_resume_q <= 1'b0;
-        end else if (CLKEN) begin
-            unique case (dbg_state_q)
-                DBG_RUNNING: begin
-                    if (!DBGEN) begin
-                        halt_pending_q <= 1'b0;
-                        breakpoint_halt_q <= 1'b0;
-                        breakpoint_resume_q <= 1'b0;
-                    end else if (breakpoint_resume_q
-                                 && core_breakpoint_execute) begin
-                        // Consume exactly the breakpoint tag that caused
-                        // the preceding halt. A simultaneous ordinary halt
-                        // request is taken after this instruction completes.
-                        breakpoint_halt_q   <= 1'b0;
-                        breakpoint_resume_q <= 1'b0;
-                        if (halt_entry_req && core_halt_boundary) begin
-                            dbg_state_q    <= DBG_HALTED;
+            entry_watchpoint_q <= 1'b0;
+        end else begin
+            // The first chain-1 capture after entry reports the reason.
+            // TAP activity is independent of CLKEN, so consumption cannot
+            // be hidden behind the core clock-enable gate.
+            if (tap_chain1_capture)
+                entry_watchpoint_q <= 1'b0;
+
+            if (CLKEN) begin
+                unique case (dbg_state_q)
+                    DBG_RUNNING: begin
+                        if (!DBGEN) begin
                             halt_pending_q <= 1'b0;
+                            halt_watchpoint_q <= 1'b0;
+                            breakpoint_halt_q <= 1'b0;
+                            breakpoint_resume_q <= 1'b0;
+                            entry_watchpoint_q <= 1'b0;
+                        end else if (breakpoint_resume_q
+                                     && core_breakpoint_execute) begin
+                            // Consume exactly the breakpoint tag that caused
+                            // the preceding halt. A simultaneous ordinary halt
+                            // request is taken after this instruction completes.
+                            breakpoint_halt_q   <= 1'b0;
+                            breakpoint_resume_q <= 1'b0;
+                            if (halt_entry_req && core_halt_boundary) begin
+                                dbg_state_q    <= DBG_HALTED;
+                                halt_pending_q <= 1'b0;
+                                halt_watchpoint_q <= 1'b0;
+                                entry_watchpoint_q <= halt_entry_watchpoint;
+                            end else if (halt_entry_req) begin
+                                halt_pending_q <= 1'b1;
+                                halt_watchpoint_q <= halt_entry_watchpoint;
+                            end
+                        end else if (core_breakpoint_execute) begin
+                            // The core suppresses this edge's execution and
+                            // freezes while this FSM enters debug state.
+                            dbg_state_q       <= DBG_HALTED;
+                            halt_pending_q    <= 1'b0;
+                            halt_watchpoint_q <= 1'b0;
+                            breakpoint_halt_q <= 1'b1;
+                            entry_watchpoint_q <= 1'b0;
+                        end else if ((halt_pending_q || halt_entry_req)
+                                     && core_halt_boundary) begin
+                            // The core commits its final state on this edge;
+                            // freezing begins immediately after the edge.
+                            dbg_state_q       <= DBG_HALTED;
+                            halt_pending_q    <= 1'b0;
+                            breakpoint_halt_q <= 1'b0;
+                            entry_watchpoint_q <= halt_watchpoint_q
+                                               || halt_entry_watchpoint;
+                            halt_watchpoint_q <= 1'b0;
                         end else if (halt_entry_req) begin
                             halt_pending_q <= 1'b1;
+                            halt_watchpoint_q <= halt_watchpoint_q
+                                               || halt_entry_watchpoint;
                         end
-                    end else if (core_breakpoint_execute) begin
-                        // The core suppresses this edge's execution and
-                        // freezes while this FSM enters debug state.
-                        dbg_state_q       <= DBG_HALTED;
+                    end
+                    DBG_HALTED: begin
                         halt_pending_q    <= 1'b0;
-                        breakpoint_halt_q <= 1'b1;
-                    end else if ((halt_pending_q || halt_entry_req)
-                                 && core_halt_boundary) begin
-                        // The core commits its final state on this edge;
-                        // freezing begins immediately after the edge.
-                        dbg_state_q       <= DBG_HALTED;
+                        halt_watchpoint_q <= 1'b0;
+                        if (tap_restart_req) begin
+                            dbg_state_q <= DBG_RUNNING;
+                            breakpoint_resume_q <= breakpoint_halt_q;
+                        end
+                    end
+                    DBG_MONITOR: begin
+                        halt_pending_q      <= 1'b0;
+                        halt_watchpoint_q   <= 1'b0;
+                        breakpoint_halt_q   <= 1'b0;
+                        breakpoint_resume_q <= 1'b0;
+                        dbg_state_q         <= DBG_MONITOR;
+                    end
+                    default: begin
+                        dbg_state_q       <= DBG_RUNNING;
                         halt_pending_q    <= 1'b0;
+                        halt_watchpoint_q <= 1'b0;
                         breakpoint_halt_q <= 1'b0;
-                    end else if (halt_entry_req) begin
-                        halt_pending_q <= 1'b1;
+                        breakpoint_resume_q <= 1'b0;
+                        entry_watchpoint_q <= 1'b0;
                     end
-                end
-                DBG_HALTED: begin
-                    halt_pending_q <= 1'b0;
-                    if (tap_restart_req) begin
-                        dbg_state_q <= DBG_RUNNING;
-                        breakpoint_resume_q <= breakpoint_halt_q;
-                    end
-                end
-                DBG_MONITOR: begin
-                    halt_pending_q      <= 1'b0;
-                    breakpoint_halt_q   <= 1'b0;
-                    breakpoint_resume_q <= 1'b0;
-                    dbg_state_q         <= DBG_MONITOR;
-                end
-                default: begin
-                    dbg_state_q       <= DBG_RUNNING;
-                    halt_pending_q    <= 1'b0;
-                    breakpoint_halt_q <= 1'b0;
-                    breakpoint_resume_q <= 1'b0;
-                end
-            endcase
+                endcase
+            end
         end
     end
+
+    assign chain1_capture_break = entry_watchpoint_q;
 
     wire in_debug_halt = (dbg_state_q == DBG_HALTED);
 

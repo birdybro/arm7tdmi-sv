@@ -70,6 +70,8 @@ module ice_rt_tb
         .dbg_rq_in          (dbg_rq_in),
         .dbg_break_in       (dbg_break_in),
         .tap_restart_req    (tap_restart_req),
+        .tap_chain1_capture (1'b0),
+        .chain1_capture_break(tb_chain1_capture_break),
         .core_halt          (core_halt),
         .dbg_break_internal (dbg_break_internal),
         .breakpoint_fetch   (breakpoint_fetch),
@@ -110,6 +112,7 @@ module ice_rt_tb
     logic        tb_inject_we;
     logic [31:0] tb_inject_instr;
     logic        tb_inject_active;
+    logic        tb_chain1_capture_break;
 
     int errors = 0;
 
@@ -232,7 +235,7 @@ module ice_rt_tb
                      core_halt, tb_dcc_rdata,
                      tb_dcc_control, tb_dbgabt_rdata, tb_dcc_tx_empty,
                      tb_dcc_rx_full, tb_inject_we, tb_inject_instr,
-                     tb_inject_active,
+                     tb_inject_active, tb_chain1_capture_break,
                      scan_raddr};
     /* verilator lint_on UNUSEDSIGNAL */
 

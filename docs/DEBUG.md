@@ -217,6 +217,12 @@ response remains intact and shifts out on the next pass.
 
 ### Scan chain 1 inject runtime
 
+Capture-DR snapshots the core write-data bus into the 32 data cells. On debug
+entry, the DBGBREAK cell reports the cause on its first capture: zero for an
+opcode breakpoint and one for a data watchpoint. That cause latch is consumed
+by the capture, so later captures return zero. The end-to-end regression is
+`tb/integration/arm7tdmis_debug_entry_cause_tb.sv`.
+
 When the TAP fires `tap_inject_we` (Update-DR with IR=INTEST + chain selector
 = 1), the ICE-RT latches the instruction and holds `dbg_inject_we` until the
 core acknowledges it. The core then remains released for the actual lifetime

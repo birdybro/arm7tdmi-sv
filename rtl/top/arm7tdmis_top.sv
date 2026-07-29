@@ -167,6 +167,8 @@ module arm7tdmis_top
     logic        dbg_inject_active;
     logic        dbg_inject_accept;
     logic        dbg_inject_retire;
+    logic        tap_chain1_capture;
+    logic        ice_chain1_capture_break;
     logic        ice_data_write_q;
     logic [31:0] ice_watch_data;
 
@@ -200,6 +202,8 @@ module arm7tdmis_top
         .dbg_rq_in          (DBGRQ),       // §22: synchronized inside ICE-RT
         .dbg_break_in       (DBGBREAK),    // §22: synchronized inside ICE-RT
         .tap_restart_req    (tap_restart_req),
+        .tap_chain1_capture (tap_chain1_capture),
+        .chain1_capture_break(ice_chain1_capture_break),
         .dbg_break_internal (ice_dbg_break),
         .breakpoint_fetch   (ice_breakpoint_fetch),
         .dbg_ack            (ice_dbg_ack),
@@ -299,6 +303,9 @@ module arm7tdmis_top
         .ice_scan_re      (ice_scan_re),
         .ice_scan_rdata   (ice_scan_rdata),
         .ice_scan_raddr   (ice_scan_raddr),
+        .ice_chain1_capture_data(WDATA),
+        .ice_chain1_capture_break(ice_chain1_capture_break),
+        .ice_chain1_capture(tap_chain1_capture),
         .ice_inject_instr (tap_inject_instr),
         .ice_inject_break (tap_inject_break),
         .ice_inject_we    (tap_inject_we),

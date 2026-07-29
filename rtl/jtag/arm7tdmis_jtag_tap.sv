@@ -46,11 +46,14 @@ module arm7tdmis_jtag_tap
     input  logic [31:0] ice_scan_rdata,   // captured at Capture-DR
     input  logic [4:0]  ice_scan_raddr,   // echoed addr; DCC data bit 0 carries W
 
-    // ---- Scan chain 1 (33-bit) — debug instruction injection.
-    // Held register, written when held IR == INTEST AND scan_n_q == 1
-    // at Update-DR. Layout per TRM §30.23.6:
+    // ---- Scan chain 1 (33-bit) — core data and debug control.
+    // Captured when held IR == INTEST AND scan_n_q == 1, then written
+    // back at Update-DR. Layout per TRM §5.14.5:
     //   [32]    DBGBREAK control cell (debug-speed vs system-speed)
-    //   [31:0]  Instruction to inject
+    //   [31:0]  core data bus / instruction to inject
+    input  logic [31:0] ice_chain1_capture_data,
+    input  logic        ice_chain1_capture_break,
+    output logic        ice_chain1_capture,
     output logic [31:0] ice_inject_instr,
     output logic        ice_inject_break,
     output logic        ice_inject_we,    // pulse high on Update-DR when chain 1 active
@@ -161,10 +164,12 @@ module arm7tdmis_jtag_tap
                             // Reserved chains are hard zero. Chain 2 has no
                             // Capture-DR action (§5.14.5), so a read response
                             // loaded at Update-DR remains available to shift.
-                            // Chain 1 capture data is connected separately
-                            // with its debug-entry-cause implementation.
                             if (scan_n_q == 4'd1)
-                                dr_shift_q <= 38'h0;
+                                dr_shift_q <= {
+                                    5'h0,
+                                    ice_chain1_capture_break,
+                                    ice_chain1_capture_data
+                                };
                             else if (scan_n_q != 4'd2)
                                 dr_shift_q <= 38'h0;
                         end
@@ -275,6 +280,10 @@ module arm7tdmis_jtag_tap
                          && !dr_shift_q[0];      // R/W=0 (read)
 
     // ---- Chain 1 outputs to the debug-state instruction-inject path.
+    assign ice_chain1_capture = DBGTCKEN
+                              && (tap_q == CDR)
+                              && (ir_hold_q == 4'(IR_INTEST))
+                              && (scan_n_q == 4'd1);
     assign ice_inject_instr = dr_shift_q[31:0];
     assign ice_inject_break = dr_shift_q[32];
     assign ice_inject_we    = DBGTCKEN

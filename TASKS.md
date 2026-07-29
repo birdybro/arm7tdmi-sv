@@ -2583,6 +2583,11 @@ number of cycles spent in an internal FSM state.
 - [ ] **JTAG-003:** Implement and verify SCAN_N selection, chain 0, 33-bit chain 1,
   38-bit chain 2, reserved chains, the TRM-defined physical cell order, update
   atomicity, and chain-1 bit 33's entry-cause/debug-speed/system-speed meanings.
+  Selection, widths, reserved-chain behavior, physical order, update atomicity,
+  and one-shot breakpoint/watchpoint entry cause are fail-hard verified by
+  `tb/unit/jtag_tap_tb.sv` and
+  `tb/integration/arm7tdmis_debug_entry_cause_tb.sv`; system-speed execution
+  remains open.
 - [ ] **JTAG-004:** Gate TMS/TDI/TCKEN/TDO/TDOEN as specified by DBGEN. Implement the
   required TCK synchronization/RTCK convention or publish a proven synchronous-only
   FPGA debug-port wrapper with a different, explicit interface name. DBGEN gating is
