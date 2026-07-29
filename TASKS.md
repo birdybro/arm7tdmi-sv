@@ -2568,7 +2568,7 @@ number of cycles spent in an internal FSM state.
 
 ## 31.7 P0/P1 — EmbeddedICE-RT, JTAG, and ETM-facing behavior
 
-- [ ] **DBG-001:** Replace the scaffold debug FSM with conformant halt and monitor
+- [x] **DBG-001:** Replace the scaffold debug FSM with conformant halt and monitor
   modes. Implement Debug Control bits 5:0, Debug Status bits 4:0, IFEN/INTDIS, Debug
   Abort Status, DBGRQ/DBGBREAK priority, the exact Table 5-1 register map, and all
   DBGEN gating. Follow each pin's specified sampling/synchronization behavior rather
@@ -2594,8 +2594,14 @@ number of cycles spent in an internal FSM state.
   reserved register address through public JTAG, requires deterministic RAZ/WI
   behavior, and proves that address `0x02` cannot create a false vector breakpoint.
   These benches cover every architecturally reachable halt-mode
-  breakpoint/watchpoint exception collision. The complete DBGEN matrix keeps this
-  item open.
+  breakpoint/watchpoint exception collision. `tb/integration/arm7tdmis_debug_dbgen_sources_tb.sv`
+  completes the DBGEN matrix: public JTAG preloads forced DBGACK, INTDIS, monitor
+  mode, an instruction breakpoint, and a data watchpoint before DBGEN is lowered;
+  held DBGRQ/DBGBREAK/DBGEXT cannot stop either matched access or inhibit the
+  selected IRQ/FIQ, and every gated output remains LOW. Together with
+  `tb/integration/arm7tdmis_debug_dbgen_gating_tb.sv`, the DCC integration test,
+  and the comparator unit test, this covers every documented §5.7/Appendix A
+  disable effect.
 - [x] **DBG-002:** Feed Debug Status TRANS from the actual `TRANS[1]`, not PROT.
   Align address/control and read/write data before data-dependent watchpoint comparison.
   `tb/integration/arm7tdmis_debug_status_tb.sv` discriminates live `TRANS[1]`

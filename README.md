@@ -262,6 +262,7 @@ evidence.
 | `cp15_undef` | Bare-core p15 access with no external claimant enters Undefined |
 | `cp14_dcc` | Public CP14/JTAG bidirectional c0/c1 DCC ownership, rev-4 status, pins, CLKEN, and DBGEN gating |
 | `debug_reserved_regs` | public-JTAG RAZ/WI checks for every reserved EmbeddedICE-RT address |
+| `debug_dbgen_sources` | Complete core-facing DBGEN disable matrix across requests, comparators, monitor mode, outputs, and IRQ/FIQ pass-through |
 | `abort` | DABT during LDR — Rd preserved, vector entry |
 | `pabt` | PABT propagation via `fd_q.pabort` |
 | `ldm_abort` | Per-beat load suppression, base writeback/restoration, and r15 protection |

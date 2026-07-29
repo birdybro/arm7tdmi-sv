@@ -213,6 +213,14 @@ nFIQ_eff = nFIQ | ~ifen
 
 Per §5.19.2 IRQ/FIQ are forced disabled internally during debug-state regardless of CPSR.I/F — that's the `DBGACKI` term doing it.
 
+With DBGEN LOW, the complete core-facing source matrix is inert: forced
+DBGACK, INTDIS, monitor mode, DBGRQ, external DBGBREAK/DBGEXT, internal
+breakpoints, and internal watchpoints cannot affect execution, and all
+DBGEN-qualified status outputs stay LOW. IRQ and FIQ therefore pass through
+unchanged. `tb/integration/arm7tdmis_debug_dbgen_sources_tb.sv` proves these
+effects after programming the ICE only through public JTAG; the TAP pin gating
+itself is covered by `tb/integration/arm7tdmis_debug_dbgen_gating_tb.sv`.
+
 ## Debug-input sampling
 
 `DBGBREAK` is sampled on the rising edge with the address/control phase and
