@@ -2595,11 +2595,22 @@ number of cycles spent in an internal FSM state.
   behavior, and proves that address `0x02` cannot create a false vector breakpoint.
   The remaining exception-priority cases and complete DBGEN matrix keep this item
   open.
-- [ ] **DBG-002:** Feed Debug Status TRANS from the actual `TRANS[1]`, not PROT.
+- [x] **DBG-002:** Feed Debug Status TRANS from the actual `TRANS[1]`, not PROT.
   Align address/control and read/write data before data-dependent watchpoint comparison.
+  `tb/integration/arm7tdmis_debug_status_tb.sv` discriminates live `TRANS[1]`
+  from privileged `PROT[1]` during both an active stalled transfer and debug halt.
+  `tb/unit/ice_watchpoint_tb.sv` poisons the next address/control phase while checking
+  the prior transfer's read/write data, and repeats the check across CLKEN stalls.
 - [ ] **DBG-003:** Implement exact WP0/WP1 value/mask, XNOR, size, read/write,
-  opcode/data, privilege, T, EXTERN, CHAIN latch, RANGE, and ENABLE semantics. `DBGRNG`
-  remains independent of ENABLE but is disabled by DBGEN.
+  opcode/data, privilege, EXTERN, CHAIN latch, RANGE, and ENABLE semantics. Figure
+  5-13 contains no T comparator field; TBIT is Debug Status bit 4, not a watchpoint
+  qualifier. `DBGRNG` remains independent of ENABLE but is disabled by DBGEN.
+  `tb/unit/ice_watchpoint_tb.sv` covers both units, every control field, address/data
+  XNOR masks, data-phase alignment, CLKEN, ENABLE independence, DBGEN/control-disable,
+  and CHAIN/RANGE coupling. `tb/integration/arm7tdmis_debug_software_breakpoint_tb.sv`
+  programs the §5.21.2 sequence through public JTAG and covers ARM plus both Thumb
+  bus lanes and adjacent-halfword false positives in both endiannesses. Explicit
+  post-match asynchronous CHAINOUT reset evidence remains before closure.
 - [x] **DBG-004:** Qualify breakpoints with valid, non-flushed instructions.
   Watchpoints enter debug only after the access and all architectural writeback
   complete; cover LDM/STM, aborts, exceptions, and simultaneous DBGRQ.

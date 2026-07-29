@@ -88,6 +88,14 @@ In code: `&((value ~^ input) | mask)`.
 
 Mask bit = 1 means "this bit always matches" (don't-care); mask bit = 0 means exact equality required. Common implementation bug is to use AND — easy to miss because the polarity is inverted from what most masks do.
 
+For a Thumb opcode fetch, the data comparator applies this rule only to the
+addressed 16-bit bus lane. The other half of `RDATA` may contain an adjacent
+instruction because a 32-bit memory is permitted to return the complete word.
+The lane is selected from the aligned fetch address and `CFGBIGEND`. Per
+TRM §5.21.2, a debugger programs the same 16-bit software-breakpoint pattern
+into both halves of the data-value register; both lanes and both endiannesses
+are covered by `tb/integration/arm7tdmis_debug_software_breakpoint_tb.sv`.
+
 ### 9-bit control compare
 
 ```

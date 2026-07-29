@@ -2,6 +2,7 @@
 
 module arm7tdmis_ice_rt
     import arm7tdmis_debug_pkg::*;
+    import arm7tdmis_bus_pkg::*;
 (
     input  logic        CLK,
     input  logic        CLKEN,
@@ -15,6 +16,7 @@ module arm7tdmis_ice_rt
     input  logic        watch_nrw,       // 0 = read, 1 = write
     input  logic [1:0]  watch_size,
     input  logic        watch_tbit,
+    input  logic        watch_bigend,    // static CFGBIGEND bus-lane mapping
     input  logic [1:0]  watch_extern,
     input  logic        watch_priv,        // address-phase PROT[1] / nTRANS
     input  logic        core_trans1,       // live core TRANS[1] for Debug Status[3]
@@ -371,6 +373,14 @@ module arm7tdmis_ice_rt
         return &((value ~^ in) | mask);
     endfunction
 
+    function automatic logic masked_match16(
+        input logic [15:0] value,
+        input logic [15:0] mask,
+        input logic [15:0] in
+    );
+        return &((value ~^ in) | mask);
+    endfunction
+
     // Figure 5-13 control layout:
     //   [7] RANGE, [6] CHAIN, [5] DBGEXT, [4] PROT[1],
     //   [3] PROT[0], [2:1] SIZE, [0] WRITE.
@@ -382,12 +392,35 @@ module arm7tdmis_ice_rt
 
     wire wp0_addr_match = masked_match32(
         regs[WP0_ADDR_VAL], regs[WP0_ADDR_MASK], watch_addr_q);
-    wire wp0_data_match = masked_match32(
-        regs[WP0_DATA_VAL], regs[WP0_DATA_MASK], watch_data);
+    // §5.21.2: a Thumb software breakpoint compares only the half of
+    // RDATA selected by the fetch address and static endianness. Memory is
+    // permitted to return unrelated data in the other half of the word.
+    // Other opcode and data transfers retain the full 32-bit comparator.
+    wire thumb_opcode_data = !watch_nopc_q
+                           && (watch_size_q == 2'(SIZE_HALFWORD));
+    wire thumb_data_high = watch_addr_q[1] ^ watch_bigend;
+    wire wp0_data_match = thumb_opcode_data
+        ? (thumb_data_high
+           ? masked_match16(regs[WP0_DATA_VAL][31:16],
+                            regs[WP0_DATA_MASK][31:16],
+                            watch_data[31:16])
+           : masked_match16(regs[WP0_DATA_VAL][15:0],
+                            regs[WP0_DATA_MASK][15:0],
+                            watch_data[15:0]))
+        : masked_match32(regs[WP0_DATA_VAL],
+                         regs[WP0_DATA_MASK], watch_data);
     wire wp1_addr_match = masked_match32(
         regs[WP1_ADDR_VAL], regs[WP1_ADDR_MASK], watch_addr_q);
-    wire wp1_data_match = masked_match32(
-        regs[WP1_DATA_VAL], regs[WP1_DATA_MASK], watch_data);
+    wire wp1_data_match = thumb_opcode_data
+        ? (thumb_data_high
+           ? masked_match16(regs[WP1_DATA_VAL][31:16],
+                            regs[WP1_DATA_MASK][31:16],
+                            watch_data[31:16])
+           : masked_match16(regs[WP1_DATA_VAL][15:0],
+                            regs[WP1_DATA_MASK][15:0],
+                            watch_data[15:0]))
+        : masked_match32(regs[WP1_DATA_VAL],
+                         regs[WP1_DATA_MASK], watch_data);
 
     // TRM §5.26.1 publishes the comparator split used by CHAINOUT:
     // address plus control[4:0] enables the latch; data plus control[7:5]

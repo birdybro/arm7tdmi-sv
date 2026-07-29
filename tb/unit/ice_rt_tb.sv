@@ -62,6 +62,7 @@ module ice_rt_tb
         .watch_nrw          (watch_nrw),
         .watch_size         (watch_size),
         .watch_tbit         (watch_tbit),
+        .watch_bigend       (1'b0),
         .watch_extern       (watch_extern),
         .watch_priv         (watch_priv),
         .core_trans1        (core_trans1),

@@ -53,6 +53,7 @@ module dcc_tb;
         .watch_nrw          (1'b0),
         .watch_size         (2'b00),
         .watch_tbit         (1'b0),
+        .watch_bigend       (1'b0),
         .watch_extern       (2'b00),
         .watch_priv         (1'b1),
         .core_trans1        (1'b0),

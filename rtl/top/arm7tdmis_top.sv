@@ -220,6 +220,7 @@ module arm7tdmis_top
         .watch_nrw          (WRITE),
         .watch_size         (SIZE),
         .watch_tbit         (CPTBIT),
+        .watch_bigend       (CFGBIGEND),
         .watch_extern       (DBGEXT),
         .watch_priv         (PROT[1]),     // address-phase privilege bit
         .core_trans1        (TRANS[1]),    // live Debug Status[3]

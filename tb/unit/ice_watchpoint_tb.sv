@@ -83,6 +83,7 @@ module ice_watchpoint_tb;
         .watch_nrw,
         .watch_size,
         .watch_tbit,
+        .watch_bigend       (1'b0),
         .watch_extern,
         .watch_priv,
         .core_trans1,
