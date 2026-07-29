@@ -257,6 +257,7 @@ module arm7tdmis_block_ls_policy_tb
         int expected_data_cycles;
         logic [31:0] expected_spsr;
         int data_cycles;
+        int pc_internal_cycles;
         logic test_seen;
 
         @(negedge CLK);
@@ -268,6 +269,7 @@ module arm7tdmis_block_ls_policy_tb
         nRESET = 1'b1;
 
         data_cycles = 0;
+        pc_internal_cycles = 0;
         test_seen = 1'b0;
         repeat (130) begin
             @(negedge CLK);
@@ -277,11 +279,24 @@ module arm7tdmis_block_ls_policy_tb
             if (test_seen
                 && (TRANS inside {TRANS_N, TRANS_S})
                 && PROT[PROT_BIT_DATA]) begin
-                data_cycles++;
-                if (SIZE !== 2'(SIZE_WORD))
-                    fail(case_id, {label, " issued a non-word beat"});
-                if (LOCK)
-                    fail(case_id, {label, " asserted LOCK"});
+                if (u_dut.u_core.block_pc_internal_phase) begin
+                    pc_internal_cycles++;
+                    if (!(case_id inside {6, 7})
+                        || ADDR !== (TEST_PC + 32'd12)
+                        || WRITE !== WRITE_READ
+                        || SIZE !== 2'(SIZE_WORD)
+                        || PROT !== 2'(PROT_DAT_PRIV)
+                        || LOCK !== LOCK_FREE
+                        || TRANS !== 2'(TRANS_N))
+                        fail(case_id, {label,
+                            " emitted a malformed LDM pc+3i phase"});
+                end else begin
+                    data_cycles++;
+                    if (SIZE !== 2'(SIZE_WORD))
+                        fail(case_id, {label, " issued a non-word beat"});
+                    if (LOCK)
+                        fail(case_id, {label, " asserted LOCK"});
+                end
             end
         end
 
@@ -291,6 +306,11 @@ module arm7tdmis_block_ls_policy_tb
             fail(case_id, $sformatf(
                 "%s data-cycle count expected %0d got %0d",
                 label, expected_data_cycles, data_cycles));
+        if (pc_internal_cycles != ((case_id inside {6, 7}) ? 1 : 0))
+            fail(case_id, $sformatf(
+                "%s pc+3i phase count expected %0d got %0d",
+                label, (case_id inside {6, 7}) ? 1 : 0,
+                pc_internal_cycles));
 
         if (is_trap_case(case_id)) begin
             if (u_dut.u_core.cpsr.m !== 5'(MODE_UNDEFINED)
