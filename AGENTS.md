@@ -16,7 +16,7 @@ landed since that baseline: the ARM/Thumb, exception/abort, coprocessor/CP14,
 EmbeddedICE-RT, and ETM-facing directed requirements are checked; regressions fail
 hard and publish evidence; and both FPGA characterization profiles pass checked
 Quartus flows. Current open categories are the unchecked §31 items:
-framework/PocketStation integration, public-suite/cross/formal validation,
+framework/PocketStation integration, cycle-cross/functional/formal validation,
 remaining FPGA/reproducibility/hardware work, and final release
 review/freezing. Consult each checkbox and its attached evidence before making
 a narrower claim.
@@ -66,10 +66,11 @@ supported simulation flow. Build scripts and `.f` file lists live in
 
 Directed tests use hand-written, TRM-derived expected state. The checked
 VAL-001 QEMU trace is the independent shared-subset differential; VAL-002
-adds a 32-seed constrained-random QEMU/ARM7-policy campaign; VAL-009 separately
+adds a 32-seed constrained-random QEMU/ARM7-policy campaign; VAL-003 runs the
+pinned MIT `jsmolka/gba-suite` ARM and Thumb exercisers; VAL-009 separately
 executes pinned-compiler programs; VAL-010 runs the deterministic sanitizer/
-X-state wrapper soak. Remaining VAL items require public suites, formal
-properties, and cross/functional-coverage closure. Do not
+X-state wrapper soak. Remaining VAL items require formal properties and
+cycle-cross/functional-coverage closure. Do not
 describe hand-written expectations as independent differential validation.
 
 ## RTL coding discipline (load-bearing — read before writing any `.sv`)

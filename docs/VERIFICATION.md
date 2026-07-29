@@ -11,8 +11,10 @@ It always removes the Verilator build directory first, then runs:
    mutation matrix.
 4. Every unit test in the `UNIT_TESTS` manifest.
 5. Every directed test in the `INTEG_TESTS` manifest.
-6. The 256-seed sanitizer/X-state soak.
-7. The mixed-instruction smoke test and bidirectional traceability gate.
+6. The pinned public ARM/Thumb suite and the 32 × 256 constrained-random
+   campaign.
+7. The 256-seed sanitizer/X-state soak.
+8. The mixed-instruction smoke test and bidirectional traceability gate.
 
 The runner stops at the first failing phase and returns nonzero. The intentional
 failure sentinel contains a real SystemVerilog `$fatal`; the enclosing target
@@ -58,6 +60,9 @@ The final `traceability` phase writes
 and result semantics are defined in [TRACEABILITY.md](TRACEABILITY.md).
 The non-quick `soak` phase separately writes
 `reports/generated/soak-report.json` using schema `arm7tdmis-soak-v1`.
+The mandatory `public-suite` phase writes
+`reports/generated/public-suite-report.json` using schema
+`arm7tdmis-public-suite-v1`.
 
 ## Independent lint and CDC/RDC closure
 
@@ -229,6 +234,42 @@ hashes, and an exact single-seed reproducer. Full regression runs the 32 × 256
 campaign; quick CI runs `random-validation-quick` with two 64-instruction
 seeds. Release evidence independently revalidates the report strength, every
 input, and every generated artifact hash.
+
+## Public ARMv4T suite
+
+`make -C scripts public-suite` fetches the MIT-licensed
+`jsmolka/gba-suite` repository at commit
+`a7113b67e63f83a9b321696ddd7042ccfad6c881`. The runner refuses a checkout
+unless the origin, commit, tree, clean state, license SHA-256, and both source
+ROM SHA-256 values exactly match `verification/public_suites.json`.
+
+The generated execution images remove bytes 0x04–0xbf from the non-executable
+GBA cartridge header and replace only the manifest-enumerated words that
+enter ARM3-only 26-bit compatibility behavior or ARMv4T UNPREDICTABLE classes
+for which this project already has a different documented deterministic
+policy. The runner checks every other payload byte against upstream and
+checks the complete patched-image hashes. This is an explicit normalization
+boundary, not evidence for the skipped policy cases; their repository-owned
+directed matrices remain authoritative.
+
+`arm7tdmis_public_suite_tb` supplies only the reset trampoline, memory regions,
+and deterministic DISPSTAT vblank source needed by the exercisers. It checks
+the upstream zero-result register, visible-VRAM FNV signature, idle PC,
+minimum trace length, instruction-state counts, and absence of exceptions or
+debug injection through public CPU pins and `VER_RETIRE_*`; it does not read
+internal hierarchy. The frozen passing measurements are:
+
+| Image | Retirements | ARM | Thumb | VRAM signature | Idle PC |
+|---|---:|---:|---:|---|---|
+| ARM | 8,596 | 8,588 | 8 | `0xe8d71fb2` | `0x08001ec4` |
+| Thumb | 6,691 | 6,152 | 539 | `0xe8d71fb2` | `0x08000aac` |
+
+The atomically written report records source/license/patch provenance, input
+and generated-artifact hashes, commands, metrics, and exact reproducers.
+Both quick CI and full regression regenerate the 15,287-retirement result.
+Release archiving validates the same clean commit, exact manifest, both
+instruction-state floors, frozen signatures, and every artifact hash. The
+proprietary Arm Validation Suite is neither used nor claimed.
 
 ## Pinned ARM/Thumb compiler program
 
@@ -548,6 +589,7 @@ transfers and their independent responses remain covered by
 
 Measured structural coverage reporting, mutation testing of architectural
 controls, independent QEMU/compiler execution, constrained-random
-differential/policy testing, and deterministic sanitizing soak are implemented
-above. Required-bin functional coverage closure, public suites, and formal
-evidence remain separate open requirements in `TASKS.md` §31.10.
+differential/policy testing, the pinned public ARM/Thumb suite, and
+deterministic sanitizing soak are implemented above. Required-bin functional
+coverage closure and formal evidence remain separate open requirements in
+`TASKS.md` §31.10.

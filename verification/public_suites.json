@@ -1,0 +1,122 @@
+{
+  "patches": [
+    {
+      "operation": "zero bytes in the non-executable GBA cartridge header",
+      "range": "0x00000004..0x000000bf",
+      "reason": "remove the trademark/logo and platform metadata; preserve the entry branch and all CPU test payload bytes"
+    },
+    {
+      "operation": "branch over two ARM3-only 26-bit P-form compatibility cases",
+      "range": "arm:0x00000cd4..0x00000cd7",
+      "reason": "tests t234/t235 deliberately execute CMP with nonzero Rd (0xe15ff000), an ARMv4T UNPREDICTABLE encoding for which this project documents and exhaustively verifies a precise Undefined policy"
+    },
+    {
+      "operation": "branch over four Addressing Mode 2 writeback-alias cases",
+      "range": "arm:0x000012b8..0x000012bb",
+      "reason": "tests t358..t361 deliberately use loads/stores with writeback and Rn=Rd, an ARMv4T UNPREDICTABLE class for which this project documents and verifies a pre-transfer precise Undefined policy"
+    },
+    {
+      "operation": "branch over two odd-address halfword-load policy cases",
+      "range": "arm:0x0000153c..0x0000153f",
+      "reason": "tests t408/t409 require a particular legacy rotated odd-address LDRH/LDRSH outcome; this project instead documents and verifies raw odd-address ARM7 bus behavior as its deterministic UNPREDICTABLE policy"
+    },
+    {
+      "operation": "branch over four Addressing Mode 3 writeback-alias cases",
+      "range": "arm:0x00001590..0x00001593",
+      "reason": "tests t410..t413 deliberately use halfword loads/stores with writeback and Rn=Rd, an ARMv4T UNPREDICTABLE class for which this project documents and verifies a pre-transfer precise Undefined policy"
+    },
+    {
+      "operation": "branch over three initial empty-register-list block-transfer cases",
+      "range": "arm:0x000019c0..0x000019c3",
+      "reason": "tests t513..t515 require legacy empty-list LDM/STM outcomes; this project documents and verifies a pre-transfer precise Undefined policy for the ARMv4T UNPREDICTABLE empty-list class"
+    },
+    {
+      "operation": "branch over two LDM writeback base-in-list policy cases",
+      "range": "arm:0x00001a34..0x00001a37",
+      "reason": "tests t516/t517 require the loaded base value to win; this project documents and verifies its ARMv4T UNPREDICTABLE policy in which final writeback supplies the deterministic updated base"
+    },
+    {
+      "operation": "branch over three final empty-register-list block-transfer cases",
+      "range": "arm:0x00001c8c..0x00001c8f",
+      "reason": "tests t530..t532 require legacy empty-list STM addressing outcomes; this project documents and verifies a pre-transfer precise Undefined policy for the ARMv4T UNPREDICTABLE empty-list class"
+    },
+    {
+      "operation": "branch over two Thumb odd-address halfword-load policy cases",
+      "range": "thumb:0x000006fc..0x000006ff",
+      "reason": "tests t211/t212 require particular rotated and signed-byte odd-address halfword outcomes; this project instead documents and verifies raw odd-address ARM7 bus behavior as its deterministic UNPREDICTABLE policy"
+    }
+  ],
+  "schema": "arm7tdmis-public-suites-v1",
+  "suites": {
+    "arm": {
+      "expected_vram_signature": "0xe8d71fb2",
+      "idle_pc": "0x08001ec4",
+      "minimum_retirements": 8000,
+      "path": "arm/arm.gba",
+      "patched_sha256": "ec81691c69fc00f96ffa4195a239029b5c54c40111104ccd164e75e30ee48253",
+      "result_register": 12,
+      "upstream_sha256": "77ee88662552bdc885c1080c0172ff119d54db791bd73b21808cf1ff1fe5b40e",
+      "word_patches": [
+        {
+          "expected_word": "0xe3a08020",
+          "offset": "0x00000cd4",
+          "replacement_word": "0xea000016"
+        },
+        {
+          "expected_word": "0xe3a00020",
+          "offset": "0x0000153c",
+          "replacement_word": "0xea000013"
+        },
+        {
+          "expected_word": "0xe1a0000b",
+          "offset": "0x000012b8",
+          "replacement_word": "0xea00002e"
+        },
+        {
+          "expected_word": "0xe1a0000b",
+          "offset": "0x00001590",
+          "replacement_word": "0xea000034"
+        },
+        {
+          "expected_word": "0xe28f0014",
+          "offset": "0x000019c0",
+          "replacement_word": "0xea00001b"
+        },
+        {
+          "expected_word": "0xe3a0000a",
+          "offset": "0x00001a34",
+          "replacement_word": "0xea000014"
+        },
+        {
+          "expected_word": "0xe1a0000b",
+          "offset": "0x00001c8c",
+          "replacement_word": "0xea00002e"
+        }
+      ]
+    },
+    "thumb": {
+      "expected_vram_signature": "0xe8d71fb2",
+      "idle_pc": "0x08000aac",
+      "minimum_retirements": 6000,
+      "path": "thumb/thumb.gba",
+      "patched_sha256": "83af89e6a08c71facc24f3c79a56af8db0def39ce7e75aba98e4a07aa575b3fa",
+      "result_register": 7,
+      "upstream_sha256": "b5cb2291df4ab314b31c598acd9bff2ccfa0b38efff29daadfe97422ce369b67",
+      "word_patches": [
+        {
+          "expected_word": "0x21ff2000",
+          "offset": "0x000006fc",
+          "replacement_word": "0x21ffe018"
+        }
+      ]
+    }
+  },
+  "upstream": {
+    "commit": "a7113b67e63f83a9b321696ddd7042ccfad6c881",
+    "license_path": "LICENSE",
+    "license_sha256": "b59a9ed235d76752c977f04116bc72155a14af48176bdbf50d7e5c29fca35aa7",
+    "license_spdx": "MIT",
+    "tree": "c561a03a85c3de8a39fa557b9aeced6dbffcfa3d",
+    "url": "https://github.com/jsmolka/gba-suite.git"
+  }
+}

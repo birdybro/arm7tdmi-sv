@@ -7,11 +7,13 @@ and may be stricter than this summary.
 - No real MiSTer framework, PocketStation subsystem, copyrighted BIOS or
   software image, hardware run, or long system soak is included
   (MIST-007 through MIST-009, FPGA-002, and FPGA-007).
-- Third-party ARMv4T suites, complete cross/functional coverage, formal proof,
-  and independent review remain open (VAL-003 through VAL-008 and VAL-011).
-  The checked QEMU differential, 32-seed constrained-random campaign, pinned
-  compiler-program test, and 256-seed sanitizing wrapper soak close VAL-001,
-  VAL-002, VAL-009, and VAL-010 respectively, not those broader gates.
+- Complete cycle cross/functional coverage, formal proof, and independent
+  review remain open (VAL-004 through VAL-008 and VAL-011). The checked public
+  ARM/Thumb exercisers close VAL-003, but the proprietary Arm Validation Suite
+  has not been run. The QEMU differential, 32-seed constrained-random
+  campaign, pinned compiler-program test, and 256-seed sanitizing wrapper soak
+  close VAL-001, VAL-002, VAL-009, and VAL-010 respectively, not the remaining
+  broader gates.
 - A fully pinned clean-checkout release toolchain remains open (FPGA-008).
   Independent Slang lint, structural CDC/RDC closure, and two-endian
   functional post-fit simulation are checked under FPGA-004/006; these are

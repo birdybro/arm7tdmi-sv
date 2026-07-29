@@ -205,6 +205,169 @@ def validate_constrained_random_evidence(
                 )
 
 
+def validate_public_suite_evidence(
+    report: dict[str, Any],
+    manifest: dict[str, Any],
+    *,
+    expected_commit: str,
+) -> None:
+    """Reject stale, altered, weakened, or non-passing VAL-003 evidence."""
+    if manifest.get("schema") != "arm7tdmis-public-suites-v1":
+        raise ValueError("public-suite manifest has wrong schema")
+    manifest_upstream = manifest.get("upstream")
+    manifest_suites = manifest.get("suites")
+    manifest_patches = manifest.get("patches")
+    if (
+        not isinstance(manifest_upstream, dict)
+        or manifest_upstream.get("url")
+        != "https://github.com/jsmolka/gba-suite.git"
+        or manifest_upstream.get("license_spdx") != "MIT"
+        or not re.fullmatch(
+            r"[0-9a-f]{40}", str(manifest_upstream.get("commit", ""))
+        )
+        or not re.fullmatch(
+            r"[0-9a-f]{40}", str(manifest_upstream.get("tree", ""))
+        )
+        or not re.fullmatch(
+            r"[0-9a-f]{64}",
+            str(manifest_upstream.get("license_sha256", "")),
+        )
+        or not isinstance(manifest_patches, list)
+        or not isinstance(manifest_suites, dict)
+        or set(manifest_suites) != {"arm", "thumb"}
+    ):
+        raise ValueError("public-suite manifest is not trusted")
+
+    if report.get("schema") != "arm7tdmis-public-suite-v1":
+        raise ValueError("public-suite report has wrong schema")
+    if report.get("status") != "passed" or report.get("failure"):
+        raise ValueError("public-suite report is not passed")
+    if report.get("git", {}).get("dirty"):
+        raise ValueError("public-suite report describes a dirty source tree")
+    if report.get("git", {}).get("commit") != expected_commit:
+        raise ValueError("public-suite report commit does not match regression")
+
+    upstream = report.get("upstream")
+    if not isinstance(upstream, dict) or any(
+        upstream.get(key) != value
+        for key, value in manifest_upstream.items()
+    ):
+        raise ValueError("public-suite upstream provenance does not match")
+    license_artifact = upstream.get("license_artifact")
+    if (
+        not isinstance(upstream.get("acquisition_commands"), list)
+        or not isinstance(license_artifact, dict)
+        or license_artifact.get("sha256")
+        != manifest_upstream["license_sha256"]
+        or type(license_artifact.get("bytes")) is not int
+        or license_artifact["bytes"] <= 0
+    ):
+        raise ValueError("public-suite license evidence is incomplete")
+    if report.get("patches") != manifest_patches:
+        raise ValueError("public-suite policy patch manifest was altered")
+
+    suites = report.get("suites")
+    if (
+        not isinstance(suites, dict)
+        or set(suites) != {"arm", "thumb"}
+        or report.get("suite_count") != 2
+    ):
+        raise ValueError("public-suite report does not contain both suites")
+
+    total_retirements = 0
+    minimum_isa_retirements = {
+        "arm": {"arm_retirements": 8_000, "thumb_retirements": 1},
+        "thumb": {"arm_retirements": 6_000, "thumb_retirements": 500},
+    }
+    for name in ("arm", "thumb"):
+        suite_manifest = manifest_suites[name]
+        suite = suites[name]
+        if not isinstance(suite_manifest, dict) or not isinstance(suite, dict):
+            raise ValueError(f"public-suite {name} entry is malformed")
+        expected_fields = {
+            "upstream_path": suite_manifest.get("path"),
+            "upstream_sha256": suite_manifest.get("upstream_sha256"),
+            "patched_sha256": suite_manifest.get("patched_sha256"),
+            "idle_pc": suite_manifest.get("idle_pc"),
+            "result_register": suite_manifest.get("result_register"),
+            "expected_vram_signature": suite_manifest.get(
+                "expected_vram_signature"
+            ),
+            "word_patches": suite_manifest.get("word_patches"),
+        }
+        if suite.get("status") != "passed" or any(
+            suite.get(key) != value for key, value in expected_fields.items()
+        ):
+            raise ValueError(
+                f"public-suite {name} result does not match its manifest"
+            )
+        if (
+            not re.fullmatch(
+                r"0x[0-9a-f]{8}",
+                str(suite.get("expected_vram_signature", "")),
+            )
+            or suite.get("expected_vram_signature") == "0x00000000"
+        ):
+            raise ValueError(f"public-suite {name} signature is invalid")
+
+        metrics = suite.get("metrics")
+        metric_names = {
+            "retirements",
+            "arm_retirements",
+            "thumb_retirements",
+            "rom_words",
+        }
+        if (
+            not isinstance(metrics, dict)
+            or any(type(metrics.get(key)) is not int for key in metric_names)
+            or metrics["retirements"]
+            != metrics["arm_retirements"] + metrics["thumb_retirements"]
+            or metrics["retirements"]
+            < int(suite_manifest.get("minimum_retirements", 0))
+            or metrics["rom_words"] <= 0
+            or any(
+                metrics[key] < minimum
+                for key, minimum in minimum_isa_retirements[name].items()
+            )
+        ):
+            raise ValueError(
+                f"public-suite {name} retirement evidence is too weak"
+            )
+        total_retirements += metrics["retirements"]
+
+        reproducer = suite.get("reproducer")
+        artifacts = suite.get("artifacts")
+        if (
+            not isinstance(reproducer, list)
+            or not reproducer
+            or any(not isinstance(value, str) or not value for value in reproducer)
+            or not isinstance(artifacts, dict)
+            or not artifacts
+        ):
+            raise ValueError(
+                f"public-suite {name} reproduction evidence is incomplete"
+            )
+        for artifact in artifacts.values():
+            if (
+                not isinstance(artifact, dict)
+                or not isinstance(artifact.get("path"), str)
+                or type(artifact.get("bytes")) is not int
+                or artifact["bytes"] <= 0
+                or not re.fullmatch(
+                    r"[0-9a-f]{64}", str(artifact.get("sha256", ""))
+                )
+            ):
+                raise ValueError(
+                    f"public-suite {name} artifact manifest is malformed"
+                )
+
+    if (
+        report.get("total_retirements") != total_retirements
+        or total_retirements < 14_000
+    ):
+        raise ValueError("public-suite total retirement evidence is inconsistent")
+
+
 def _sha256(path: pathlib.Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -469,6 +632,77 @@ def _validated_files(
                         )
                     candidates.append(artifact_path)
         candidates.append(random_report_path.resolve())
+    if "public-suite" in phase_names:
+        public_report_path = REPORT_ROOT / "public-suite-report.json"
+        public_manifest_path = REPO_ROOT / "verification" / "public_suites.json"
+        if not public_report_path.is_file():
+            raise ValueError("public-suite report is missing")
+        if not public_manifest_path.is_file():
+            raise ValueError("public-suite manifest is missing")
+        public_report = json.loads(
+            public_report_path.read_text(encoding="utf-8")
+        )
+        public_manifest = json.loads(
+            public_manifest_path.read_text(encoding="utf-8")
+        )
+        validate_public_suite_evidence(
+            public_report,
+            public_manifest,
+            expected_commit=str(
+                regression.get("git", {}).get("commit", "")
+            ),
+        )
+
+        expected_inputs = {
+            "tb/integration/arm7tdmis_public_suite_tb.sv",
+            "verification/public_suite.py",
+            "verification/public_suites.json",
+        }
+        inputs = public_report.get("inputs")
+        if not isinstance(inputs, dict) or set(inputs) != expected_inputs:
+            raise ValueError("public-suite input manifest is incomplete")
+        for input_entry in inputs.values():
+            if not isinstance(input_entry, dict):
+                raise ValueError("public-suite input entry is malformed")
+            input_path = _repo_path(str(input_entry.get("path", "")))
+            if (
+                input_path.stat().st_size != input_entry.get("bytes")
+                or _sha256(input_path) != input_entry.get("sha256")
+            ):
+                raise ValueError("public-suite input hash mismatch")
+            candidates.append(input_path)
+
+        artifact_root = (REPORT_ROOT / "public_suite").resolve()
+        artifact_entries = [
+            public_report.get("upstream", {}).get("license_artifact"),
+            *[
+                artifact
+                for suite in public_report.get("suites", {}).values()
+                for artifact in suite.get("artifacts", {}).values()
+            ],
+        ]
+        for artifact in artifact_entries:
+            if not isinstance(artifact, dict):
+                raise ValueError("public-suite artifact is malformed")
+            artifact_path = (
+                artifact_root / str(artifact.get("path", ""))
+            ).resolve()
+            try:
+                artifact_path.relative_to(artifact_root)
+            except ValueError as error:
+                raise ValueError(
+                    "public-suite artifact escapes its report directory"
+                ) from error
+            if (
+                not artifact_path.is_file()
+                or artifact_path.stat().st_size != artifact.get("bytes")
+                or _sha256(artifact_path) != artifact.get("sha256")
+            ):
+                raise ValueError("public-suite artifact hash mismatch")
+            candidates.append(artifact_path)
+        candidates.extend(
+            (public_report_path.resolve(), public_manifest_path.resolve())
+        )
     quality_phases = {"lint-independent", "cdc-rdc"}
     present_quality_phases = quality_phases & phase_names
     if present_quality_phases and present_quality_phases != quality_phases:

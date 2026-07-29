@@ -65,6 +65,10 @@ RANDOM_OBJ_DIR := $(OBJ_DIR)/constrained_random
 RANDOM_DIFF_BIN := $(RANDOM_OBJ_DIR)/diff/Varm7tdmis_random_diff_tb
 RANDOM_POLICY_BIN := $(RANDOM_OBJ_DIR)/policy/Varm7tdmis_random_policy_tb
 RANDOM_REPORT := ../reports/generated/constrained-random-report.json
+PUBLIC_SUITE_OBJ_DIR := $(OBJ_DIR)/public_suite
+PUBLIC_SUITE_BIN := $(PUBLIC_SUITE_OBJ_DIR)/Varm7tdmis_public_suite_tb
+PUBLIC_SUITE_REPORT := ../reports/generated/public-suite-report.json
+PUBLIC_SUITE_ARGS ?=
 SOAK_SEEDS ?= 256
 SOAK_OBJ_DIR := $(OBJ_DIR)/soak
 SOAK_BIN := $(SOAK_OBJ_DIR)/Varm7tdmis_mister_wrapper_tb
@@ -126,7 +130,8 @@ INTEG_RUN_ARGS_compiler = \
         sim run wave clean help regress regress-quick regress-ci \
         coverage release-evidence \
         traceability random-validation-build random-validation \
-        random-validation-quick soak-build soak \
+        random-validation-quick public-suite-build public-suite \
+        soak-build soak \
         harness-unit harness-self-test raw-checker-self-test mutation-self-test \
         $(addprefix unit-, $(UNIT_TESTS)) unit \
         $(addprefix integ-, $(INTEG_TESTS)) integ errata
@@ -285,6 +290,23 @@ $(foreach t,$(INTEG_TESTS),$(eval $(call INTEG_RULE,$(t))))
 integ: $(addprefix integ-, $(INTEG_TESTS))
 
 errata: $(addprefix integ-, $(ERRATA_TESTS))
+
+$(PUBLIC_SUITE_BIN): Makefile $(SIM_F) $(RTL_SRCS) \
+                     ../tb/integration/arm7tdmis_public_suite_tb.sv
+	mkdir -p $(PUBLIC_SUITE_OBJ_DIR)
+	$(VERILATOR) $(VFLAGS_BUILD) -Wno-SYNCASYNCNET \
+	    -DARM7TDMIS_VERIFICATION \
+	    --top-module arm7tdmis_public_suite_tb \
+	    --Mdir $(PUBLIC_SUITE_OBJ_DIR) -f $(SIM_F) \
+	    ../tb/integration/arm7tdmis_public_suite_tb.sv
+
+public-suite-build: $(PUBLIC_SUITE_BIN)
+
+public-suite: public-suite-build
+	PYTHONPATH=../verification $(PYTHON) ../verification/public_suite.py \
+	    --binary $(abspath $(PUBLIC_SUITE_BIN)) \
+	    --manifest ../verification/public_suites.json \
+	    --output $(PUBLIC_SUITE_REPORT) $(PUBLIC_SUITE_ARGS)
 
 # VAL-002 builds the scoreboards once, then generates fresh source/reference
 # images and executes every deterministic seed through both oracle lanes.
@@ -502,6 +524,7 @@ help:
 	@echo "  unit         run every unit test ($(UNIT_TESTS))"
 	@echo "  integ        run every directed integration test ($(INTEG_TESTS))"
 	@echo "  errata       run the complete 15-entry r4p3 errata evidence matrix"
+	@echo "  public-suite run pinned MIT ARM and Thumb instruction exercisers"
 	@echo "  random-validation run 32 x 256-instruction constrained-random seeds"
 	@echo "  soak         run 256 deterministic sanitizer/X-propagation seeds"
 	@echo "  regress      clean full run with JSON metadata/results under reports/"

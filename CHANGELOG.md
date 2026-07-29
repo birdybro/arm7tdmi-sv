@@ -14,6 +14,9 @@ sign-off gate in `TASKS.md` §31.13.
 - Add a 32-seed constrained-random ARM/Thumb campaign with at least 8,192
   QEMU-compared retirements, privileged-mode/exception coverage, and separate
   two-endian ARM7 legacy-unaligned permitted-memory scoreboards.
+- Add pinned MIT `jsmolka/gba-suite` ARM and Thumb exercisers with exact
+  source/license/patch provenance, 15,287 retirements, frozen signatures,
+  fail-hard public-port scoreboarding, and release-evidence validation.
 - Add a checksum-pinned Arm GNU 14.3.Rel1 compiler gate that executes separate
   ARM and Thumb C units, bidirectional ARMv4T interworking, and mixed-width
   memory signatures on the RTL.

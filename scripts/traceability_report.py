@@ -138,8 +138,13 @@ def _phase_names_from_paths(paths: Iterable[str]) -> list[str]:
         if path.startswith("tb/unit/") and name.endswith("_tb.sv"):
             phases.add(f"unit-{name.removesuffix('_tb.sv')}")
         elif path.startswith("tb/integration/") and name.endswith("_tb.sv"):
-            test_name = name.removeprefix("arm7tdmis_").removesuffix("_tb.sv")
-            phases.add(f"integration-{test_name}")
+            if name == "arm7tdmis_public_suite_tb.sv":
+                phases.add("public-suite")
+            else:
+                test_name = name.removeprefix(
+                    "arm7tdmis_"
+                ).removesuffix("_tb.sv")
+                phases.add(f"integration-{test_name}")
     return sorted(phases)
 
 

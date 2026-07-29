@@ -3343,10 +3343,28 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   exact tool/input/artifact hashes, required bins, per-seed commands, and an
   exact reproducer. Quick CI runs two 64-instruction seeds; the full regression
   and release-evidence validator require the 32 × 256 campaign.
-- [ ] **VAL-003:** Integrate legally redistributable public ARMv4T suites (for example
+- [x] **VAL-003:** Integrate legally redistributable public ARMv4T suites (for example
   ARM/Thumb instruction exercisers used by mature open FPGA cores) after recording
   license, source commit, expected signature, and any patches. Do not claim the
   proprietary Arm Validation Suite was run unless it actually was.
+  `verification/public_suite.py` fetches the MIT-licensed
+  `jsmolka/gba-suite` repository at exact commit
+  `a7113b67e63f83a9b321696ddd7042ccfad6c881`, verifies its Git tree,
+  origin, clean state, license, and source-ROM hashes against
+  `verification/public_suites.json`, and runs both upstream ARM and Thumb CPU
+  exercisers. Only the manifest-listed GBA header removal and branches over
+  explicitly documented ARM3/ARMv4T UNPREDICTABLE-policy cases are permitted;
+  every other payload byte must equal upstream and both patched-image hashes
+  are frozen. `tb/integration/arm7tdmis_public_suite_tb.sv` supplies the
+  minimal memory/vblank environment and observes only raw CPU pins plus the
+  public verification retirement interface. The ARM image passes after 8,596
+  retirements (8,588 ARM, 8 Thumb), the Thumb image after 6,691 (6,152 ARM,
+  539 Thumb), and both produce frozen VRAM signature `0xe8d71fb2`, for 15,287
+  total retirements. Full and quick regression fetch/run this phase; schema
+  `arm7tdmis-public-suite-v1` records exact inputs, license, patches,
+  artifacts, metrics, and reproducers, and release evidence independently
+  rejects stale, dirty, altered, weakened, or hash-mismatched results. The
+  proprietary ARM Validation Suite was not run and is not claimed.
 - [ ] **VAL-004:** Replace the current E-state-duration cycle harness with exact
   Chapter 7 waveform tests and cross coverage over class × register/PC × m/n/b ×
   condition × endian × stalls × abort/interrupt.

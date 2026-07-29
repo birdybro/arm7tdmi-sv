@@ -53,6 +53,8 @@ jobs:
             reports/generated/cdc-rdc.json
             reports/generated/constrained-random-report.json
             reports/generated/constrained_random/
+            reports/generated/public-suite-report.json
+            reports/generated/public_suite/
             reports/generated/release-manifest.json
             reports/generated/arm7tdmis-release-evidence-*.tar.gz
             reports/generated/arm7tdmis-release-evidence-*.tar.gz.sha256

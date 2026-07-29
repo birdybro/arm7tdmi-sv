@@ -118,6 +118,11 @@
       "tests": ["verification/constrained_random.py", "tb/integration/arm7tdmis_random_diff_tb.sv", "tb/integration/arm7tdmis_random_policy_tb.sv", "scripts/tests/test_constrained_random_contract.py"],
       "source_sections": ["TASKS.md section 31.10 VAL-002 constrained-random campaign"]
     },
+    "VAL-003": {
+      "rtl": ["rtl/core/", "rtl/top/arm7tdmis_top.sv"],
+      "tests": ["verification/public_suite.py", "verification/public_suites.json", "tb/integration/arm7tdmis_public_suite_tb.sv", "scripts/tests/test_public_suite_contract.py", "scripts/tests/test_public_suite_evidence.py"],
+      "source_sections": ["TASKS.md section 31.10 VAL-003 pinned public-suite contract"]
+    },
     "VAL-009": {
       "rtl": ["rtl/core/", "rtl/top/arm7tdmis_top.sv"],
       "tests": ["verification/compiler/", "tb/integration/arm7tdmis_compiler_tb.sv"],
@@ -156,6 +161,8 @@
     {"glob": "verification/programs/*", "requirements": ["VAL-001"]},
     {"glob": "verification/constrained_random.py", "requirements": ["VAL-002"]},
     {"glob": "tb/integration/arm7tdmis_random_*_tb.sv", "requirements": ["VAL-002"]},
+    {"glob": "verification/public_suite.py", "requirements": ["VAL-003"]},
+    {"glob": "tb/integration/arm7tdmis_public_suite_tb.sv", "requirements": ["VAL-003"]},
     {"glob": "verification/compiler/*", "requirements": ["VAL-009"]},
     {"glob": "verification/intel_cyclonev_postfit_primitives.sv", "requirements": ["FPGA-006"]},
     {"glob": "tb/postfit/*.sv", "requirements": ["FPGA-006"]},
@@ -164,6 +171,7 @@
     {"glob": "scripts/tests/test_fpga_quality_contract.py", "requirements": ["FPGA-004"]},
     {"glob": "scripts/tests/test_postfit_sim_contract.py", "requirements": ["FPGA-006"]},
     {"glob": "scripts/tests/test_constrained_random_contract.py", "requirements": ["VAL-002"]},
+    {"glob": "scripts/tests/test_public_suite_*.py", "requirements": ["VAL-003"]},
     {"glob": "scripts/tests/test_soak_contract.py", "requirements": ["VAL-010"]}
   ]
 }

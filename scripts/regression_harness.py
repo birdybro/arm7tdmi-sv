@@ -159,6 +159,7 @@ def collect_metadata(
             ),
             "unit": list(unit_tests),
             "integration": list(integration_tests),
+            "public_suite": ["pinned-gba-suite-arm-thumb"],
             "constrained_random": [],
             "soak": [],
             "examples": ["generic-soc"],
@@ -297,6 +298,7 @@ def _phases(
         yield _make_phase(f"unit-{test}", f"unit-{test}")
     for test in selected_integration:
         yield _make_phase(f"integration-{test}", f"integ-{test}")
+    yield _make_phase("public-suite", "public-suite")
     if quick:
         yield _make_phase(
             "random-validation-quick", "random-validation-quick"

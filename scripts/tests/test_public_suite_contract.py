@@ -86,7 +86,7 @@ class PublicSuiteContractTest(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, runner)
 
-    def test_public_port_scoreboard_runs_both_unmodified_test_payloads(
+    def test_public_port_scoreboard_runs_both_manifest_normalized_payloads(
         self,
     ) -> None:
         testbench_path = (
