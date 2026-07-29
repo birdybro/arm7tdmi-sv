@@ -3277,7 +3277,10 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   `scripts/quartus_option_characterization.py` validates the reports and emits
   `reports/generated/quartus-options.json`; the mandatory regression phase and
   `scripts/tests/test_option_characterization.py` freeze the configurations,
-  delta schema, documentation, and evidence path.
+  delta schema, timing-closing Auto Fit policy, documentation, and evidence
+  path. The policy preserves the 0.25 ns minimum synchronous-input contract
+  across all four option profiles instead of accepting a one-shot placement
+  that can miss external-input hold timing.
 - [x] **MIST-012:** Test coexistence with DMA/bus arbitration, including SWP LOCK,
   LDM/STM DMORE, stalls, and abort/error responses.
   `arm7tdmis_mister_dma_arbitration_tb` runs a real ARM program against a
