@@ -323,6 +323,7 @@ module arm7tdmis_core_pipelined
     logic         ls_signed_q;
     logic         ls_load_q;
     logic [1:0]   ls_addr_lo_q;
+    logic [31:0]  memory_instr_pc_q;
 
     logic [15:0]  block_remaining_q;
     logic [31:0]  block_curr_addr_q;
@@ -919,6 +920,18 @@ module arm7tdmis_core_pipelined
     wire any_exc_fires    = swi_fires || undef_fires || irq_fires || fiq_fires
                          || pabt_fires || dabt_fires;
 
+    // TRM §2.9.8 exception-link table. Synchronous SWI/UNDEF links use
+    // the source instruction width; IRQ/FIQ/PABT always use PC+4; DABT
+    // uses the faulting transfer's PC+8. The latter comes from an issue-
+    // time latch because Decode can already contain the next Thumb
+    // halfword by the eventual abort writeback boundary.
+    wire [31:0] exception_lr_value =
+        fiq_interlock_fires ? 32'h0000_0014
+      : dabt_fires          ? (memory_instr_pc_q + 32'd8)
+      : (swi_fires || undef_fires)
+                            ? (de_q.pc + (de_q.thumb ? 32'd2 : 32'd4))
+                            : (de_q.pc + 32'd4);
+
     // §9d: MUL/MLA write Rd at bits[19:16] (= dec.rn) in S_EXEC.
     // UMULL/SMULL write RdLo at bits[15:12] (= dec.rd) in S_EXEC and
     // RdHi at bits[19:16] (= dec.rn) in S_MULL_HI. Non-accumulating flag
@@ -1104,10 +1117,7 @@ module arm7tdmis_core_pipelined
             rf_write_en   = 1'b1;
         end else if (any_exc_fires) begin
             rf_write_addr = 4'd14;
-            // A FIQ immediately following DABT must return to the first
-            // Abort-vector instruction: SUBS pc,lr_fiq,#4 -> 0x10.
-            rf_write_data = fiq_interlock_fires ? 32'h0000_0014
-                                                : (de_q.pc + 32'd4);
+            rf_write_data = exception_lr_value;
             rf_write_en   = 1'b1;
         end else if (branch_link_writes) begin
             rf_write_addr = 4'd14;
@@ -1237,6 +1247,7 @@ module arm7tdmis_core_pipelined
                 ls_signed_q         <= 1'b0;
                 ls_load_q           <= 1'b0;
                 ls_addr_lo_q        <= 2'h0;
+                memory_instr_pc_q   <= 32'h0;
                 block_remaining_q   <= 16'h0;
                 block_curr_addr_q   <= 32'h0;
                 block_curr_reg_q    <= 4'h0;
@@ -1284,6 +1295,14 @@ module arm7tdmis_core_pipelined
                     ls_signed_q     <= ls_effective_signed;
                     ls_load_q       <= dec.ls_load;
                     ls_addr_lo_q    <= ls_data_addr_used[1:0];
+                end
+
+                // Preserve the instruction identity across every memory
+                // substate for exact Data Abort LR generation.
+                if (state_q == S_EXEC
+                    && (ls_take_data_cycle || block_take_cycle
+                        || swp_take_cycle)) begin
+                    memory_instr_pc_q <= de_q.pc;
                 end
 
                 // LDM/STM snapshot + iteration start. The first beat's
