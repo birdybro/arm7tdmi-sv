@@ -257,6 +257,8 @@ module arm7tdmis_reset_multicycle_matrix_tb
             u_dut.u_core.ls_load_q,
             u_dut.u_core.ls_addr_lo_q,
             u_dut.u_core.memory_instr_pc_q,
+            u_dut.u_core.memory_instr_thumb_q,
+            u_dut.u_core.block_pc_refill_first_q,
             u_dut.u_core.block_remaining_q,
             u_dut.u_core.block_curr_addr_q,
             u_dut.u_core.block_curr_reg_q,
