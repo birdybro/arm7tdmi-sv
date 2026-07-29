@@ -5,6 +5,9 @@
 // The LDR must not execute before RESTART, must run only under CLKEN with
 // DBGACK temporarily low, must survive a mid-transfer stall while IRQ is
 // masked, and must report bit 33 HIGH on the first capture after re-entry.
+// Public STM scans also prove the return-PC formula: each debug-speed
+// instruction contributes one address and the system-speed access contributes
+// exactly three.
 //
 // Then reproduce OpenOCD's complete word-memory path through public JTAG:
 // load r0/r1-r4 at debug speed, run STMIA r0!,{r1-r4} at system speed,
@@ -22,6 +25,7 @@ module arm7tdmis_debug_system_speed_tb
 
     localparam int CYCLE_LIMIT = 5200;
     localparam logic [31:0] DEBUG_NOP = 32'hE1A0_0000;
+    localparam logic [31:0] DEBUG_STM_PC = 32'hE880_8000;
     localparam logic [31:0] SYSTEM_LDR = 32'hE590_4000; // LDR r4,[r0]
     localparam logic [31:0] DEBUG_LDM_R0_R4 = 32'hE890_001F;
     localparam logic [31:0] DEBUG_LDM_R0    = 32'hE890_0001;
@@ -231,6 +235,22 @@ module arm7tdmis_debug_system_speed_tb
         data = chain1_parallel_data(captured);
     endtask
 
+    task automatic capture_debug_pc(
+        output logic [31:0] data,
+        output logic        entry_cause
+    );
+        logic [37:0] captured;
+
+        select_chain1();
+        shift_dr(33, chain1_serial_in(DEBUG_STM_PC, 1'b0), captured);
+        entry_cause = captured[0];
+        if (&{1'b0, captured[37:1]})
+            fail("unreachable PC-capture sentinel");
+        inject(DEBUG_NOP, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        capture_data(data);
+    endtask
+
     task automatic write_debug_r0(
         input logic [31:0] base
     );
@@ -344,6 +364,9 @@ module arm7tdmis_debug_system_speed_tb
         logic [1:0]  stalled_trans;
         logic        stalled_lock;
         logic        reentry_cause;
+        logic [31:0] pc_baseline;
+        logic [31:0] pc_after_debug_speed;
+        logic [31:0] pc_after_system_speed;
         bit          saw_dbgack_low;
         bit          saw_sync_idle;
         bit          saw_target_access;
@@ -380,6 +403,21 @@ module arm7tdmis_debug_system_speed_tb
         wait_for_inject_idle("debug-speed MOV did not retire");
         if (u_dut.u_core.u_regfile.regs[0] !== 32'h0000_0100)
             fail("debug-speed MOV did not establish r0");
+
+        // A direct STM r15 capture contains the three-word scan-pipeline
+        // contribution. Repeating it after one ordinary injected NOP must
+        // therefore move the visible PC by four words: that NOP plus the
+        // second capture's STM and two pipeline NOPs.
+        capture_debug_pc(pc_baseline, reentry_cause);
+        if (reentry_cause !== 1'b0)
+            fail("DBGRQ entry incorrectly reported a watchpoint cause");
+        inject(DEBUG_NOP, 1'b0);
+        wait_for_inject_idle("PC-formula debug-speed NOP did not retire");
+        capture_debug_pc(pc_after_debug_speed, reentry_cause);
+        if (pc_after_debug_speed !== (pc_baseline + 32'd16))
+            fail($sformatf(
+                "debug-speed PC formula expected %08x, scanned %08x",
+                pc_baseline + 32'd16, pc_after_debug_speed));
 
         // Exact ARM7TDMI system-speed pipeline sequence.
         inject(DEBUG_NOP, 1'b0);
@@ -477,9 +515,18 @@ module arm7tdmis_debug_system_speed_tb
             fail("normal program instruction retired during system access");
 
         if (reentered) begin
-            capture_reentry_cause(reentry_cause);
+            // Since the preceding scan, two setup NOPs contribute two
+            // addresses, the at-speed LDR contributes three, and this
+            // STM-plus-two-NOP capture contributes three more.
+            capture_debug_pc(pc_after_system_speed, reentry_cause);
             if (reentry_cause !== 1'b1)
                 fail("system-speed re-entry did not scan out bit 33 HIGH");
+            if (pc_after_system_speed
+                !== (pc_after_debug_speed + 32'd32))
+                fail($sformatf(
+                    "system-speed PC formula expected %08x, scanned %08x",
+                    pc_after_debug_speed + 32'd32,
+                    pc_after_system_speed));
         end
 
         // OpenOCD arm7_9_write_memory() word path. Load the base and four
