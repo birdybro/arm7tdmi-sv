@@ -184,8 +184,11 @@ module arm7tdmis_core_pipelined
     // D-stage advance — same shape; takes the decoded view of fd_q.
     de_t          de_q;
 
-    wire [15:0]   thumb_instr_w = fd_q.pc[1] ? fd_q.instr[31:16]
-                                              : fd_q.instr[15:0];
+    // Halfword fetches are returned in their addressed external data lane.
+    // Big-endian mode mirrors the lane selected by PC[1].
+    wire [15:0]   thumb_instr_w = (fd_q.pc[1] ^ CFGBIGEND)
+                                 ? fd_q.instr[31:16]
+                                 : fd_q.instr[15:0];
 
     decoded_t     arm_dec_w;
     decoded_t     thumb_dec_w;
