@@ -64,6 +64,28 @@ The mandatory `public-suite` phase writes
 `reports/generated/public-suite-report.json` using schema
 `arm7tdmis-public-suite-v1`.
 
+## Chapter 7 cross coverage
+
+`make -C scripts regress` runs the full Chapter 7 aggregate only after every
+directed integration phase has passed. `verification/table7_cross.json`
+defines nine required legal-equivalence crosses over instruction family,
+register/PC and state, multiply `m`, block/coprocessor `n`, coprocessor `b`,
+condition/mode, endian/alignment, deterministic CLKEN holds, abort position,
+and interrupt/exception timing. It excludes only dimensions that do not apply
+to an instruction class; exclusions do not satisfy a required bin.
+
+`verification/table7_cross.py` rejects quick, failed, dirty, stale, duplicate,
+missing-log, hash-mismatched, under-counted, or missing-marker evidence. It
+resolves each manifest entry to a passing `integration-*` result in the live
+full regression, independently hashes its log and owning testbench, and
+requires the count-bearing PASS expression. The report schema
+`arm7tdmis-table7-cross-v1` records 1,903 evidence rows, a 1,891-row minimum,
+all nine required crosses, and an empty missing-cross list in
+`reports/generated/table7-cross-report.json`. Release packaging repeats the
+structural checks, hashes the referenced sources/logs, and reconnects each
+entry to the same regression phase. Quick CI deliberately omits this aggregate
+because it does not run all owning matrices.
+
 ## Independent lint and CDC/RDC closure
 
 `make -C scripts fpga-quality` is the FPGA-004 open-source quality gate. The
@@ -587,9 +609,9 @@ required hidden inter-halfword BL state. Four consecutive external MRC
 transfers and their independent responses remain covered by
 `arm7tdmis_cp_erratum15_tb`.
 
-Measured structural coverage reporting, mutation testing of architectural
-controls, independent QEMU/compiler execution, constrained-random
-differential/policy testing, the pinned public ARM/Thumb suite, and
-deterministic sanitizing soak are implemented above. Required-bin functional
-coverage closure and formal evidence remain separate open requirements in
-`TASKS.md` §31.10.
+Measured structural coverage reporting, exact Chapter 7 legal-equivalence
+cross coverage, mutation testing of architectural controls, independent
+QEMU/compiler execution, constrained-random differential/policy testing, the
+pinned public ARM/Thumb suite, and deterministic sanitizing soak are
+implemented above. Encoding-level required-bin functional coverage and formal
+evidence remain separate open requirements in `TASKS.md` §31.10.

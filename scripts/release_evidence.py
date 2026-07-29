@@ -24,6 +24,17 @@ MANIFEST_SCHEMA = "arm7tdmis-release-evidence-v1"
 VERSION_PATH = REPO_ROOT / "VERSION"
 TRM_PATH = REPO_ROOT / "ARM_DDI_0234B_ARM7TDMI-S_r4p3_TRM.pdf"
 LICENSE_PATH = REPO_ROOT / "LICENSE"
+TABLE7_REQUIRED_CROSSES = (
+    "class_waveform_endian_stall",
+    "class_condition_mode",
+    "register_pc_state",
+    "multiply_class_m",
+    "block_class_n",
+    "coprocessor_class_b_n",
+    "memory_class_endian_alignment",
+    "memory_class_abort",
+    "class_interrupt_exception",
+)
 
 
 def validate_evidence(
@@ -368,6 +379,145 @@ def validate_public_suite_evidence(
         raise ValueError("public-suite total retirement evidence is inconsistent")
 
 
+def validate_table7_cross_evidence(
+    report: dict[str, Any],
+    manifest: dict[str, Any],
+    *,
+    expected_commit: str,
+) -> None:
+    """Reject stale, altered, weakened, or non-passing VAL-004 evidence."""
+    required = manifest.get("required_crosses")
+    definitions = manifest.get("crosses")
+    if (
+        manifest.get("schema") != "arm7tdmis-table7-cross-map-v1"
+        or not isinstance(required, list)
+        or tuple(required) != TABLE7_REQUIRED_CROSSES
+        or len(required) != len(set(required))
+        or not isinstance(definitions, dict)
+        or set(definitions) != set(TABLE7_REQUIRED_CROSSES)
+    ):
+        raise ValueError("Chapter 7 cross manifest is not trusted")
+
+    for name in TABLE7_REQUIRED_CROSSES:
+        definition = definitions[name]
+        if (
+            not isinstance(definition, dict)
+            or not isinstance(definition.get("description"), str)
+            or not definition["description"]
+            or not isinstance(definition.get("dimensions"), dict)
+            or not definition["dimensions"]
+            or type(definition.get("minimum_rows")) is not int
+            or definition["minimum_rows"] <= 0
+            or not isinstance(definition.get("evidence"), list)
+            or not definition["evidence"]
+        ):
+            raise ValueError(f"Chapter 7 cross definition is weak: {name}")
+        for evidence in definition["evidence"]:
+            if (
+                not isinstance(evidence, dict)
+                or not re.fullmatch(
+                    r"integration-[a-z0-9_]+",
+                    str(evidence.get("phase", "")),
+                )
+                or not str(evidence.get("source", "")).startswith(
+                    "tb/integration/"
+                )
+                or "PASS" not in str(evidence.get("marker", ""))
+                or type(evidence.get("expected_rows")) is not int
+                or evidence["expected_rows"] <= 0
+            ):
+                raise ValueError(
+                    f"Chapter 7 cross evidence is weak: {name}"
+                )
+
+    if report.get("schema") != "arm7tdmis-table7-cross-v1":
+        raise ValueError("Chapter 7 cross report has wrong schema")
+    if report.get("status") != "passed" or report.get("failure"):
+        raise ValueError("Chapter 7 cross report is not passed")
+    if report.get("git", {}).get("dirty"):
+        raise ValueError("Chapter 7 cross report describes a dirty tree")
+    if report.get("git", {}).get("commit") != expected_commit:
+        raise ValueError("Chapter 7 cross report commit does not match")
+    if (
+        report.get("required_crosses") != required
+        or report.get("covered_crosses") != required
+        or report.get("missing_crosses") != []
+        or report.get("cross_count") != len(required)
+    ):
+        raise ValueError("Chapter 7 required cross coverage is incomplete")
+
+    report_crosses = report.get("crosses")
+    if not isinstance(report_crosses, dict) or set(report_crosses) != set(
+        TABLE7_REQUIRED_CROSSES
+    ):
+        raise ValueError("Chapter 7 report cross set is incomplete")
+
+    total_minimum_rows = 0
+    total_observed_rows = 0
+    for name in TABLE7_REQUIRED_CROSSES:
+        definition = definitions[name]
+        cross = report_crosses[name]
+        expected_evidence = definition["evidence"]
+        actual_evidence = cross.get("evidence")
+        if (
+            cross.get("description") != definition["description"]
+            or cross.get("dimensions") != definition["dimensions"]
+            or cross.get("minimum_rows") != definition["minimum_rows"]
+            or not isinstance(actual_evidence, list)
+            or len(actual_evidence) != len(expected_evidence)
+        ):
+            raise ValueError(f"Chapter 7 cross was altered: {name}")
+
+        observed_rows = 0
+        for expected, actual in zip(expected_evidence, actual_evidence):
+            if not isinstance(actual, dict) or any(
+                actual.get(key) != expected.get(key)
+                for key in ("phase", "source", "marker", "expected_rows")
+            ):
+                raise ValueError(
+                    f"Chapter 7 evidence identity was altered: {name}"
+                )
+            log = actual.get("log")
+            source = actual.get("source_artifact")
+            if (
+                actual.get("status") != "passed"
+                or not isinstance(log, dict)
+                or not str(log.get("path", "")).startswith(
+                    "reports/generated/logs/"
+                )
+                or type(log.get("bytes")) is not int
+                or log["bytes"] <= 0
+                or not re.fullmatch(
+                    r"[0-9a-f]{64}", str(log.get("sha256", ""))
+                )
+                or not isinstance(source, dict)
+                or source.get("path") != expected["source"]
+                or type(source.get("bytes")) is not int
+                or source["bytes"] <= 0
+                or not re.fullmatch(
+                    r"[0-9a-f]{64}", str(source.get("sha256", ""))
+                )
+            ):
+                raise ValueError(
+                    f"Chapter 7 hashed evidence is incomplete: {name}"
+                )
+            observed_rows += expected["expected_rows"]
+
+        if (
+            cross.get("observed_rows") != observed_rows
+            or observed_rows < definition["minimum_rows"]
+        ):
+            raise ValueError(f"Chapter 7 cross is under-covered: {name}")
+        total_minimum_rows += definition["minimum_rows"]
+        total_observed_rows += observed_rows
+
+    if (
+        report.get("total_minimum_rows") != total_minimum_rows
+        or report.get("total_observed_rows") != total_observed_rows
+    ):
+        raise ValueError("Chapter 7 aggregate row counts are inconsistent")
+
+
 def _sha256(path: pathlib.Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -469,6 +619,13 @@ def _validated_files(
         if path.is_file()
     )
     phase_names = {str(result.get("name")) for result in results}
+    if (
+        regression.get("mode") == "full"
+        and "table7-cross" not in phase_names
+    ):
+        raise ValueError(
+            "full regression is missing mandatory Chapter 7 cross evidence"
+        )
     traceability_report = REPORT_ROOT / "traceability-report.json"
     if "traceability" not in phase_names:
         raise ValueError("regression did not run mandatory traceability")
@@ -702,6 +859,88 @@ def _validated_files(
             candidates.append(artifact_path)
         candidates.extend(
             (public_report_path.resolve(), public_manifest_path.resolve())
+        )
+    if "table7-cross" in phase_names:
+        cross_report_path = REPORT_ROOT / "table7-cross-report.json"
+        cross_manifest_path = REPO_ROOT / "verification/table7_cross.json"
+        if not cross_report_path.is_file():
+            raise ValueError("Chapter 7 cross report is missing")
+        if not cross_manifest_path.is_file():
+            raise ValueError("Chapter 7 cross manifest is missing")
+        cross_report = json.loads(
+            cross_report_path.read_text(encoding="utf-8")
+        )
+        cross_manifest = json.loads(
+            cross_manifest_path.read_text(encoding="utf-8")
+        )
+        validate_table7_cross_evidence(
+            cross_report,
+            cross_manifest,
+            expected_commit=str(
+                regression.get("git", {}).get("commit", "")
+            ),
+        )
+
+        expected_inputs = {
+            "verification/table7_cross.json",
+            "verification/table7_cross.py",
+        }
+        inputs = cross_report.get("inputs")
+        if not isinstance(inputs, dict) or set(inputs) != expected_inputs:
+            raise ValueError("Chapter 7 cross input manifest is incomplete")
+        for path_text, entry in inputs.items():
+            if not isinstance(entry, dict) or entry.get("path") != path_text:
+                raise ValueError("Chapter 7 cross input entry is malformed")
+            input_path = _repo_path(path_text)
+            if (
+                input_path.stat().st_size != entry.get("bytes")
+                or _sha256(input_path) != entry.get("sha256")
+            ):
+                raise ValueError("Chapter 7 cross input hash mismatch")
+            candidates.append(input_path)
+
+        result_by_name = {
+            str(result.get("name")): result for result in results
+        }
+        for cross in cross_report["crosses"].values():
+            for evidence in cross["evidence"]:
+                phase = evidence["phase"]
+                result = result_by_name.get(phase)
+                log_entry = evidence["log"]
+                source_entry = evidence["source_artifact"]
+                if (
+                    result is None
+                    or result.get("status") != "passed"
+                    or result.get("exit_code") != 0
+                    or result.get("log") != log_entry.get("path")
+                    or result.get("log_sha256") != log_entry.get("sha256")
+                ):
+                    raise ValueError(
+                        f"Chapter 7 phase evidence mismatch: {phase}"
+                    )
+                log_path = _repo_path(str(log_entry.get("path", "")))
+                source_path = _repo_path(str(source_entry.get("path", "")))
+                if (
+                    log_path.stat().st_size != log_entry.get("bytes")
+                    or _sha256(log_path) != log_entry.get("sha256")
+                    or source_path.stat().st_size
+                    != source_entry.get("bytes")
+                    or _sha256(source_path)
+                    != source_entry.get("sha256")
+                ):
+                    raise ValueError(
+                        f"Chapter 7 evidence hash mismatch: {phase}"
+                    )
+                if re.search(
+                    str(evidence["marker"]),
+                    log_path.read_text(encoding="utf-8", errors="replace"),
+                ) is None:
+                    raise ValueError(
+                        f"Chapter 7 PASS marker missing: {phase}"
+                    )
+                candidates.extend((log_path, source_path))
+        candidates.extend(
+            (cross_report_path.resolve(), cross_manifest_path.resolve())
         )
     quality_phases = {"lint-independent", "cdc-rdc"}
     present_quality_phases = quality_phases & phase_names

@@ -3365,16 +3365,29 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   artifacts, metrics, and reproducers, and release evidence independently
   rejects stale, dirty, altered, weakened, or hash-mismatched results. The
   proprietary ARM Validation Suite was not run and is not claimed.
-- [ ] **VAL-004:** Replace the current E-state-duration cycle harness with exact
+- [x] **VAL-004:** Replace the current E-state-duration cycle harness with exact
   Chapter 7 waveform tests and cross coverage over class × register/PC × m/n/b ×
   condition × endian × stalls × abort/interrupt.
-  The exact pin/state oracle now crosses 17 base instruction-family rows with
-  both endian configurations and a deterministic 1-to-4-cycle CLKEN hold at
-  every Execute phase (68 reset-isolated cases). It checks the complete
-  enabled Chapter 7 tuple, Appendix B first-stopped-cycle allowance, stable
-  later waits, and exact resumed phase. Register/PC, m/n/b, condition, and
-  abort/interrupt evidence remains distributed across specialized matrices;
-  a fail-hard aggregate cross-coverage gate is still required before closure.
+  `arm7tdmis_table7_core_phase_matrix_tb.sv` replaces duration-only checking
+  with a complete pin/state oracle over 17 base instruction-family rows, both
+  endian configurations, and continuous versus deterministic 1-to-4-cycle
+  CLKEN holds at every Execute phase (68 reset-isolated cases). It checks every
+  enabled Chapter 7 output, response, coprocessor follower, debug/trace event,
+  and internal phase; Appendix B's first-stopped-cycle allowance; all later
+  stopped edges; and exact phase restoration.
+  `verification/table7_cross.json` then binds nine required legal-equivalence
+  crosses to the existing register/PC, all-`m`, block-`n`, coprocessor-`b/n`,
+  condition/mode, endian/alignment, abort, interrupt, and exception matrices.
+  `verification/table7_cross.py` accepts them only from passing phases in the
+  same clean full regression, verifies every phase log and testbench SHA-256,
+  requires the exact row-count PASS marker, and writes
+  `table7-cross-report.json`. The checked manifest accounts for 1,903 evidence
+  rows against a 1,891-row minimum with all nine crosses covered and no missing
+  required bin; non-applicable dimension combinations are explicit rather
+  than counted as waivers. `scripts/tests/test_table7_cross_contract.py` and
+  `scripts/tests/test_table7_cross_evidence.py` prevent the phase, manifest,
+  hashes, dimensions, row minima, release validation, or checked status from
+  weakening.
 - [ ] **VAL-005:** Add randomized CLKEN stalls to every instruction class and random
   legal ABORT, IRQ, FIQ, reset, DBGRQ, and coprocessor handshakes at each cycle.
 - [ ] **VAL-006:** Add functional coverage for every valid encoding family and every

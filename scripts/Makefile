@@ -131,6 +131,7 @@ INTEG_RUN_ARGS_compiler = \
         coverage release-evidence \
         traceability random-validation-build random-validation \
         random-validation-quick public-suite-build public-suite \
+        table7-cross \
         soak-build soak \
         harness-unit harness-self-test raw-checker-self-test mutation-self-test \
         $(addprefix unit-, $(UNIT_TESTS)) unit \
@@ -307,6 +308,15 @@ public-suite: public-suite-build
 	    --binary $(abspath $(PUBLIC_SUITE_BIN)) \
 	    --manifest ../verification/public_suites.json \
 	    --output $(PUBLIC_SUITE_REPORT) $(PUBLIC_SUITE_ARGS)
+
+# VAL-004 is deliberately a full-regression-only aggregate. It consumes the
+# already completed directed phases and rejects missing, stale, unhashed, or
+# marker-free Chapter 7 cross evidence.
+table7-cross:
+	PYTHONPATH=../verification $(PYTHON) ../verification/table7_cross.py \
+	    --manifest verification/table7_cross.json \
+	    --regression reports/generated/regression.json \
+	    --output reports/generated/table7-cross-report.json
 
 # VAL-002 builds the scoreboards once, then generates fresh source/reference
 # images and executes every deterministic seed through both oracle lanes.
@@ -525,6 +535,7 @@ help:
 	@echo "  integ        run every directed integration test ($(INTEG_TESTS))"
 	@echo "  errata       run the complete 15-entry r4p3 errata evidence matrix"
 	@echo "  public-suite run pinned MIT ARM and Thumb instruction exercisers"
+	@echo "  table7-cross validate all required Chapter 7 cross evidence in a full regression"
 	@echo "  random-validation run 32 x 256-instruction constrained-random seeds"
 	@echo "  soak         run 256 deterministic sanitizer/X-propagation seeds"
 	@echo "  regress      clean full run with JSON metadata/results under reports/"

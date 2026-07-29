@@ -2,8 +2,9 @@
 
 This is the audited map from ARM DDI 0234B Table 7-2 and detailed
 Tables 7-3 through 7-23 to RTL and fail-hard pin-level evidence. It closes
-BUS-002/BUS-003 at the directed-evidence level; it does not replace the
-independent random/formal cross-product required by VAL-004 through VAL-008.
+BUS-002/BUS-003 at the directed-evidence level and the exact legal-equivalence
+cycle crosses required by VAL-004. Randomized asynchronous-event, functional-
+coverage, and formal closure remain separate VAL-005 through VAL-008 gates.
 
 ## Oracle and phase convention
 
@@ -40,6 +41,29 @@ start, control stability, DMORE, CP mirrors, reset, and CLKEN holds on every
 clock. Specialized rows below extend the central oracle across PC
 destinations, both instruction states, all multiply `m` values, block `n`
 values, exceptions, stalls/aborts, and external coprocessor handshakes.
+
+## Required cross-coverage gate
+
+`verification/table7_cross.json` is the reviewed coverage model. It defines
+nine required legal-equivalence crosses: base class × endian × stall;
+class × condition outcome × privilege mode; register/PC × instruction and
+destination state; multiply class × `m`; block class × `n`; coprocessor class
+× `b/n`; memory class × endian × alignment; memory class × abort position;
+and instruction/exception class × interrupt timing. “Legal-equivalence” is
+important: `m` does not apply to loads, for example, and the manifest records
+`not-applicable` instead of inventing an illegal Cartesian row.
+
+The full regression runs every owning test first and then invokes
+`verification/table7_cross.py`. The gate accepts a row set only when its named
+phase passed, the regression's recorded log SHA-256 still matches the file,
+the exact count-bearing PASS expression occurs in that log, and the owning
+testbench SHA-256 is recorded. The resulting
+`reports/generated/table7-cross-report.json` has schema
+`arm7tdmis-table7-cross-v1` and reports 1,903 evidence rows against a
+1,891-row required minimum, all nine required crosses covered, and
+zero missing required cross bins. Some directed rows support more than one
+orthogonal cross; the aggregate is an evidence-row count, not a claim of
+1,903 unique programs.
 
 ## Table 7-2 summary cross-check
 
@@ -109,5 +133,7 @@ make -C scripts integ
 
 The release-facing `make -C scripts regress` starts from a clean build and
 records the command status and hashed log for every named bench in
-`reports/generated/regression.json`. `make -C scripts release-evidence`
-rejects a failed, dirty, or cross-commit result before packaging it.
+`reports/generated/regression.json`; its full profile runs `table7-cross`
+after all directed integration phases. `make -C scripts release-evidence`
+rejects a failed, dirty, cross-commit, under-counted, hash-mismatched, or
+marker-free cross result before packaging it.

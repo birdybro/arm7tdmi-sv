@@ -160,6 +160,7 @@ def collect_metadata(
             "unit": list(unit_tests),
             "integration": list(integration_tests),
             "public_suite": ["pinned-gba-suite-arm-thumb"],
+            "cycle_cross": [],
             "constrained_random": [],
             "soak": [],
             "examples": ["generic-soc"],
@@ -298,6 +299,8 @@ def _phases(
         yield _make_phase(f"unit-{test}", f"unit-{test}")
     for test in selected_integration:
         yield _make_phase(f"integration-{test}", f"integ-{test}")
+    if not quick:
+        yield _make_phase("table7-cross", "table7-cross")
     yield _make_phase("public-suite", "public-suite")
     if quick:
         yield _make_phase(
@@ -369,6 +372,9 @@ def main() -> int:
     report["manifest"]["constrained_random"] = [
         "2-seed-quick" if args.quick else "32-seed-release"
     ]
+    report["manifest"]["cycle_cross"] = (
+        [] if args.quick else ["chapter7-required-crosses"]
+    )
     report["status"] = "running"
     report["results"] = []
     write_report(report_path, report)

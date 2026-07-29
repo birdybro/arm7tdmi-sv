@@ -1,0 +1,446 @@
+{
+  "schema": "arm7tdmis-table7-cross-map-v1",
+  "coverage_model": "Exact directed legal-equivalence crosses. Values marked not-applicable are excluded instead of manufacturing illegal Cartesian combinations; every counted row is owned by a hashed testbench and a hashed full-regression PASS log.",
+  "required_crosses": [
+    "class_waveform_endian_stall",
+    "class_condition_mode",
+    "register_pc_state",
+    "multiply_class_m",
+    "block_class_n",
+    "coprocessor_class_b_n",
+    "memory_class_endian_alignment",
+    "memory_class_abort",
+    "class_interrupt_exception"
+  ],
+  "crosses": {
+    "class_waveform_endian_stall": {
+      "description": "All 17 base Chapter 7 family paths execute under both byte orders, continuously and with deterministic 1-to-4-cycle CLKEN holds at every Execute phase.",
+      "dimensions": {
+        "instruction_class": [
+          "dp",
+          "dp-register-shift",
+          "mul",
+          "mla",
+          "mull",
+          "ldr",
+          "str",
+          "ldrh",
+          "strh",
+          "ldm",
+          "stm",
+          "swp",
+          "branch",
+          "swi",
+          "undefined",
+          "condition-fail",
+          "psr-transfer"
+        ],
+        "endian": [
+          "little",
+          "big"
+        ],
+        "stall_profile": [
+          "continuous",
+          "hold-every-execute-phase-1-to-4-cycles"
+        ]
+      },
+      "minimum_rows": 68,
+      "evidence": [
+        {
+          "phase": "integration-table7_core_phase_matrix",
+          "source": "tb/integration/arm7tdmis_table7_core_phase_matrix_tb.sv",
+          "marker": "\\[table7_core_phase_matrix\\] PASS \\(2 endian x 2 stall profiles x 17 rows = 68 reset-isolated cases\\)",
+          "expected_rows": 68
+        }
+      ]
+    },
+    "class_condition_mode": {
+      "description": "The executing waveform equivalence class is paired with every genuinely conditional failure encoding over 39 decode/side-effect paths in Supervisor and User mode.",
+      "dimensions": {
+        "condition_outcome": [
+          "passed-AL-representative",
+          "failed-EQ-through-LE"
+        ],
+        "privilege_mode": [
+          "Supervisor",
+          "User"
+        ],
+        "instruction_path": [
+          "17-base-waveform-families",
+          "39-condition-sensitive-decode-paths"
+        ]
+      },
+      "minimum_rows": 1160,
+      "evidence": [
+        {
+          "phase": "integration-table7_core_phase_matrix",
+          "source": "tb/integration/arm7tdmis_table7_core_phase_matrix_tb.sv",
+          "marker": "\\[table7_core_phase_matrix\\] PASS \\(2 endian x 2 stall profiles x 17 rows = 68 reset-isolated cases\\)",
+          "expected_rows": 68
+        },
+        {
+          "phase": "integration-cond_fail_matrix",
+          "source": "tb/integration/arm7tdmis_cond_fail_matrix_tb.sv",
+          "marker": "\\[cond_fail_matrix\\] PASS \\(2 modes x 14 conditions x 39 paths = 1092 rows\\)",
+          "expected_rows": 1092
+        }
+      ]
+    },
+    "register_pc_state": {
+      "description": "Ordinary register paths, architectural PC operand values, every PC-writing family, and exception returns cover ARM/Thumb source and destination state.",
+      "dimensions": {
+        "register_role": [
+          "ordinary-gpr",
+          "r15-operand",
+          "r15-destination"
+        ],
+        "pc_form": [
+          "dp",
+          "register-shift-dp",
+          "ldr",
+          "ldm",
+          "thumb-pop",
+          "exception-return",
+          "bx",
+          "branch"
+        ],
+        "instruction_state": [
+          "ARM",
+          "Thumb"
+        ],
+        "destination_state": [
+          "ARM",
+          "Thumb",
+          "not-applicable"
+        ]
+      },
+      "minimum_rows": 139,
+      "evidence": [
+        {
+          "phase": "integration-table7_core_phase_matrix",
+          "source": "tb/integration/arm7tdmis_table7_core_phase_matrix_tb.sv",
+          "marker": "\\[table7_core_phase_matrix\\] PASS \\(2 endian x 2 stall profiles x 17 rows = 68 reset-isolated cases\\)",
+          "expected_rows": 68
+        },
+        {
+          "phase": "integration-pc_write_alignment",
+          "source": "tb/integration/arm7tdmis_pc_write_alignment_tb.sv",
+          "marker": "\\[pc_write_alignment\\] PASS \\(11 cases\\)",
+          "expected_rows": 11
+        },
+        {
+          "phase": "integration-exception_return_matrix",
+          "source": "tb/integration/arm7tdmis_exception_return_matrix_tb.sv",
+          "marker": "\\[exception_return_matrix\\] PASS \\(5 modes x 2 states x 6 forms = 60 rows\\)",
+          "expected_rows": 60
+        }
+      ]
+    },
+    "multiply_class_m": {
+      "description": "Short, medium, and worst-case early-termination boundaries cover all multiply classes, accumulate forms, signedness, flag behavior, and legal overlap policies.",
+      "dimensions": {
+        "instruction_class": [
+          "MUL",
+          "MLA",
+          "UMULL",
+          "UMLAL",
+          "SMULL",
+          "SMLAL"
+        ],
+        "m": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "signedness": [
+          "unsigned",
+          "signed",
+          "not-applicable"
+        ],
+        "accumulate": [
+          "no",
+          "yes"
+        ]
+      },
+      "minimum_rows": 22,
+      "evidence": [
+        {
+          "phase": "integration-multiply_matrix",
+          "source": "tb/integration/arm7tdmis_multiply_matrix_tb.sv",
+          "marker": "\\[multiply_matrix\\] PASS \\(22 cases\\)",
+          "expected_rows": 22
+        }
+      ]
+    },
+    "block_class_n": {
+      "description": "LDM/STM address modes and list positions cover one and multiword timing, intermediate DMORE behavior, abort controls, PC membership, and maximum-length transfers.",
+      "dimensions": {
+        "instruction_class": [
+          "LDM",
+          "STM"
+        ],
+        "n_boundary": [
+          "1",
+          "2",
+          "3",
+          "8",
+          "12",
+          "16"
+        ],
+        "address_mode": [
+          "IA",
+          "IB",
+          "DA",
+          "DB"
+        ],
+        "pc_membership": [
+          "excluded",
+          "included"
+        ]
+      },
+      "minimum_rows": 283,
+      "evidence": [
+        {
+          "phase": "integration-block_ls_matrix",
+          "source": "tb/integration/arm7tdmis_block_ls_matrix_tb.sv",
+          "marker": "\\[block_ls_matrix\\] PASS \\(256 one-hot \\+ 16 multi rows\\)",
+          "expected_rows": 272
+        },
+        {
+          "phase": "integration-dmore_matrix",
+          "source": "tb/integration/arm7tdmis_dmore_matrix_tb.sv",
+          "marker": "\\[dmore_matrix\\] PASS \\(8 reset-isolated rows\\)",
+          "expected_rows": 8
+        },
+        {
+          "phase": "integration-debug_inject_handshake",
+          "source": "tb/integration/arm7tdmis_debug_inject_handshake_tb.sv",
+          "marker": "\\[debug_inject_handshake\\] PASS",
+          "expected_rows": 3
+        }
+      ]
+    },
+    "coprocessor_class_b_n": {
+      "description": "CDP, MCR, MRC, LDC, and STC cover immediate acceptance, finite and interrupt-abandoned busy waits, variable word count, and every three-word abort beat.",
+      "dimensions": {
+        "instruction_class": [
+          "CDP",
+          "MCR",
+          "MRC",
+          "LDC",
+          "STC"
+        ],
+        "b_boundary": [
+          "0",
+          "2",
+          "3",
+          "interrupt-abandoned"
+        ],
+        "n": [
+          "3",
+          "not-applicable"
+        ],
+        "handshake": [
+          "ready",
+          "busy-then-ready",
+          "absent",
+          "busy-then-interrupt"
+        ]
+      },
+      "minimum_rows": 15,
+      "evidence": [
+        {
+          "phase": "integration-cp_cdp_protocol",
+          "source": "tb/integration/arm7tdmis_cp_cdp_protocol_tb.sv",
+          "marker": "\\[cp_cdp_protocol\\] PASS",
+          "expected_rows": 3
+        },
+        {
+          "phase": "integration-cp_reg_transfer",
+          "source": "tb/integration/arm7tdmis_cp_reg_transfer_tb.sv",
+          "marker": "\\[cp_reg_transfer\\] PASS",
+          "expected_rows": 2
+        },
+        {
+          "phase": "integration-cp_ldc_stc",
+          "source": "tb/integration/arm7tdmis_cp_ldc_stc_tb.sv",
+          "marker": "\\[cp_ldc_stc\\] PASS",
+          "expected_rows": 2
+        },
+        {
+          "phase": "integration-cp_busy_interrupt",
+          "source": "tb/integration/arm7tdmis_cp_busy_interrupt_tb.sv",
+          "marker": "\\[cp_busy_interrupt\\] PASS \\(IRQ and FIQ\\)",
+          "expected_rows": 2
+        },
+        {
+          "phase": "integration-cp_ldc_stc_abort",
+          "source": "tb/integration/arm7tdmis_cp_ldc_stc_abort_tb.sv",
+          "marker": "\\[cp_ldc_stc_abort\\] PASS \\(all LDC/STC abort beats\\)",
+          "expected_rows": 6
+        }
+      ]
+    },
+    "memory_class_endian_alignment": {
+      "description": "Word, byte, halfword, signed, swap, branch-exchange, and PC-load paths cover every address suffix under both endian configurations, with Thumb-specific controls.",
+      "dimensions": {
+        "memory_class": [
+          "LDR",
+          "STR",
+          "LDRH",
+          "STRH",
+          "LDRSH",
+          "LDRSB",
+          "SWP",
+          "SWPB",
+          "Thumb-word",
+          "Thumb-halfword",
+          "LDR-to-PC",
+          "BX-fetch"
+        ],
+        "endian": [
+          "little",
+          "big"
+        ],
+        "address_low_bits": [
+          "00",
+          "01",
+          "10",
+          "11"
+        ]
+      },
+      "minimum_rows": 148,
+      "evidence": [
+        {
+          "phase": "integration-unaligned_access_matrix",
+          "source": "tb/integration/arm7tdmis_unaligned_access_matrix_tb.sv",
+          "marker": "\\[unaligned_access_matrix\\] PASS \\(64 data/SWP \\+ 8 fetch reset-per-case rows\\)",
+          "expected_rows": 72
+        },
+        {
+          "phase": "integration-thumb_word_unaligned_policy",
+          "source": "tb/integration/arm7tdmis_thumb_word_unaligned_policy_tb.sv",
+          "marker": "\\[thumb_word_unaligned_policy\\] PASS \\(48 reset-per-case rows\\)",
+          "expected_rows": 48
+        },
+        {
+          "phase": "integration-thumb_halfword_policy",
+          "source": "tb/integration/arm7tdmis_thumb_halfword_policy_tb.sv",
+          "marker": "\\[thumb_halfword_policy\\] PASS \\(20 reset-per-case rows\\)",
+          "expected_rows": 20
+        },
+        {
+          "phase": "integration-ldr_pc_unaligned_policy",
+          "source": "tb/integration/arm7tdmis_ldr_pc_unaligned_policy_tb.sv",
+          "marker": "\\[ldr_pc_unaligned_policy\\] PASS \\(8 reset-per-case rows\\)",
+          "expected_rows": 8
+        }
+      ]
+    },
+    "memory_class_abort": {
+      "description": "Single-transfer P/U/W/L modes, every four-beat LDM/STM position, both SWP widths and response positions, and every LDC/STC word are paired with abort behavior and non-abort controls.",
+      "dimensions": {
+        "memory_class": [
+          "LDR",
+          "STR",
+          "LDM",
+          "STM",
+          "SWP",
+          "SWPB",
+          "LDC",
+          "STC"
+        ],
+        "abort_position": [
+          "single-response",
+          "read-response",
+          "write-response",
+          "first-beat",
+          "middle-beat",
+          "last-beat",
+          "non-abort-control"
+        ]
+      },
+      "minimum_rows": 34,
+      "evidence": [
+        {
+          "phase": "integration-ls_abort_modes",
+          "source": "tb/integration/arm7tdmis_ls_abort_modes_tb.sv",
+          "marker": "\\[ls_abort_modes\\] PASS \\(all 16 P/U/W/L abort cases\\)",
+          "expected_rows": 16
+        },
+        {
+          "phase": "integration-ldm_abort",
+          "source": "tb/integration/arm7tdmis_ldm_abort_tb.sv",
+          "marker": "\\[ldm_abort\\] PASS \\(all four abort beats\\)",
+          "expected_rows": 4
+        },
+        {
+          "phase": "integration-stm_abort",
+          "source": "tb/integration/arm7tdmis_stm_abort_tb.sv",
+          "marker": "\\[stm_abort\\] PASS \\(all four abort beats\\)",
+          "expected_rows": 4
+        },
+        {
+          "phase": "integration-swp_bus_matrix",
+          "source": "tb/integration/arm7tdmis_swp_bus_matrix_tb.sv",
+          "marker": "\\[swp_bus_matrix\\] PASS \\(16 reset-per-case rows\\)",
+          "expected_rows": 16
+        },
+        {
+          "phase": "integration-cp_ldc_stc_abort",
+          "source": "tb/integration/arm7tdmis_cp_ldc_stc_abort_tb.sv",
+          "marker": "\\[cp_ldc_stc_abort\\] PASS \\(all LDC/STC abort beats\\)",
+          "expected_rows": 6
+        }
+      ]
+    },
+    "class_interrupt_exception": {
+      "description": "All six architected exception classes from ARM and Thumb are paired with mask, level, CLKEN-edge, priority, and coprocessor-busy interrupt timing.",
+      "dimensions": {
+        "exception_class": [
+          "SWI",
+          "Undefined",
+          "Prefetch-Abort",
+          "Data-Abort",
+          "IRQ",
+          "FIQ"
+        ],
+        "source_state": [
+          "ARM",
+          "Thumb"
+        ],
+        "event_timing": [
+          "masked",
+          "held",
+          "CLKEN-stalled-pulse",
+          "CLKEN-stalled-level",
+          "late-edge",
+          "simultaneous-IRQ-FIQ",
+          "coprocessor-busy"
+        ]
+      },
+      "minimum_rows": 22,
+      "evidence": [
+        {
+          "phase": "integration-exception_bus_matrix",
+          "source": "tb/integration/arm7tdmis_exception_bus_matrix_tb.sv",
+          "marker": "\\[exception_bus_matrix\\] PASS \\(6 classes x 2 states\\)",
+          "expected_rows": 12
+        },
+        {
+          "phase": "integration-interrupt_sampling_matrix",
+          "source": "tb/integration/arm7tdmis_interrupt_sampling_matrix_tb.sv",
+          "marker": "\\[interrupt_sampling_matrix\\] PASS \\(8 rows\\)",
+          "expected_rows": 8
+        },
+        {
+          "phase": "integration-cp_busy_interrupt",
+          "source": "tb/integration/arm7tdmis_cp_busy_interrupt_tb.sv",
+          "marker": "\\[cp_busy_interrupt\\] PASS \\(IRQ and FIQ\\)",
+          "expected_rows": 2
+        }
+      ]
+    }
+  }
+}

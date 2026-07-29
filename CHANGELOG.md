@@ -31,6 +31,9 @@ sign-off gate in `TASKS.md` §31.13.
 - Add zero-warning independent Slang elaboration for every public synthesis
   top and a mutation-tested structural CDC/RDC gate; synchronize deassertion
   of every wrapper/debug reset domain.
+- Close deterministic Chapter 7 cycle-cross coverage with exact endian/stall
+  waveforms, nine manifest-defined legal-equivalence crosses, full-regression
+  log/source hashing, and mutation-tested release validation.
 - Complete the remaining independent validation, formal, toolchain,
   MiSTer-framework, PocketStation, and hardware requirements in `TASKS.md`.
 - Freeze v1.0 only after every release-gate statement has durable evidence.
