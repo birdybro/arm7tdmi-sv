@@ -67,6 +67,9 @@ module ice_rt_tb
         .core_trans1        (core_trans1),
         .core_halt_boundary (1'b1),
         .core_breakpoint_execute(1'b0),
+        .core_exception_pending(1'b0),
+        .core_exception_entry(1'b0),
+        .core_exception_vector_ready(1'b0),
         .dbg_rq_in          (dbg_rq_in),
         .dbg_break_in       (dbg_break_in),
         .tap_run_idle       (1'b0),
@@ -79,6 +82,7 @@ module ice_rt_tb
         .core_halt          (core_halt),
         .dbg_break_internal (dbg_break_internal),
         .breakpoint_fetch   (breakpoint_fetch),
+        .halt_watchpoint_event(tb_halt_watchpoint_event),
         .dbg_ack            (dbg_ack),
         .ifen               (ifen),
         .halt_request       (halt_request),
@@ -121,6 +125,7 @@ module ice_rt_tb
     logic        tb_entry_breakpoint;
     logic        tb_monitor_mode;
     logic        tb_monitor_data_abort;
+    logic        tb_halt_watchpoint_event;
 
     int errors = 0;
 
@@ -246,6 +251,7 @@ module ice_rt_tb
                      tb_inject_active, tb_chain1_capture_break,
                      tb_entry_breakpoint,
                      tb_monitor_mode, tb_monitor_data_abort,
+                     tb_halt_watchpoint_event,
                      scan_raddr};
     /* verilator lint_on UNUSEDSIGNAL */
 

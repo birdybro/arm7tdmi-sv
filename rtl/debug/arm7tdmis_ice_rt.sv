@@ -20,6 +20,9 @@ module arm7tdmis_ice_rt
     input  logic        core_trans1,       // live core TRANS[1] for Debug Status[3]
     input  logic        core_halt_boundary,// current instruction commits this edge
     input  logic        core_breakpoint_execute,
+    input  logic        core_exception_pending,
+    input  logic        core_exception_entry,
+    input  logic        core_exception_vector_ready,
     input  logic        dbg_rq_in,         // Appendix B: synchronous soft-
                                             //      macrocell DBGRQ input
     input  logic        dbg_break_in,      // §22: external DBGBREAK pin
@@ -64,6 +67,7 @@ module arm7tdmis_ice_rt
     // Outputs
     output logic        dbg_break_internal,
     output logic        breakpoint_fetch,    // tag for the aligned opcode fetch
+    output logic        halt_watchpoint_event,// aligned halt-mode data WP
     output logic        dbg_ack,             // §22: forced via Debug Control[0],
                                               //      OR set when the debug-state
                                               //      FSM is in HALTED.
@@ -242,6 +246,7 @@ module arm7tdmis_ice_rt
     debug_state_e dbg_state_q;
     logic         halt_pending_q;
     logic         halt_watchpoint_q;
+    logic         halt_exception_wait_q;
     logic         breakpoint_halt_q;
     logic         breakpoint_resume_q;
     logic         entry_watchpoint_q;
@@ -503,6 +508,7 @@ module arm7tdmis_ice_rt
                               && monitor_enabled_wp_match
                               && watch_nopc_q;
     assign watchpoint_halt_pre = !monitor_mode && data_watchpoint_pre;
+    assign halt_watchpoint_event = watchpoint_halt_pre;
 
     // §30.22.1: DBGEN=0 forces all debug outputs LOW.
     assign dbg_break_internal_pre = breakpoint_fetch_pre
@@ -517,6 +523,7 @@ module arm7tdmis_ice_rt
             dbg_state_q       <= DBG_RUNNING;
             halt_pending_q    <= 1'b0;
             halt_watchpoint_q <= 1'b0;
+            halt_exception_wait_q <= 1'b0;
             breakpoint_halt_q <= 1'b0;
             breakpoint_resume_q <= 1'b0;
             entry_watchpoint_q <= 1'b0;
@@ -535,9 +542,23 @@ module arm7tdmis_ice_rt
                         if (!DBGEN) begin
                             halt_pending_q <= 1'b0;
                             halt_watchpoint_q <= 1'b0;
+                            halt_exception_wait_q <= 1'b0;
                             breakpoint_halt_q <= 1'b0;
                             breakpoint_resume_q <= 1'b0;
                             entry_watchpoint_q <= 1'b0;
+                        end else if (halt_exception_wait_q) begin
+                            // When a watchpoint/debug request collides with
+                            // an exception, §5.18.3 requires the exception
+                            // mode transition and first vector fetch before
+                            // debug state. Freeze only after the core has
+                            // captured that vector word into its F/D stage.
+                            halt_pending_q    <= 1'b0;
+                            halt_watchpoint_q <= 1'b0;
+                            if (core_exception_vector_ready) begin
+                                dbg_state_q       <= DBG_HALTED;
+                                halt_exception_wait_q <= 1'b0;
+                                breakpoint_halt_q <= 1'b0;
+                            end
                         end else if (breakpoint_resume_q
                                      && core_breakpoint_execute) begin
                             // Consume exactly the breakpoint tag that caused
@@ -546,10 +567,15 @@ module arm7tdmis_ice_rt
                             breakpoint_halt_q   <= 1'b0;
                             breakpoint_resume_q <= 1'b0;
                             if (halt_entry_req && core_halt_boundary) begin
-                                dbg_state_q    <= DBG_HALTED;
                                 halt_pending_q <= 1'b0;
                                 halt_watchpoint_q <= 1'b0;
                                 entry_watchpoint_q <= halt_entry_watchpoint;
+                                if (core_exception_pending
+                                    || core_exception_entry) begin
+                                    halt_exception_wait_q <= 1'b1;
+                                end else begin
+                                    dbg_state_q <= DBG_HALTED;
+                                end
                             end else if (halt_entry_req) begin
                                 halt_pending_q <= 1'b1;
                                 halt_watchpoint_q <= halt_entry_watchpoint;
@@ -566,13 +592,18 @@ module arm7tdmis_ice_rt
                         end else if ((halt_pending_q || halt_entry_req)
                                      && core_halt_boundary) begin
                             // The core commits its final state on this edge;
-                            // freezing begins immediately after the edge.
-                            dbg_state_q       <= DBG_HALTED;
+                            // an exception collision first refills its vector.
                             halt_pending_q    <= 1'b0;
                             breakpoint_halt_q <= 1'b0;
                             entry_watchpoint_q <= halt_watchpoint_q
                                                || halt_entry_watchpoint;
                             halt_watchpoint_q <= 1'b0;
+                            if (core_exception_pending
+                                || core_exception_entry) begin
+                                halt_exception_wait_q <= 1'b1;
+                            end else begin
+                                dbg_state_q <= DBG_HALTED;
+                            end
                         end else if (halt_entry_req) begin
                             halt_pending_q <= 1'b1;
                             halt_watchpoint_q <= halt_watchpoint_q
@@ -582,6 +613,7 @@ module arm7tdmis_ice_rt
                     DBG_HALTED: begin
                         halt_pending_q    <= 1'b0;
                         halt_watchpoint_q <= 1'b0;
+                        halt_exception_wait_q <= 1'b0;
                         if (!DBGEN) begin
                             dbg_state_q <= DBG_RUNNING;
                             breakpoint_halt_q <= 1'b0;
@@ -597,6 +629,7 @@ module arm7tdmis_ice_rt
                     DBG_MONITOR: begin
                         halt_pending_q      <= 1'b0;
                         halt_watchpoint_q   <= 1'b0;
+                        halt_exception_wait_q <= 1'b0;
                         breakpoint_halt_q   <= 1'b0;
                         breakpoint_resume_q <= 1'b0;
                         dbg_state_q         <= DBG_MONITOR;
@@ -605,6 +638,7 @@ module arm7tdmis_ice_rt
                         dbg_state_q       <= DBG_RUNNING;
                         halt_pending_q    <= 1'b0;
                         halt_watchpoint_q <= 1'b0;
+                        halt_exception_wait_q <= 1'b0;
                         breakpoint_halt_q <= 1'b0;
                         breakpoint_resume_q <= 1'b0;
                         entry_watchpoint_q <= 1'b0;
@@ -712,7 +746,8 @@ module arm7tdmis_ice_rt
     // access even though DBGACKI temporarily drops, so pending interrupts
     // stay suppressed until a real debug exit.
     wire ice_intdis = regs[DEBUG_CTRL_ADDR][2];
-    assign ifen = !(DBGEN && (ice_intdis || in_debug_halt));
+    assign ifen = !(DBGEN && (ice_intdis || in_debug_halt
+                            || halt_exception_wait_q));
 
     // Scan chain 2 upper bits are decoded by the TAP-facing wrapper.
     /* verilator lint_off UNUSEDSIGNAL */

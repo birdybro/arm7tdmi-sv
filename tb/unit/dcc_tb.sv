@@ -58,6 +58,9 @@ module dcc_tb;
         .core_trans1        (1'b0),
         .core_halt_boundary (1'b1),
         .core_breakpoint_execute(1'b0),
+        .core_exception_pending(1'b0),
+        .core_exception_entry(1'b0),
+        .core_exception_vector_ready(1'b0),
         .dbg_rq_in          (1'b0),
         .dbg_break_in       (1'b0),
         .tap_run_idle       (1'b0),
@@ -88,6 +91,7 @@ module dcc_tb;
         .dbg_inject_active,
         .dbg_break_internal,
         .breakpoint_fetch,
+        .halt_watchpoint_event(tb_halt_watchpoint_event),
         .dbg_ack,
         .ifen,
         .halt_request,
@@ -104,6 +108,7 @@ module dcc_tb;
     logic tb_entry_breakpoint;
     logic tb_monitor_mode;
     logic tb_monitor_data_abort;
+    logic tb_halt_watchpoint_event;
 
     int unsigned errors = 0;
 
@@ -294,6 +299,7 @@ module dcc_tb;
                      dbg_inject_active, tb_chain1_capture_break,
                      tb_entry_breakpoint, tb_monitor_mode,
                      tb_monitor_data_abort,
+                     tb_halt_watchpoint_event,
                      scan_raddr};
     /* verilator lint_on UNUSEDSIGNAL */
 

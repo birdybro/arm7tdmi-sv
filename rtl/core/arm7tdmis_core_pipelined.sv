@@ -117,9 +117,13 @@ module arm7tdmis_core_pipelined
     input  logic        dbg_breakpoint_fetch,
     input  logic        dbg_monitor_mode,
     input  logic        dbg_watchpoint_abort,
+    input  logic        dbg_watchpoint_halt,
     output logic        dbg_halt_boundary,
     output logic        dbg_breakpoint_execute,
-    output logic        dbg_abort_taken
+    output logic        dbg_abort_taken,
+    output logic        dbg_exception_pending,
+    output logic        dbg_exception_entry,
+    output logic        dbg_exception_vector_ready
 );
 
     // =====================================================================
@@ -1105,10 +1109,29 @@ module arm7tdmis_core_pipelined
     wire undef_pending = executing
                        && ((condition_pass && instr_is_undef) || cond_is_nv
                            || cp_undef_trap);
+    // A halt-mode watchpoint or DBGRQ has priority over an interrupt, but
+    // §5.19.2 requires the core to remember the interrupt and enter debug
+    // in that exception's mode. Retain a one-cycle request sampled during
+    // a multicycle instruction, then take it on the following S_EXEC edge
+    // after the watched instruction's final architectural writeback.
+    logic debug_irq_pending_q;
+    logic debug_fiq_pending_q;
+    wire debug_halt_collision = dbg_watchpoint_halt || dbg_halt_req;
+    wire debug_irq_pending_now = debug_halt_collision
+                               && !nIRQ && !cpsr.i;
+    wire debug_fiq_pending_now = debug_halt_collision
+                               && !nFIQ && !cpsr.f;
+    assign dbg_exception_pending = debug_irq_pending_q
+                                 || debug_fiq_pending_q
+                                 || debug_irq_pending_now
+                                 || debug_fiq_pending_now;
+
     wire irq_pending   = (executing && !nIRQ && !cpsr.i)
-                       || cp_wait_irq_pending;
+                       || cp_wait_irq_pending
+                       || ((state_q == S_EXEC) && debug_irq_pending_q);
     wire fiq_pending   = (executing && !nFIQ && !cpsr.f)
-                       || cp_wait_fiq_pending;
+                       || cp_wait_fiq_pending
+                       || ((state_q == S_EXEC) && debug_fiq_pending_q);
     logic fiq_after_dabt_q;
     wire  fiq_interlock_fires = fiq_after_dabt_q
                               && (state_q == S_EXEC);
@@ -1235,6 +1258,43 @@ module arm7tdmis_core_pipelined
       : (swi_fires || undef_fires)
                             ? (de_q.pc + (de_q.thumb ? 32'd2 : 32'd4))
                             : (de_q.pc + 32'd4);
+
+    always_ff @(posedge CLK) begin
+        if (!nRESET) begin
+            debug_irq_pending_q <= 1'b0;
+            debug_fiq_pending_q <= 1'b0;
+        end else if (CLKEN) begin
+            if (irq_fires || fiq_fires) begin
+                debug_irq_pending_q <= 1'b0;
+                debug_fiq_pending_q <= 1'b0;
+            end else begin
+                if (debug_irq_pending_now)
+                    debug_irq_pending_q <= 1'b1;
+                if (debug_fiq_pending_now)
+                    debug_fiq_pending_q <= 1'b1;
+            end
+        end
+    end
+
+    // Exception/watchpoint debug entry is delayed until the first vector
+    // instruction has been fetched, but not executed (TRM §5.18.3). A
+    // flush starts the refill; latch_into_fd marks the response edge that
+    // captures that first vector instruction. ICE freezes the core after
+    // this edge, before fd_q can advance into Execute.
+    logic debug_exception_refill_q;
+    assign dbg_exception_entry = any_exc_fires;
+    assign dbg_exception_vector_ready = debug_exception_refill_q
+                                      && latch_into_fd;
+    always_ff @(posedge CLK) begin
+        if (!nRESET) begin
+            debug_exception_refill_q <= 1'b0;
+        end else if (CLKEN) begin
+            if (any_exc_fires)
+                debug_exception_refill_q <= 1'b1;
+            else if (dbg_exception_vector_ready)
+                debug_exception_refill_q <= 1'b0;
+        end
+    end
 
     // §9d: MUL/MLA write Rd at bits[19:16] (= dec.rn) in S_EXEC.
     // UMULL/SMULL write RdLo at bits[15:12] (= dec.rd) in S_EXEC and

@@ -2,10 +2,9 @@
 // TASKS.md §1.4 / AGENTS.md so downstream tests, the ETM wrapper (§24),
 // and the scan wrapper (§25) all line up.
 //
-// At §7 the top instantiates a synchronized reset and the simple
-// non-pipelined core. Coprocessor (§19), debug (§22), JTAG (§23), and
-// ETM (§24) outputs are still tied to safe idle defaults — those
-// subsystems land in their own milestones.
+// The integration now uses the pipelined core and connects the coprocessor,
+// EmbeddedICE-RT, JTAG, and ETM-facing interfaces. Remaining release gaps are
+// tracked in TASKS.md §31.
 
 module arm7tdmis_top
     import arm7tdmis_bus_pkg::*;
@@ -147,14 +146,16 @@ module arm7tdmis_top
         .dbg_breakpoint_fetch(ice_breakpoint_fetch),
         .dbg_monitor_mode (ice_monitor_mode),
         .dbg_watchpoint_abort(ice_monitor_data_abort),
+        .dbg_watchpoint_halt(ice_halt_watchpoint_event),
         .dbg_halt_boundary(ice_halt_boundary),
         .dbg_breakpoint_execute(ice_breakpoint_execute),
-        .dbg_abort_taken  (ice_debug_abort_taken)
+        .dbg_abort_taken  (ice_debug_abort_taken),
+        .dbg_exception_pending(ice_core_exception_pending),
+        .dbg_exception_entry(ice_core_exception_entry),
+        .dbg_exception_vector_ready(ice_core_exception_vector_ready)
     );
 
-    // ---- EmbeddedICE-RT (§22 scaffold) ----
-    // Watchpoint comparators only at this milestone — full debug-state
-    // FSM, CHAIN/RANGE coupling, and scan-chain-2 wiring land later.
+    // ---- EmbeddedICE-RT (§22) ----
     logic       ice_dbg_break;
     logic [1:0] ice_dbgrng;
 
@@ -167,7 +168,11 @@ module arm7tdmis_top
     logic ice_breakpoint_execute;
     logic ice_monitor_mode;
     logic ice_monitor_data_abort;
+    logic ice_halt_watchpoint_event;
     logic ice_debug_abort_taken;
+    logic ice_core_exception_pending;
+    logic ice_core_exception_entry;
+    logic ice_core_exception_vector_ready;
     logic tap_restart_req;
     logic        core_dcc_we;
     logic        core_dcc_re;
@@ -217,6 +222,9 @@ module arm7tdmis_top
         .core_trans1        (TRANS[1]),    // live Debug Status[3]
         .core_halt_boundary (ice_halt_boundary),
         .core_breakpoint_execute(ice_breakpoint_execute),
+        .core_exception_pending(ice_core_exception_pending),
+        .core_exception_entry(ice_core_exception_entry),
+        .core_exception_vector_ready(ice_core_exception_vector_ready),
         .dbg_rq_in          (DBGRQ),
         .dbg_break_in       (DBGBREAK),    // synchronous, bus-phase aligned
         .tap_run_idle       (tap_run_idle),
@@ -228,6 +236,7 @@ module arm7tdmis_top
         .monitor_data_abort (ice_monitor_data_abort),
         .dbg_break_internal (ice_dbg_break),
         .breakpoint_fetch   (ice_breakpoint_fetch),
+        .halt_watchpoint_event(ice_halt_watchpoint_event),
         .dbg_ack            (ice_dbg_ack),
         .ifen               (ice_ifen),
         .halt_request       (ice_halt_request),

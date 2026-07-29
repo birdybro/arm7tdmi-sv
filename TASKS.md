@@ -2578,14 +2578,17 @@ number of cycles spent in an internal FSM state.
   `tb/integration/arm7tdmis_debug_external_break_tb.sv`. Synchronous external
   DBGRQ sampling, control-bit-1 Run-Test/Idle synchronization, internal-DBGACKI
   status semantics, INTDIS, register width, and RAZ behavior are covered by
-  `tb/integration/arm7tdmis_debug_control_sync_tb.sv`. Remaining simultaneous-
-  priority cases keep this item open.
+  `tb/integration/arm7tdmis_debug_control_sync_tb.sv`. Watchpoint priority over
+  simultaneous DBGRQ and watchpoint interaction with Data Abort and IRQ are
+  covered by `tb/integration/arm7tdmis_debug_watchpoint_priority_tb.sv`.
+  Remaining breakpoint/vector-catch/exception priority cases and the complete
+  DBGEN matrix keep this item open.
 - [ ] **DBG-002:** Feed Debug Status TRANS from the actual `TRANS[1]`, not PROT.
   Align address/control and read/write data before data-dependent watchpoint comparison.
 - [ ] **DBG-003:** Implement exact WP0/WP1 value/mask, XNOR, size, read/write,
   opcode/data, privilege, T, EXTERN, CHAIN latch, RANGE, and ENABLE semantics. `DBGRNG`
   remains independent of ENABLE but is disabled by DBGEN.
-- [ ] **DBG-004:** Qualify breakpoints with valid, non-flushed instructions.
+- [x] **DBG-004:** Qualify breakpoints with valid, non-flushed instructions.
   Watchpoints enter debug only after the access and all architectural writeback
   complete; cover LDM/STM, aborts, exceptions, and simultaneous DBGRQ.
   Internal opcode execute/restart and flush cancellation are covered by
@@ -2593,8 +2596,13 @@ number of cycles spent in an internal FSM state.
   `tb/integration/arm7tdmis_debug_breakpoint_flush_tb.sv`. Internal and external
   multibeat LDM completion are covered by
   `tb/integration/arm7tdmis_debug_watchpoint_completion_tb.sv` and
-  `tb/integration/arm7tdmis_debug_external_break_tb.sv`; abort, other-exception,
-  STM, and simultaneous-DBGRQ cases remain open.
+  `tb/integration/arm7tdmis_debug_external_break_tb.sv`.
+  `tb/integration/arm7tdmis_debug_watchpoint_priority_tb.sv` covers final-beat
+  STM completion and base writeback, external Data Abort precedence, retained
+  one-cycle IRQ, and simultaneous DBGRQ. Its exception cases require the mode,
+  LR, and SPSR transition plus the first vector fetch before DBGACK, while
+  proving that neither the vector instruction nor the post-watchpoint
+  instruction executes.
 - [x] **DBG-005:** Implement monitor-mode restrictions and generated PABT/DABT,
   including `DbgAbt` and external ABORT precedence.
   `tb/integration/arm7tdmis_debug_monitor_mode_tb.sv` programs the mode and
@@ -2625,9 +2633,13 @@ number of cycles spent in an internal FSM state.
   correction in `tb/integration/arm7tdmis_debug_pc_capture_tb.sv`; the same
   regression verifies the distinct pre-execute breakpoint formula. The normal
   multibeat watchpoint formula is covered alongside completion ordering in
-  `tb/integration/arm7tdmis_debug_watchpoint_completion_tb.sv`. Watchpoint with
-  exception and system-speed PC formulas, pending-interrupt preservation, and
-  the documented PC-modify erratum policy remain open.
+  `tb/integration/arm7tdmis_debug_watchpoint_completion_tb.sv`. A watchpoint
+  collision with a one-cycle IRQ now proves pending-interrupt preservation and
+  correct IRQ mode/LR/SPSR/vector entry, and the Data Abort collision proves
+  abort-mode entry before debug halt, in
+  `tb/integration/arm7tdmis_debug_watchpoint_priority_tb.sv`. The scan-visible
+  watchpoint-with-exception and system-speed PC formulas, the broader pending-
+  interrupt matrix, and the documented PC-modify erratum policy remain open.
 - [x] **JTAG-001:** Exhaustively verify all 16 TAP states and transitions, async
   `DBGnTRST`, Capture/Shift/Update-IR, fixed `0001` capture, all five public
   instructions, and BYPASS for every other IR encoding. Fail-hard evidence:

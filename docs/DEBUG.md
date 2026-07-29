@@ -3,9 +3,10 @@
 > **Audit status:** The subsystem remains partial overall. Halt-mode scan transport,
 > debug-speed register/PSR transfer, staged system-speed access, and the bidirectional
 > CP14 DCC have fail-hard directed coverage. Monitor-mode breakpoint/watchpoint
-> aborts and CP14 Debug Abort Status coupling are also covered end to end. Exact
-> debug-pin sampling, a synchronous FPGA debug-port wrapper, ETM closure, and the
-> remaining release blockers are tracked in `TASKS.md` §31.6–§31.8.
+> aborts, CP14 Debug Abort Status coupling, synchronous DBGRQ/DBGBREAK sampling,
+> and halt-mode watchpoint/exception ordering are also covered end to end. A
+> synchronous FPGA debug-port wrapper, ETM closure, the remaining collision
+> matrix, and other release blockers are tracked in `TASKS.md` §31.6–§31.8.
 
 EmbeddedICE-RT + JTAG TAP + CP14 DCC, as implemented in `rtl/debug/arm7tdmis_ice_rt.sv` and `rtl/jtag/arm7tdmis_jtag_tap.sv`. The TRM chapters are 5.13–5.27.
 
@@ -214,6 +215,18 @@ external synchronous input, while bit 0 reports internal `DBGACKI` rather than
 the force-modified external pin. These distinctions are covered by
 `tb/integration/arm7tdmis_debug_control_sync_tb.sv`.
 
+A halt-mode data watchpoint is remembered through the watched instruction's
+final transfer and all of its architectural writeback. If it coincides with a
+Data Abort or an unmasked IRQ/FIQ request, the core first commits the selected
+exception's mode, LR, and SPSR and captures the first vector word into the
+fetch/decode stage. EmbeddedICE then asserts internal DBGACK and freezes the
+core before that vector instruction executes. A one-cycle interrupt sampled at
+the watchpoint/debug-request boundary is retained until this entry completes,
+and IFEN suppresses later interrupts during the exception refill. STM
+completion, external Data Abort priority, retained IRQ, vector-before-DBGACK,
+and watchpoint priority over simultaneous DBGRQ are covered by
+`tb/integration/arm7tdmis_debug_watchpoint_priority_tb.sv`.
+
 ## JTAG TAP
 
 Standard IEEE 1149.1 16-state controller in `rtl/jtag/arm7tdmis_jtag_tap.sv`. Notable wrinkles:
@@ -334,6 +347,11 @@ instruction containing the watched access. The multibeat LDM regression proves
 that r15 remains correct after every load and base writeback commits, before
 the following instruction is allowed to execute:
 `tb/integration/arm7tdmis_debug_watchpoint_completion_tb.sv`.
+
+When an exception coincides with that watchpoint, the exception state and first
+vector fetch precede debug halt as described above. The mode/LR/SPSR and bus
+ordering are covered; the exception-specific scan-visible r15 correction is
+still an explicit release item in `TASKS.md` DBG-007.
 
 Writing r15 through that stream also replaces the halted pipeline's fetch PC.
 The address is halfword-aligned in Thumb state and word-aligned in ARM state;
