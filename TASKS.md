@@ -2445,9 +2445,18 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   `tb/integration/arm7tdmis_psr_policy_tb.sv` executes the same contract through
   ARM instructions in Supervisor, FIQ, User, and System modes, proves an MSR T-bit
   attempt never changes fetch state, and checks its one-cycle TRM Table 7-6 timing.
-- [ ] **ISA-005:** Correct every r15 operand value: normal ARM/Thumb reads, ARM
+- [x] **ISA-005:** Correct every r15 operand value: normal ARM/Thumb reads, ARM
   register-specified shift (+12 case), store-data r15, branch link, PC-relative Thumb
-  operations, and debug-state instructions.
+  operations, and debug-state instructions. The reset-per-program
+  `tb/integration/arm7tdmis_pc_operands_tb.sv` checks ordinary ARM +8, the distinct
+  register-controlled-shift Rm +12 value, scalar and block-store +12 data, BL link,
+  ordinary Thumb +4, and word-aligned Thumb literal/ADD bases at a halfword address.
+  The block-store path now uses the latched instruction PC rather than accidentally
+  borrowing the following decode-stage PC. `tb/integration/arm7tdmis_cp14_r15_tb.sv`
+  and `tb/integration/arm7tdmis_cp_reg_r15_tb.sv` prove MCR r15 +12 and MRC r15
+  NZCV-only semantics. Public-scan debug PC accounting, including DBGRQ,
+  breakpoint/watchpoint, exception, debug-speed, system-speed, scan-loaded r15, and
+  RESTART, remains exact in the DBG-007/JTAG-005 regressions.
 - [ ] **ISA-006:** Align every PC write according to the destination state. Cover BX
   both directions, data-processing-to-PC, LDR/LDM-to-PC, POP PC, and exception return.
   A CPSR-restoring PC write must use the restored T bit for its first refill.

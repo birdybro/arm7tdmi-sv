@@ -36,6 +36,31 @@ In steady state, three different instructions are in flight per cycle. Throughpu
 
 Same plus `dec` (the normalized `decoded_t` from the ARM/Thumb decoders).
 
+### Architectural r15 views
+
+`de_q.pc` is the address of the instruction in Execute, not an already advanced
+architectural PC. Most register-file reads of r15 add 8 in ARM state or 4 in Thumb
+state. The few architecturally distinct consumers derive their value from the
+instruction address explicitly:
+
+| Consumer | Value |
+|---|---|
+| Ordinary ARM operand / ARM PC-relative base | `de_q.pc + 8` |
+| ARM register-controlled shift `Rm=r15` | `de_q.pc + 12` |
+| ARM `STR`/`STM` store data for r15 | instruction PC `+ 12` |
+| ARM `BL` link | `de_q.pc + 4` |
+| Thumb ordinary operand | `de_q.pc + 4` |
+| Thumb PC-relative literal / address generation | `(de_q.pc + 4) & ~3` |
+| ARM MCR source r15 | `de_q.pc + 12` |
+| ARM MRC destination r15 | CPSR NZCV only; no PC write |
+
+Scalar stores snapshot the exceptional value with the rest of the transfer controls.
+Block stores use `memory_instr_pc_q`, because `de_q` can contain the following
+instruction during `S_BLOCK_DATA`; using the live register-file view would make the
+result depend on pipeline occupancy. Normal execution is covered by
+`tb/integration/arm7tdmis_pc_operands_tb.sv`; the CP and debug-specific views are
+covered by the r15 and public-scan regressions named in `TASKS.md` ISA-005.
+
 ### Why `pabort` rides the pipeline
 
 ABORT is sampled at the F-stage RDATA latch, not at E-stage execute. Without `pabort` per-instruction, the abort signal would be lost between fetch and execute (the original ARM7TDMI memory bus model has them many cycles apart in the steady state). When the aborted instruction reaches E, `pabt_fires` triggers via `executing && de_q.pabort`.
