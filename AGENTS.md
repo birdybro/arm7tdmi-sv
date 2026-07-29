@@ -16,7 +16,7 @@ landed since that baseline: the ARM/Thumb, exception/abort, coprocessor/CP14,
 EmbeddedICE-RT, and ETM-facing directed requirements are checked; regressions fail
 hard and publish evidence; and both FPGA characterization profiles pass checked
 Quartus flows. Current open categories are the unchecked §31 items:
-framework/PocketStation integration, random/suite/formal/soak validation,
+framework/PocketStation integration, random/suite/formal validation,
 remaining FPGA/reproducibility/hardware work, and final release
 review/freezing. Consult each checkbox and its attached evidence before making
 a narrower claim.
@@ -66,10 +66,10 @@ supported simulation flow. Build scripts and `.f` file lists live in
 
 Directed tests use hand-written, TRM-derived expected state. The checked
 VAL-001 QEMU trace is the independent shared-subset differential; VAL-009
-separately executes pinned-compiler programs. Remaining VAL items require
-random programs, public suites, formal properties, functional-coverage
-closure, and long soaks. Do not describe hand-written expectations as
-independent differential validation.
+separately executes pinned-compiler programs; VAL-010 runs the deterministic
+sanitizer/X-state wrapper soak. Remaining VAL items require random programs,
+public suites, formal properties, and functional-coverage closure. Do not
+describe hand-written expectations as independent differential validation.
 
 ## RTL coding discipline (load-bearing — read before writing any `.sv`)
 
@@ -95,7 +95,7 @@ These are the non-obvious traps the TRM and TASKS.md flag — internalize them b
 - **Banked registers depend on mode.** 31 GPRs + 6 SPSRs across User/FIQ/IRQ/Supervisor/Abort/Undefined/System; FIQ banks r8–r14, the others bank only r13/r14. Register read/write mapping is mode-driven and must be implemented for every mode (§3).
 - **Reset state is specific.** Supervisor mode, I=1, F=1, T=0, ARM state, PC=0x00000000 — set all of them, don't just clear PC.
 - **Bus is pipelined.** Address-class signals (ADDR/WRITE/SIZE/PROT/LOCK) are broadcast one bus cycle *ahead* of the data cycle they describe. `CLKEN` gates bus progression; treat it as a wait-state mechanism, not a clock gate.
-- **Remaining highest-risk blocks:** random/formal/soak validation,
+- **Remaining highest-risk blocks:** random/formal validation,
   framework/board CDC and timing, post-synthesis equivalence, and
   hardware/PocketStation evidence.
 - **Reserved coprocessor IDs.** CP14 is the Debug Communications Channel; CP15 is system control. External coprocessors must not use those IDs.

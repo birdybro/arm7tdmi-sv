@@ -3354,9 +3354,24 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   stack/call, and word/halfword/byte memory signature. `integ-compiler` is
   mandatory in full regression and, with the QEMU differential, in quick CI;
   generated compiler evidence is included in the release archive.
-- [ ] **VAL-010:** Run long deterministic fuzz/soak jobs under sanitizing simulator
+- [x] **VAL-010:** Run long deterministic fuzz/soak jobs under sanitizing simulator
   settings, X-propagation where supported, and multiple seeds. Archive failing seeds
   and minimize them into directed regressions.
+  `scripts/soak_harness.py` runs 256 deterministic, nonrepeating seeds through
+  a 64-iteration MiSTer-wrapper program while independently randomizing
+  `CPU_CE` and memory readiness. The dedicated Verilator build enables unique
+  X assignment/initialization and instruments all generated C++ with AddressSanitizer
+  and UndefinedBehaviorSanitizer; each child has fail-fast sanitizer settings,
+  a per-seed timeout, and an exact seed-specific PASS requirement. Schema
+  `arm7tdmis-soak-v1` records the commit and dirty state, simulator identity,
+  binary and testbench SHA-256, configuration, and every seed/output result;
+  release evidence requires that recorded state to be clean. On failure
+  the harness greedily minimizes the 16-bit seed while requiring the same
+  timeout, sanitizer class, or normalized testbench diagnostic, preserves the
+  original log, and writes an exact command/environment reproducer ready to
+  promote into a directed regression. `make -C scripts soak` is a mandatory non-quick
+  regression phase and a scheduled/manual CI job whose always-run artifact
+  upload retains the report and any failure reproducers.
 - [ ] **VAL-011:** Have a reviewer independent of the implementation map each
   sign-off requirement to evidence and inspect waveforms for the highest-risk
   exception, bus, coprocessor, and debug cases.

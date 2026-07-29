@@ -47,6 +47,67 @@ def validate_evidence(
             )
 
 
+def validate_soak_evidence(
+    soak: dict[str, Any],
+    *,
+    expected_commit: str,
+) -> None:
+    """Reject incomplete, stale, weakened, or non-passing soak evidence."""
+    if soak.get("schema") != "arm7tdmis-soak-v1":
+        raise ValueError("soak report has wrong schema")
+    if soak.get("status") != "passed" or soak.get("failures"):
+        raise ValueError("soak report is not passed")
+    if soak.get("git", {}).get("dirty"):
+        raise ValueError("soak report describes a dirty source tree")
+    if soak.get("git", {}).get("commit") != expected_commit:
+        raise ValueError("soak report commit does not match regression")
+
+    configuration = soak.get("configuration", {})
+    sanitizer_environment = configuration.get("environment", {})
+    sanitizers = configuration.get("sanitizers", [])
+    dependencies = "\n".join(
+        str(value)
+        for value in soak.get("tools", {}).get("binary_dependencies", [])
+    )
+    if (
+        configuration.get("x_assignment") != "unique"
+        or configuration.get("x_initialization") != "unique"
+        or not isinstance(sanitizers, list)
+        or set(sanitizers) != {"address", "undefined"}
+        or not isinstance(sanitizer_environment, dict)
+        or "halt_on_error=1"
+        not in str(sanitizer_environment.get("ASAN_OPTIONS", ""))
+        or "halt_on_error=1"
+        not in str(sanitizer_environment.get("UBSAN_OPTIONS", ""))
+        or not isinstance(configuration.get("timeout_seconds"), (int, float))
+        or configuration["timeout_seconds"] <= 0
+        or "libasan" not in dependencies
+        or "libubsan" not in dependencies
+    ):
+        raise ValueError("soak report lacks sanitizer/X-state evidence")
+
+    seeds = soak.get("seeds", [])
+    if not isinstance(seeds, list) or any(
+        not isinstance(entry, dict) for entry in seeds
+    ):
+        raise ValueError("soak report has a malformed seed list")
+    if (
+        not isinstance(configuration.get("seed_count"), int)
+        or configuration["seed_count"] < 256
+        or soak.get("completed_seed_count") != len(seeds)
+        or len(seeds) != configuration["seed_count"]
+        or len({entry.get("seed") for entry in seeds}) != len(seeds)
+    ):
+        raise ValueError("soak report does not contain 256 unique seeds")
+    if any(
+        entry.get("status") != "passed"
+        or entry.get("exit_code") != 0
+        or not entry.get("pass_marker_found")
+        for entry in seeds
+    ):
+        raise ValueError("soak report contains a non-passing seed")
+
+
 def _sha256(path: pathlib.Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -202,6 +263,29 @@ def _validated_files(
             for path in compiler_directory.rglob("*")
             if path.is_file()
         )
+    if "soak" in phase_names:
+        soak_path = REPORT_ROOT / "soak-report.json"
+        if not soak_path.is_file():
+            raise ValueError("soak report is missing")
+        soak = json.loads(soak_path.read_text(encoding="utf-8"))
+        validate_soak_evidence(
+            soak,
+            expected_commit=str(regression.get("git", {}).get("commit", "")),
+        )
+        for input_entry in soak.get("inputs", {}).values():
+            if not isinstance(input_entry, dict):
+                raise ValueError("soak report has a malformed input")
+            input_path = _repo_path(str(input_entry.get("path", "")))
+            if input_path.stat().st_size != input_entry.get("bytes"):
+                raise ValueError(
+                    f"soak input size mismatch: {input_entry.get('path')}"
+                )
+            if _sha256(input_path) != input_entry.get("sha256"):
+                raise ValueError(
+                    f"soak input hash mismatch: {input_entry.get('path')}"
+                )
+            candidates.append(input_path)
+        candidates.append(soak_path.resolve())
     return sorted(set(candidates))
 
 

@@ -63,3 +63,25 @@ jobs:
           sudo apt-get install --yes build-essential make python3 verilator
       - name: Kill architectural-control mutants
         run: make -C scripts mutation-self-test
+
+  sanitizer-soak:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install sanitizer verification tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential make python3 verilator
+      - name: Run deterministic sanitizer and X-state soak
+        run: make -C scripts soak
+      - name: Preserve soak report and any minimized reproducer
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm7tdmis-soak-${{ github.sha }}
+          path: |
+            reports/generated/soak-report.json
+            reports/generated/soak-failures/
+          if-no-files-found: error
+          retention-days: 90

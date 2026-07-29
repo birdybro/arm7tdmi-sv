@@ -108,6 +108,11 @@
       "tests": ["verification/compiler/", "tb/integration/arm7tdmis_compiler_tb.sv"],
       "source_sections": ["TASKS.md section 31.10 VAL-009 compiler-program contract"]
     },
+    "VAL-010": {
+      "rtl": ["rtl/top/arm7tdmi_mister.sv"],
+      "tests": ["scripts/soak_harness.py", "scripts/tests/test_soak_contract.py", "tb/integration/arm7tdmis_mister_wrapper_tb.sv"],
+      "source_sections": ["TASKS.md section 31.10 VAL-010 sanitizer-soak contract"]
+    },
     "VAL-011": {
       "rtl": ["rtl/"],
       "tests": ["OPEN - independent reviewer approval required"],
@@ -127,6 +132,7 @@
   "verification_rules": [
     {"glob": "tb/unit/*.sv", "requirements": ["VER-003", "ISA-017"]},
     {"glob": "tb/integration/*.sv", "requirements": ["VER-003", "VER-009", "BUS-012"]},
+    {"glob": "tb/integration/arm7tdmis_mister_wrapper_tb.sv", "requirements": ["MIST-001", "MIST-002", "VAL-010"]},
     {"glob": "tb/harness/*.sv", "requirements": ["VER-005"]},
     {"glob": "tb/programs/*", "requirements": ["VER-003", "ISA-017"]},
     {"glob": "tb/formal/*", "requirements": ["VAL-007", "VAL-008"]},
@@ -134,6 +140,7 @@
     {"glob": "verification/*.py", "requirements": ["VAL-001"]},
     {"glob": "verification/programs/*", "requirements": ["VAL-001"]},
     {"glob": "verification/compiler/*", "requirements": ["VAL-009"]},
-    {"glob": "scripts/tests/test_*.py", "requirements": ["VER-002", "VER-005"]}
+    {"glob": "scripts/tests/test_*.py", "requirements": ["VER-002", "VER-005"]},
+    {"glob": "scripts/tests/test_soak_contract.py", "requirements": ["VAL-010"]}
   ]
 }

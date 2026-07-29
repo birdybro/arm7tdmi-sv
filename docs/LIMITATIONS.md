@@ -8,10 +8,10 @@ and may be stricter than this summary.
   software image, hardware run, or long system soak is included
   (MIST-007 through MIST-009, FPGA-002, and FPGA-007).
 - Constrained-random generation, third-party ARMv4T suites, complete
-  cross/functional coverage, formal proof, long sanitizing fuzz runs, and
-  independent review remain open (VAL-002 through VAL-008 and VAL-010 through
-  VAL-011). The checked QEMU differential and pinned compiler-program test
-  close VAL-001 and VAL-009 respectively, not those broader gates.
+  cross/functional coverage, formal proof, and independent review remain open
+  (VAL-002 through VAL-008 and VAL-011). The checked QEMU differential,
+  pinned compiler-program test, and 256-seed sanitizing wrapper soak close
+  VAL-001, VAL-009, and VAL-010 respectively, not those broader gates.
 - Independent synthesis plus CDC/RDC analysis, post-synthesis architectural
   simulation or equivalence, and a fully pinned clean-checkout release
   toolchain remain open (FPGA-004, FPGA-006, and FPGA-008).

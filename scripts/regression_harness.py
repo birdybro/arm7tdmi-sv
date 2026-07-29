@@ -156,6 +156,7 @@ def collect_metadata(
             ),
             "unit": list(unit_tests),
             "integration": list(integration_tests),
+            "soak": [],
             "examples": ["generic-soc"],
             "smoke": ["arm7tdmis_tb_top"],
         },
@@ -289,6 +290,8 @@ def _phases(
         yield _make_phase(f"unit-{test}", f"unit-{test}")
     for test in selected_integration:
         yield _make_phase(f"integration-{test}", f"integ-{test}")
+    if not quick:
+        yield _make_phase("soak", "soak")
     yield _make_phase("smoke", "run")
     yield _make_phase("traceability", "traceability")
 
@@ -345,6 +348,9 @@ def main() -> int:
     )
     report["mode"] = "quick" if args.quick else "full"
     report["scope"] = "simulation-only" if args.simulation_only else "release"
+    report["manifest"]["soak"] = (
+        [] if args.quick else ["mister-wrapper-256-seed-sanitized"]
+    )
     report["status"] = "running"
     report["results"] = []
     write_report(report_path, report)

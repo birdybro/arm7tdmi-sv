@@ -20,6 +20,7 @@ module arm7tdmis_mister_wrapper_tb;
     logic forced_cpu_ce;
     logic forced_mem_ready;
     logic [15:0] lfsr_q;
+    integer unsigned lfsr_seed;
 
     wire CPU_CE = random_mode ? (lfsr_q[0] || lfsr_q[3])
                               : forced_cpu_ce;
@@ -144,7 +145,7 @@ module arm7tdmis_mister_wrapper_tb;
 
     always_ff @(posedge CLK or negedge RESET_N) begin
         if (!RESET_N)
-            lfsr_q <= 16'h1ACE;
+            lfsr_q <= lfsr_seed[15:0];
         else
             lfsr_q <= {lfsr_q[14:0],
                        lfsr_q[15] ^ lfsr_q[13] ^ lfsr_q[12] ^ lfsr_q[10]};
@@ -182,12 +183,12 @@ module arm7tdmis_mister_wrapper_tb;
                 // deliberately retains data-class PROT even though its
                 // address lies in the program image.
                 if (MEM_ADDR < 32'h0000_0080 && !MEM_CODE) begin
-                    check(MEM_ADDR == 32'h0000_0028
+                    check(MEM_ADDR == 32'h0000_002C
                           && !MEM_WRITE && MEM_SEQUENTIAL,
                           $sformatf(
                               "unexpected data-class program request at %08x",
                               MEM_ADDR));
-                    if (MEM_ADDR == 32'h0000_0028
+                    if (MEM_ADDR == 32'h0000_002C
                         && !MEM_WRITE && MEM_SEQUENTIAL)
                         saw_merged_load_fetch <= 1'b1;
                 end else if (MEM_ADDR >= 32'h0000_0080) begin
@@ -262,27 +263,36 @@ module arm7tdmis_mister_wrapper_tb;
         random_mode      = 1'b0;
         forced_cpu_ce    = 1'b0;
         forced_mem_ready = 1'b0;
+        lfsr_seed        = 32'h0000_1ACE;
+        if (!$value$plusargs("SEED=%d", lfsr_seed))
+            lfsr_seed = 32'h0000_1ACE;
+        if (lfsr_seed[15:0] == 16'h0000)
+            lfsr_seed = 32'h0000_0001;
 
         for (int word_index = 0; word_index < 256; word_index++)
             memory[word_index] = 32'h0000_0000;
 
         // ARM program:
-        //   r0 = 0x80
+        //   r0 = 0x80; repeat the randomized transaction mix 64 times
         //   word [0x80] = 0x11; byte [0x81] = 0xAA;
         //   halfword [0x82] = 0x0055
         //   [0x88] = readback [0x80]; [0x84] = completion signature
         memory[0]  = 32'hE3A0_0080; // MOV  r0,#0x80
-        memory[1]  = 32'hE3A0_1011; // MOV  r1,#0x11
-        memory[2]  = 32'hE580_1000; // STR  r1,[r0]
-        memory[3]  = 32'hE3A0_20AA; // MOV  r2,#0xAA
-        memory[4]  = 32'hE5C0_2001; // STRB r2,[r0,#1]
-        memory[5]  = 32'hE3A0_3055; // MOV  r3,#0x55
-        memory[6]  = 32'hE1C0_30B2; // STRH r3,[r0,#2]
-        memory[7]  = 32'hE590_4000; // LDR  r4,[r0]
-        memory[8]  = 32'hE580_4008; // STR  r4,[r0,#8]
-        memory[9]  = 32'hE3A0_50A5; // MOV  r5,#0xA5
-        memory[10] = 32'hE580_5004; // STR  r5,[r0,#4]
-        memory[11] = 32'hEAFF_FFFE; // B    .
+        memory[1]  = 32'hE3A0_6000; // MOV  r6,#0
+        memory[2]  = 32'hE3A0_1011; // MOV  r1,#0x11
+        memory[3]  = 32'hE580_1000; // STR  r1,[r0]
+        memory[4]  = 32'hE3A0_20AA; // MOV  r2,#0xAA
+        memory[5]  = 32'hE5C0_2001; // STRB r2,[r0,#1]
+        memory[6]  = 32'hE3A0_3055; // MOV  r3,#0x55
+        memory[7]  = 32'hE1C0_30B2; // STRH r3,[r0,#2]
+        memory[8]  = 32'hE590_4000; // LDR  r4,[r0]
+        memory[9]  = 32'hE580_4008; // STR  r4,[r0,#8]
+        memory[10] = 32'hE286_6001; // ADD  r6,r6,#1
+        memory[11] = 32'hE356_0040; // CMP  r6,#64
+        memory[12] = 32'h1AFF_FFF4; // BNE  0x08
+        memory[13] = 32'hE3A0_50A5; // MOV  r5,#0xA5
+        memory[14] = 32'hE580_5004; // STR  r5,[r0,#4]
+        memory[15] = 32'hEAFF_FFFE; // B    .
 
         repeat (5) @(posedge CLK);
         @(negedge CLK);
@@ -319,7 +329,7 @@ module arm7tdmis_mister_wrapper_tb;
               $sformatf("mixed-width stores produced %08x", memory[32]));
         check(memory[34] == 32'h0055_AA11,
               $sformatf("readback store produced %08x", memory[34]));
-        check(accepted_count > 15, "too few memory transactions completed");
+        check(accepted_count > 400, "too few memory transactions completed");
         check(accepted_while_ce_low > 0,
               "no response completed independently of CPU_CE");
         check(longest_wait >= 1, "random memory never inserted a wait");
@@ -342,7 +352,7 @@ module arm7tdmis_mister_wrapper_tb;
 
         if (errors != 0)
             $fatal(1, "[mister_wrapper] FAIL (%0d errors)", errors);
-        $display("[mister_wrapper] PASS");
+        $display("[mister_wrapper] PASS seed=%0d", lfsr_seed);
         $finish;
     end
 

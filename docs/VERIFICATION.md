@@ -10,7 +10,8 @@ It always removes the Verilator build directory first, then runs:
    mutation matrix.
 4. Every unit test in the `UNIT_TESTS` manifest.
 5. Every directed test in the `INTEG_TESTS` manifest.
-6. The mixed-instruction smoke test.
+6. The 256-seed sanitizer/X-state soak.
+7. The mixed-instruction smoke test and bidirectional traceability gate.
 
 The runner stops at the first failing phase and returns nonzero. The intentional
 failure sentinel contains a real SystemVerilog `$fatal`; the enclosing target
@@ -54,6 +55,8 @@ versioned artifact archive together with the corresponding clean source commit.
 The final `traceability` phase writes
 `reports/generated/traceability-report.json`; its bidirectional completeness
 and result semantics are defined in [TRACEABILITY.md](TRACEABILITY.md).
+The non-quick `soak` phase separately writes
+`reports/generated/soak-report.json` using schema `arm7tdmis-soak-v1`.
 
 `make -C scripts regress-quick` exercises the same metadata, clean-build, lint,
 harness, and smoke path with one unit plus the mandatory QEMU differential and
@@ -188,6 +191,36 @@ completion only after the C-written mailbox proves loop/arithmetic, stack and
 call behavior, plus compiler-generated word, halfword, and byte accesses.
 This test is mandatory in quick CI and full regression. Its generated build
 directory is included in release-evidence archives when the phase ran.
+
+## Deterministic sanitizer soak
+
+`make -C scripts soak` builds the canonical MiSTer-wrapper integration test
+with Verilator `--x-assign unique --x-initial unique` and instruments the
+generated C++ with AddressSanitizer and UndefinedBehaviorSanitizer. It then
+runs 256 deterministic, nonzero 16-bit seeds. Each seed controls both
+Verilator's unique X values and the testbench LFSR that independently stalls
+CPU enable and memory readiness. The ARM workload repeats its mixed word,
+byte, halfword, and load/store transaction sequence 64 times, so the test
+also continuously checks request stability and completion while CPU enable
+is low.
+
+Every simulator child has a 30-second timeout, fail-fast `ASAN_OPTIONS` and
+`UBSAN_OPTIONS`, and must exit zero with its exact seed-specific PASS marker.
+The atomically written `arm7tdmis-soak-v1` report records the Git state,
+simulator/host identity, sanitizer and X configuration, binary and testbench
+SHA-256, and each seed's command, duration, exit status, output hash, and PASS
+status. Any failure stops the run, saves its complete log, then greedily
+clears seed bits only while the same timeout, sanitizer class, or normalized
+testbench diagnostic remains reproducible. It emits a JSON reproducer with
+that failure signature, the minimized seed, exact environment, command,
+timeout, and binary hash.
+
+The soak is mandatory in full (non-quick) regression. Scheduled and manually
+dispatched CI execute it independently and use an always-run artifact upload
+to retain `soak-report.json` plus any minimized failure reproducer. Release
+evidence accepts a full-run soak only when all 256 seeds are unique and
+passing, the report names the same clean commit, and all recorded input
+hashes still match.
 
 ## Exhaustive encoding evidence
 
@@ -409,7 +442,8 @@ required hidden inter-halfword BL state. Four consecutive external MRC
 transfers and their independent responses remain covered by
 `arm7tdmis_cp_erratum15_tb`.
 
-Measured structural coverage reporting and mutation testing of architectural
-controls are implemented above. Required-bin functional coverage closure,
-independent differential testing, and formal evidence remain separate open
-requirements in `TASKS.md` §31.10.
+Measured structural coverage reporting, mutation testing of architectural
+controls, independent QEMU/compiler execution, and deterministic sanitizing
+soak are implemented above. Required-bin functional coverage closure,
+broader constrained-random differential testing, public suites, and formal
+evidence remain separate open requirements in `TASKS.md` §31.10.

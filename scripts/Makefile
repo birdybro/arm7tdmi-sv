@@ -52,6 +52,10 @@ COVERAGE_REPORT_DIR := ../reports/generated/coverage
 QEMU_DIFF_DIR := ../reports/generated/qemu_diff
 COMPILER_DIR := ../reports/generated/compiler
 TRACEABILITY_REPORT := ../reports/generated/traceability-report.json
+SOAK_SEEDS ?= 256
+SOAK_OBJ_DIR := $(OBJ_DIR)/soak
+SOAK_BIN := $(SOAK_OBJ_DIR)/Varm7tdmis_mister_wrapper_tb
+SOAK_REPORT := ../reports/generated/soak-report.json
 ARM_TOOLCHAIN_ROOT := ../.tools
 ARM_TOOLCHAIN := \
 	$(ARM_TOOLCHAIN_ROOT)/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi
@@ -107,7 +111,7 @@ INTEG_RUN_ARGS_compiler = \
         quartus-option-characterization \
         sim run wave clean help regress regress-quick regress-ci \
         coverage release-evidence \
-        traceability \
+        traceability soak-build soak \
         harness-unit harness-self-test raw-checker-self-test mutation-self-test \
         $(addprefix unit-, $(UNIT_TESTS)) unit \
         $(addprefix integ-, $(INTEG_TESTS)) integ errata
@@ -246,6 +250,30 @@ $(foreach t,$(INTEG_TESTS),$(eval $(call INTEG_RULE,$(t))))
 integ: $(addprefix integ-, $(INTEG_TESTS))
 
 errata: $(addprefix integ-, $(ERRATA_TESTS))
+
+# The release soak uses a separate, sanitizer-instrumented binary so ordinary
+# developer simulations do not silently inherit host-specific sanitizer
+# runtime requirements. Unique X initialization is controlled by Verilator's
+# deterministic runtime seed, which is kept identical to the workload seed.
+$(SOAK_BIN): Makefile $(SIM_F) $(RTL_SRCS) $(INTEG_COMMON_SRCS) \
+             ../tb/integration/arm7tdmis_mister_wrapper_tb.sv
+	mkdir -p $(SOAK_OBJ_DIR)
+	$(VERILATOR) $(VFLAGS_COMMON) --binary -j 0 -Wno-SYNCASYNCNET \
+	    --x-assign unique --x-initial unique \
+	    -CFLAGS "-fsanitize=address,undefined -fno-omit-frame-pointer" \
+	    -LDFLAGS "-fsanitize=address,undefined" \
+	    --top-module arm7tdmis_mister_wrapper_tb \
+	    --Mdir $(SOAK_OBJ_DIR) -f $(SIM_F) \
+	    $(INTEG_COMMON_SRCS) \
+	    ../tb/integration/arm7tdmis_mister_wrapper_tb.sv
+
+soak-build: $(SOAK_BIN)
+
+soak: soak-build
+	PYTHONPATH=. $(PYTHON) soak_harness.py \
+	    --binary $(abspath $(SOAK_BIN)) \
+	    --seeds $(SOAK_SEEDS) \
+	    --output $(SOAK_REPORT)
 
 # Coverage builds are separate from ordinary trace builds and write one raw
 # database per test. The top-level target merges those databases before
@@ -392,6 +420,7 @@ help:
 	@echo "  unit         run every unit test ($(UNIT_TESTS))"
 	@echo "  integ        run every directed integration test ($(INTEG_TESTS))"
 	@echo "  errata       run the complete 15-entry r4p3 errata evidence matrix"
+	@echo "  soak         run 256 deterministic sanitizer/X-propagation seeds"
 	@echo "  regress      clean full run with JSON metadata/results under reports/"
 	@echo "  regress-quick lint/harness plus one unit/integration test and smoke"
 	@echo "  regress-ci   quick simulation-only CI report without Quartus phases"

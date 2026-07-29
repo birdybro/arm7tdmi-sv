@@ -19,6 +19,9 @@ sign-off gate in `TASKS.md` §31.13.
 - Close the JTAG interoperability requirement through its project-specific
   bridge alternative: the public synchronous debug-step transport is packaged,
   documented, and protocol-tested without claiming asynchronous pod/GDB use.
+- Add a 256-seed deterministic MiSTer-wrapper soak with sanitizer-instrumented
+  simulation, unique X initialization, fail-hard timeouts, machine-readable
+  evidence, and automatically minimized failure reproducers.
 - Complete the remaining independent validation, formal, toolchain,
   MiSTer-framework, PocketStation, and hardware requirements in `TASKS.md`.
 - Freeze v1.0 only after every release-gate statement has durable evidence.
