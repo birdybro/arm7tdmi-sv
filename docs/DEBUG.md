@@ -262,6 +262,14 @@ user-bank selection, and keeps the external bus idle. The public-pin round
 trip for r0-r14 is verified by
 `tb/integration/arm7tdmis_debug_register_scan_tb.sv`.
 
+The same internal data-bus adapter handles OpenOCD's PSR export primitive:
+`MRS Rd,{CPSR|SPSR}`, `STR Rd,[r15]`, two NOPs, then a chain-1 capture.
+The MRS and four-immediate MSR sequences execute in the core, while the exact
+`STR Rd,[r15]` transfer is consumed by the adapter and never reaches external
+memory. CPSR and the current-mode SPSR are written, read back, cross-isolation
+checked, and bus-isolation checked in
+`tb/integration/arm7tdmis_debug_register_scan_tb.sv`.
+
 An STM capture of r15 includes the three-word advance contributed by the STM
 and its two pipeline NOPs, even though the FPGA stream adapter consumes those
 operations internally. Consequently, OpenOCD's ARM-state `-12` scan-pipeline

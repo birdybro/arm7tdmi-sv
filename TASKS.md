@@ -2573,7 +2573,9 @@ number of cycles spent in an internal FSM state.
   12-register LDM in `tb/integration/arm7tdmis_debug_inject_handshake_tb.sv` and at
   system speed by a stalled LDR with temporary `DBGACK`, interrupt masking, and
   automatic re-entry checks in `tb/integration/arm7tdmis_debug_system_speed_tb.sv`;
-  the full allowed-instruction and 16-register matrix remains open.
+  OpenOCD's MRS/MSR/STR PSR transfer is covered in
+  `tb/integration/arm7tdmis_debug_register_scan_tb.sv`. The full
+  allowed-instruction and 16-register matrix remains open.
 - [ ] **DBG-007:** Implement debug entry/exit PC formulas, temporary DBGACK behavior,
   pending interrupt preservation, interrupt masking during at-speed execution, and
   the DBGRQ/PC-modify errata policy. Scan-loaded r15 now replaces all stale
@@ -2623,9 +2625,11 @@ number of cycles spent in an internal FSM state.
   `tb/integration/arm7tdmis_debug_pc_resume_tb.sv`, and DBGRQ r15 capture by
   `tb/integration/arm7tdmis_debug_pc_capture_tb.sv`, which also covers a
   scan-programmed instruction breakpoint; normal data-watchpoint r15 capture is
-  covered by `tb/integration/arm7tdmis_debug_watchpoint_completion_tb.sv`. PSRs,
-  exception-coupled entry, the remaining end-to-end operations, and
-  debugger-process integration remain open.
+  covered by `tb/integration/arm7tdmis_debug_watchpoint_completion_tb.sv`.
+  OpenOCD-compatible CPSR/SPSR read/write and scan-bus isolation are covered by
+  `tb/integration/arm7tdmis_debug_register_scan_tb.sv`. Exception-coupled entry,
+  the remaining end-to-end operations, and debugger-process integration remain
+  open.
 - [ ] **JTAG-006:** Demonstrate a pinned open-source debugger/GDB flow against the
   simulated scan transport and on FPGA, or document precisely why the r4p3 scan
   protocol needs a project-specific bridge and release that bridge with protocol tests.

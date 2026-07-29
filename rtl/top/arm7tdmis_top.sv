@@ -301,6 +301,10 @@ module arm7tdmis_top
     logic        dbg_block_force_user_q;
     logic [15:0] dbg_block_remaining_q;
     logic [3:0]  dbg_block_reg_q;
+    logic        dbg_store_setup_q;
+    logic [1:0]  dbg_store_setup_left_q;
+    logic        dbg_store_active_q;
+    logic [3:0]  dbg_store_reg_q;
 
     function automatic logic [3:0] debug_lowest_reg(
         input logic [15:0] mask
@@ -318,13 +322,27 @@ module arm7tdmis_top
                                && tap_inject_instr[23]
                                && !tap_inject_instr[21]
                                && (tap_inject_instr[15:0] != 16'h0);
+    // OpenOCD exports an MRS result with STR Rd,[r15], followed by two
+    // pipeline NOPs and one chain-1 data capture. The transfer is on the
+    // internal debug data bus, not the external memory interface.
+    wire tap_debug_store_instr = (tap_inject_instr[31:16] == 16'hE58F)
+                               && (tap_inject_instr[11:0] == 12'h000);
     wire dbg_block_start = tap_inject_we && ice_dbg_ack
                          && !tap_inject_break
                          && !dbg_block_setup_q && !dbg_block_active_q
+                         && !dbg_store_setup_q && !dbg_store_active_q
                          && tap_debug_block_instr;
-    wire dbg_block_consumes_scan = dbg_block_start
-                                 || dbg_block_setup_q
-                                 || dbg_block_active_q;
+    wire dbg_store_start = tap_inject_we && ice_dbg_ack
+                         && !tap_inject_break
+                         && !dbg_block_setup_q && !dbg_block_active_q
+                         && !dbg_store_setup_q && !dbg_store_active_q
+                         && tap_debug_store_instr;
+    wire dbg_data_consumes_scan = dbg_block_start
+                                || dbg_block_setup_q
+                                || dbg_block_active_q
+                                || dbg_store_start
+                                || dbg_store_setup_q
+                                || dbg_store_active_q;
     wire [15:0] dbg_block_after_current =
         dbg_block_remaining_q & ~(16'h1 << dbg_block_reg_q);
 
@@ -337,6 +355,10 @@ module arm7tdmis_top
             dbg_block_force_user_q  <= 1'b0;
             dbg_block_remaining_q   <= 16'h0;
             dbg_block_reg_q         <= 4'h0;
+            dbg_store_setup_q       <= 1'b0;
+            dbg_store_setup_left_q  <= 2'd0;
+            dbg_store_active_q      <= 1'b0;
+            dbg_store_reg_q         <= 4'h0;
         end else if (!DBGEN) begin
             dbg_block_setup_q       <= 1'b0;
             dbg_block_setup_left_q  <= 2'd0;
@@ -345,6 +367,10 @@ module arm7tdmis_top
             dbg_block_force_user_q  <= 1'b0;
             dbg_block_remaining_q   <= 16'h0;
             dbg_block_reg_q         <= 4'h0;
+            dbg_store_setup_q       <= 1'b0;
+            dbg_store_setup_left_q  <= 2'd0;
+            dbg_store_active_q      <= 1'b0;
+            dbg_store_reg_q         <= 4'h0;
         end else if (dbg_block_start) begin
             dbg_block_setup_q       <= 1'b1;
             dbg_block_setup_left_q  <= 2'd2;
@@ -354,6 +380,11 @@ module arm7tdmis_top
             dbg_block_remaining_q   <= tap_inject_instr[15:0];
             dbg_block_reg_q         <=
                 debug_lowest_reg(tap_inject_instr[15:0]);
+        end else if (dbg_store_start) begin
+            dbg_store_setup_q      <= 1'b1;
+            dbg_store_setup_left_q <= 2'd2;
+            dbg_store_active_q     <= 1'b0;
+            dbg_store_reg_q        <= tap_inject_instr[15:12];
         end else if (tap_inject_we && dbg_block_setup_q) begin
             if (dbg_block_setup_left_q == 2'd1) begin
                 dbg_block_setup_q      <= 1'b0;
@@ -370,13 +401,25 @@ module arm7tdmis_top
                 dbg_block_reg_q <=
                     debug_lowest_reg(dbg_block_after_current);
             end
+        end else if (tap_inject_we && dbg_store_setup_q) begin
+            if (dbg_store_setup_left_q == 2'd1) begin
+                dbg_store_setup_q      <= 1'b0;
+                dbg_store_setup_left_q <= 2'd0;
+                dbg_store_active_q     <= 1'b1;
+            end else begin
+                dbg_store_setup_left_q <= dbg_store_setup_left_q - 2'd1;
+            end
+        end else if (tap_inject_we && dbg_store_active_q) begin
+            dbg_store_active_q <= 1'b0;
         end
     end
 
     assign dbg_reg_we = tap_inject_we && dbg_block_active_q
                       && dbg_block_load_q;
-    assign dbg_reg_addr = dbg_block_reg_q;
-    assign dbg_reg_force_user = dbg_block_force_user_q;
+    assign dbg_reg_addr = dbg_store_active_q ? dbg_store_reg_q
+                                             : dbg_block_reg_q;
+    assign dbg_reg_force_user = !dbg_store_active_q
+                              && dbg_block_force_user_q;
 
     // The direct stream adapter consumes the STM plus its two pipeline
     // NOPs without executing them in the core. A physical ARM7TDMI has
@@ -388,9 +431,11 @@ module arm7tdmis_top
                                    : dbg_reg_rdata;
     wire [31:0] tap_chain1_capture_data = dbg_block_active_q
                                        && !dbg_block_load_q
-                                       ? dbg_block_capture_data : WDATA;
+                                       ? dbg_block_capture_data
+                                       : dbg_store_active_q
+                                       ? dbg_reg_rdata : WDATA;
     wire tap_inject_we_to_ice = tap_inject_we
-                              && !dbg_block_consumes_scan;
+                              && !dbg_data_consumes_scan;
 
     // Appendix A: the complete external scan transport is enabled only when
     // DBGEN is HIGH. DBGnTRST remains independent so the TAP and ICE D-types
