@@ -8,6 +8,8 @@
 //     destination-PC result is aligned in the current state.
 //   * MOVS pc,<op> in User/System has no SPSR to restore. The selected policy
 //     commits the aligned PC result and leaves CPSR unchanged.
+//   * pre-ARMv6 Thumb MUL with Rd=Rm returns the ordinary square and preserves
+//     C, matching the project's r4p3-compatible multiplier policy.
 //   * address arithmetic wraps modulo 2^32.
 //
 // Every case starts from reset. A marker after a redirected instruction must
@@ -21,7 +23,7 @@ module arm7tdmis_unpredictable_runtime_tb
     import arm7tdmis_types_pkg::*;
 ;
 
-    localparam int CASE_COUNT = 7;
+    localparam int CASE_COUNT = 8;
 
     logic CLK;
     initial begin
@@ -154,7 +156,7 @@ module arm7tdmis_unpredictable_runtime_tb
             // At 0xfffffff8, visible PC wraps to zero. Offset +0x40.
             u_mem.mem[254] = 32'hEA00_0010;
             u_mem.mem[255] = 32'hE1A0_0000;
-        end else begin
+        end else if (case_id <= 7) begin
             // Seed NZCV, select a mode without an SPSR, then execute the
             // otherwise-normal exception-return spelling.
             u_mem.mem[8]  = 32'hE59F_0058; // r0 <- target 0x100
@@ -170,6 +172,19 @@ module arm7tdmis_unpredictable_runtime_tb
             u_mem.mem[64] = 32'hE10F_6000; // target: MRS r6,CPSR
             u_mem.mem[65] = 32'hE3A0_7000 | 32'(case_id);
             u_mem.mem[66] = 32'hEAFF_FFFE;
+        end else begin
+            // Prior to ARMv6, Thumb MUL with identical Rd/Rm operands is
+            // architecturally UNPREDICTABLE. Seed C=1 with CMP, then prove
+            // the deterministic r4p3-compatible square/preserve-C policy.
+            u_mem.mem[8]  = 32'hE59F_0058; // r0 <- 9
+            u_mem.mem[9]  = 32'hE59F_2058; // r2 <- Thumb target 0x41
+            u_mem.mem[10] = 32'hE350_0000; // CMP r0,#0: C=1
+            u_mem.mem[11] = 32'hE12F_FF12; // BX r2
+            u_mem.mem[12] = 32'hE3A0_50EE; // flushed successor
+            u_mem.mem[16] = 32'h2708_4340; // MUL r0,r0; MOVS r7,#8
+            u_mem.mem[17] = 32'hE7FE_E7FE; // B .
+            u_mem.mem[32] = 32'h0000_0009;
+            u_mem.mem[33] = 32'h0000_0041;
         end
     endtask
 
@@ -227,13 +242,21 @@ module arm7tdmis_unpredictable_runtime_tb
                 if (u_dut.u_core.cpsr.m !== 5'(MODE_USER))
                     fail(case_id, "User MOVS pc changed mode");
             end
-            default: begin
+            7: begin
                 if (u_dut.u_core.u_regfile.regs[6] !== 32'hA000_00DF)
                     fail(case_id, $sformatf(
                         "System MOVS pc CPSR expected a00000df got %08x",
                         u_dut.u_core.u_regfile.regs[6]));
                 if (u_dut.u_core.cpsr.m !== 5'(MODE_SYSTEM))
                     fail(case_id, "System MOVS pc changed mode");
+            end
+            default: begin
+                if (u_dut.u_core.u_regfile.regs[0] !== 32'h0000_0051)
+                    fail(case_id, "Thumb MUL Rd=Rm policy did not square r0");
+                if (!u_dut.u_core.cpsr.c)
+                    fail(case_id, "Thumb MUL policy did not preserve C");
+                if (!u_dut.u_core.cpsr.t)
+                    fail(case_id, "Thumb MUL policy left Thumb state");
             end
         endcase
     endtask

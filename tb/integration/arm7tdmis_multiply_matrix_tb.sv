@@ -10,8 +10,11 @@
 //   * INT32_MIN and INT32_MAX signed products; and
 //   * architectural m=1/2/3/4 early-termination timing.
 //
-// The architecturally UNPREDICTABLE short Rd=Rm, long RdLo=RdHi, and any r15
-// operand/destination encodings are deliberately outside the overlap rows.
+// ARMv4 described short Rd=Rm as UNPREDICTABLE. The r4p3-compatible project
+// policy reads every operand before writeback and therefore returns the
+// ordinary mathematical result; two rows freeze that policy without calling
+// it an architectural guarantee. Long RdLo=RdHi and any r15
+// operand/destination use the separate precise-Undefined project policy.
 
 `timescale 1ns/1ps
 
@@ -261,8 +264,7 @@ module arm7tdmis_multiply_matrix_tb
                  32'hFFFF_FFFF, 1, 1, 0, 0, 0,
                  2, 0, 1, 3, 0, 4'b0101, 4);
 
-        // Defined overlap rows. The old-architecture UNPREDICTABLE cases
-        // listed in the file header remain deliberately unclaimed.
+        // Defined overlap rows.
         run_case("MUL Rd=Rs", mul_opcode(0, 0, 1, 0, 1, 0),
                  3, 7, 0, 0, 0, 0, 1, 21, 0, 0, 0, 4'b0101, 2);
         run_case("MLA Rd=Rn", mul_opcode(1, 0, 2, 2, 1, 0),
@@ -273,6 +275,13 @@ module arm7tdmis_multiply_matrix_tb
         run_case("UMLAL RdLo=Rm RdHi=Rs",
                  mull_opcode(1, 1, 0, 0, 1, 1, 0),
                  3, 7, 0, 0, 0, 0, 0, 24, 1, 1, 7, 4'b0101, 4);
+
+        // ARMv4 UNPREDICTABLE policy: short Rd=Rm uses the original
+        // multiplicand and returns the ordinary result, matching r4p3.
+        run_case("MUL Rd=Rm policy", mul_opcode(0, 0, 2, 0, 1, 2),
+                 0, 7, 3, 0, 0, 0, 2, 21, 0, 0, 0, 4'b0101, 2);
+        run_case("MLA Rd=Rm policy", mul_opcode(1, 0, 3, 2, 1, 3),
+                 0, 7, 5, 3, 0, 0, 3, 26, 0, 0, 0, 4'b0101, 3);
 
         // m=1 is exercised above. These rows close m=2/3/4 at core level.
         run_case("MUL m=2", mul_opcode(0, 0, 2, 0, 1, 0),
@@ -288,8 +297,8 @@ module arm7tdmis_multiply_matrix_tb
         if (errors != 0)
             $fatal(1, "[multiply_matrix] FAIL (%0d errors, %0d cases)",
                    errors, cases_run);
-        if (cases_run != 19)
-            $fatal(1, "[multiply_matrix] FAIL expected 19 cases, ran %0d",
+        if (cases_run != 21)
+            $fatal(1, "[multiply_matrix] FAIL expected 21 cases, ran %0d",
                    cases_run);
         $display("[multiply_matrix] PASS (%0d cases)", cases_run);
         $finish;
