@@ -1,0 +1,67 @@
+[tasks]
+core_prove
+core_cover
+regfile_prove
+psr_prove
+jtag_prove
+cdc_reset_prove
+
+[options]
+core_prove: mode prove
+core_prove: depth 36
+core_cover: mode cover
+core_cover: depth 80
+regfile_prove: mode prove
+regfile_prove: depth 4
+psr_prove: mode prove
+psr_prove: depth 4
+jtag_prove: mode prove
+jtag_prove: depth 4
+cdc_reset_prove: mode prove
+cdc_reset_prove: depth 4
+
+[engines]
+smtbmc boolector
+
+[script]
+core_prove: read_slang --std 1800-2017 --allow-use-before-declare --single-unit -D ARM7TDMIS_VERIFICATION arm7tdmis_types_pkg.sv arm7tdmis_psr_pkg.sv arm7tdmis_bus_pkg.sv arm7tdmis_instr_pkg.sv arm7tdmis_regfile.sv arm7tdmis_shifter.sv arm7tdmis_alu.sv arm7tdmis_multiplier.sv arm7tdmis_condition.sv arm7tdmis_decoder.sv arm7tdmis_thumb_decoder.sv arm7tdmis_psr.sv arm7tdmis_core_pipelined.sv arm7tdmis_core_formal.sv --top arm7tdmis_core_formal
+core_prove: prep -top arm7tdmis_core_formal
+
+core_cover: read_slang --std 1800-2017 --allow-use-before-declare --single-unit -D ARM7TDMIS_VERIFICATION -D FORMAL_COVER arm7tdmis_types_pkg.sv arm7tdmis_psr_pkg.sv arm7tdmis_bus_pkg.sv arm7tdmis_instr_pkg.sv arm7tdmis_regfile.sv arm7tdmis_shifter.sv arm7tdmis_alu.sv arm7tdmis_multiplier.sv arm7tdmis_condition.sv arm7tdmis_decoder.sv arm7tdmis_thumb_decoder.sv arm7tdmis_psr.sv arm7tdmis_core_pipelined.sv arm7tdmis_core_formal.sv --top arm7tdmis_core_formal
+core_cover: prep -top arm7tdmis_core_formal
+
+regfile_prove: read_slang --std 1800-2017 --allow-use-before-declare --single-unit -D ARM7TDMIS_VERIFICATION arm7tdmis_types_pkg.sv arm7tdmis_instr_pkg.sv arm7tdmis_regfile.sv arm7tdmis_regfile_formal.sv --top arm7tdmis_regfile_formal
+regfile_prove: prep -top arm7tdmis_regfile_formal
+
+psr_prove: read_slang --std 1800-2017 --allow-use-before-declare --single-unit -D ARM7TDMIS_VERIFICATION arm7tdmis_types_pkg.sv arm7tdmis_psr_pkg.sv arm7tdmis_psr.sv arm7tdmis_psr_formal.sv --top arm7tdmis_psr_formal
+psr_prove: prep -top arm7tdmis_psr_formal
+
+jtag_prove: read_slang --std 1800-2017 --allow-use-before-declare --single-unit arm7tdmis_debug_pkg.sv arm7tdmis_jtag_tap.sv arm7tdmis_jtag_formal.sv --top arm7tdmis_jtag_formal
+jtag_prove: prep -top arm7tdmis_jtag_formal
+
+cdc_reset_prove: read_slang --std 1800-2017 --allow-use-before-declare --single-unit arm7tdmis_reset_sync.sv arm7tdmis_sync_debug_port.sv arm7tdmis_cdc_reset_formal.sv --top arm7tdmis_cdc_reset_formal
+cdc_reset_prove: prep -top arm7tdmis_cdc_reset_formal
+
+[files]
+rtl/arm7tdmis_types_pkg.sv
+rtl/arm7tdmis_psr_pkg.sv
+rtl/arm7tdmis_bus_pkg.sv
+rtl/arm7tdmis_instr_pkg.sv
+rtl/arm7tdmis_debug_pkg.sv
+rtl/datapath/arm7tdmis_regfile.sv
+rtl/datapath/arm7tdmis_shifter.sv
+rtl/datapath/arm7tdmis_alu.sv
+rtl/datapath/arm7tdmis_multiplier.sv
+rtl/decode/arm7tdmis_condition.sv
+rtl/decode/arm7tdmis_decoder.sv
+rtl/decode/arm7tdmis_thumb_decoder.sv
+rtl/core/arm7tdmis_psr.sv
+rtl/core/arm7tdmis_reset_sync.sv
+rtl/core/arm7tdmis_core_pipelined.sv
+rtl/jtag/arm7tdmis_jtag_tap.sv
+rtl/jtag/arm7tdmis_sync_debug_port.sv
+tb/formal/arm7tdmis_core_formal.sv
+tb/formal/arm7tdmis_regfile_formal.sv
+tb/formal/arm7tdmis_psr_formal.sv
+tb/formal/arm7tdmis_jtag_formal.sv
+tb/formal/arm7tdmis_cdc_reset_formal.sv
