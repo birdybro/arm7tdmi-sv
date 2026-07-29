@@ -4,13 +4,15 @@
 // coprocessor instruction, Prefetch Abort, and Data Abort. A one-cycle
 // synchronous DBGRQ coincident with each must retain the exception,
 // commit its mode/LR/SPSR, fetch the first vector word, and only then
-// assert DBGACK. Load and store Data Aborts are separate scenarios.
+// assert DBGACK. Repeat the matrix with Debug Control[1]'s scan-created
+// request. Load and store Data Aborts are separate scenarios.
 
 `timescale 1ns/1ps
 
 /* verilator lint_off DECLFILENAME */
 module arm7tdmis_debug_dbgrq_exception_scenario #(
-    parameter int unsigned SCENARIO = 0
+    parameter int unsigned SCENARIO = 0,
+    parameter bit SCAN_REQUEST = 1'b0
 ) (
     input  logic CLK,
     output logic done,
@@ -18,6 +20,8 @@ module arm7tdmis_debug_dbgrq_exception_scenario #(
 );
     import arm7tdmis_bus_pkg::*;
     import arm7tdmis_types_pkg::*;
+    import arm7tdmis_debug_pkg::*;
+    import arm7tdmis_jtag_tb_pkg::*;
 
     localparam int unsigned UNDEF_SCENARIO = 0;
     localparam int unsigned CP_SCENARIO    = 1;
@@ -48,6 +52,9 @@ module arm7tdmis_debug_dbgrq_exception_scenario #(
     logic nRESET = 1'b0;
     logic DBGnTRST = 1'b0;
     logic DBGRQ;
+    logic DBGTCKEN = 1'b0;
+    logic DBGTMS = 1'b1;
+    logic DBGTDI = 1'b0;
 
     logic [31:0] ADDR, WDATA, RDATA;
     logic WRITE;
@@ -80,9 +87,9 @@ module arm7tdmis_debug_dbgrq_exception_scenario #(
         .DBGRNG,
         .DBGCOMMTX,
         .DBGCOMMRX,
-        .DBGTCKEN          (1'b0),
-        .DBGTMS            (1'b0),
-        .DBGTDI            (1'b0),
+        .DBGTCKEN,
+        .DBGTMS,
+        .DBGTDI,
         .DBGTDO,
         .DBGnTRST,
         .DBGnTDOEN,
@@ -115,13 +122,13 @@ module arm7tdmis_debug_dbgrq_exception_scenario #(
         DBGRQ        = 1'b0;
         if (SCENARIO == PABT_SCENARIO) begin
             inject_abort = pabt_response;
-            DBGRQ        = trigger_exec;
+            DBGRQ        = !SCAN_REQUEST && trigger_exec;
         end else if ((SCENARIO == LDR_SCENARIO)
                      || (SCENARIO == STR_SCENARIO)) begin
             inject_abort = data_response;
-            DBGRQ        = data_response;
+            DBGRQ        = !SCAN_REQUEST && data_response;
         end else begin
-            DBGRQ = trigger_exec;
+            DBGRQ = !SCAN_REQUEST && trigger_exec;
         end
     end
 
@@ -132,7 +139,7 @@ module arm7tdmis_debug_dbgrq_exception_scenario #(
             vector_seen  <= 1'b0;
             request_seen <= 1'b0;
         end else begin
-            if (DBGRQ)
+            if (DBGRQ || u_dut.u_ice.ice_dbgrq_force_q)
                 request_seen <= 1'b1;
             if (TRANS[1] && !PROT[0] && (ADDR == EXCEPTION_VECTOR))
                 vector_seen <= 1'b1;
@@ -140,9 +147,71 @@ module arm7tdmis_debug_dbgrq_exception_scenario #(
     end
 
     task automatic fail(input string description);
-        $display("[debug_dbgrq_exception/%0d] FAIL %s",
-                 SCENARIO, description);
+        $display("[debug_dbgrq_exception/%0d/%s] FAIL %s",
+                 SCENARIO, SCAN_REQUEST ? "scan" : "pin", description);
         failed = 1'b1;
+    endtask
+
+    logic [37:0] ignored_scan;
+
+    task automatic tck(input logic tms, input logic tdi);
+        @(negedge CLK);
+        DBGTMS   = tms;
+        DBGTDI   = tdi;
+        DBGTCKEN = 1'b1;
+        @(posedge CLK);
+        #1;
+        DBGTCKEN = 1'b0;
+    endtask
+
+    task automatic load_ir(input logic [3:0] instruction);
+        tck(1'b1, 1'b0);
+        tck(1'b1, 1'b0);
+        tck(1'b0, 1'b0);
+        tck(1'b0, 1'b0);
+        for (int i = 0; i < 4; i++)
+            tck(i == 3, instruction[i]);
+        tck(1'b1, 1'b0);
+        tck(1'b0, 1'b0);
+    endtask
+
+    task automatic shift_dr(
+        input int unsigned width,
+        input logic [37:0] scan_in
+    );
+        tck(1'b1, 1'b0);
+        tck(1'b0, 1'b0);
+        tck(1'b0, 1'b0);
+        for (int i = 0; i < width; i++) begin
+            ignored_scan[i] = DBGTDO;
+            tck(i == (width - 1), scan_in[i]);
+        end
+        tck(1'b1, 1'b0);
+        tck(1'b0, 1'b0);
+    endtask
+
+    task automatic select_chain2;
+        load_ir(4'(IR_SCAN_N));
+        shift_dr(4, 38'd2);
+        load_ir(4'(IR_INTEST));
+    endtask
+
+    // Commit force-DBGRQ without visiting Run-Test/Idle, then park in
+    // Test-Logic-Reset. One later TCK edge enters RTI and opens the
+    // force-request latch while the exception is being processed.
+    task automatic arm_scan_request;
+        logic [37:0] serial_in;
+        select_chain2();
+        serial_in = chain2_serial_in(1'b1, 5'h00, 32'h0000_0002);
+        tck(1'b1, 1'b0);
+        tck(1'b0, 1'b0);
+        tck(1'b0, 1'b0);
+        for (int i = 0; i < 38; i++)
+            tck(i == 37, serial_in[i]);
+        tck(1'b1, 1'b0); // Exit1-DR -> Update-DR
+        tck(1'b1, 1'b0); // Update-DR -> Select-DR, commit
+        tck(1'b1, 1'b0); // Select-DR -> Select-IR
+        tck(1'b1, 1'b0); // Select-IR -> Test-Logic-Reset
     endtask
 
     initial begin : run
@@ -159,7 +228,39 @@ module arm7tdmis_debug_dbgrq_exception_scenario #(
 
         repeat (3) @(posedge CLK);
         DBGnTRST = 1'b1;
+        if (SCAN_REQUEST) begin
+            tck(1'b0, 1'b0);
+            arm_scan_request();
+        end
         nRESET   = 1'b1;
+
+        if (SCAN_REQUEST) fork
+            begin : release_scan_request
+                bit trigger_seen;
+                trigger_seen = 1'b0;
+                for (int i = 0; i < 180; i++) begin
+                    @(negedge CLK);
+                    if (((SCENARIO == LDR_SCENARIO)
+                         || (SCENARIO == STR_SCENARIO))
+                        ? data_response : trigger_exec) begin
+                        trigger_seen = 1'b1;
+                        break;
+                    end
+                end
+                if (!trigger_seen) begin
+                    fail("scan-request release condition was not observed");
+                end else begin
+                    // TLR -> RTI on the exception-taking edge. The force
+                    // latch samples the programmed bit on the next CLK.
+                    DBGTMS   = 1'b0;
+                    DBGTDI   = 1'b0;
+                    DBGTCKEN = 1'b1;
+                    @(posedge CLK);
+                    #1;
+                    DBGTCKEN = 1'b0;
+                end
+            end
+        join_none
 
         halted = 1'b0;
         for (int i = 0; i < 260; i++) begin
@@ -172,9 +273,9 @@ module arm7tdmis_debug_dbgrq_exception_scenario #(
         end
 
         if (!halted)
-            fail("DBGRQ never entered debug state");
+            fail("debug request never entered debug state");
         if (!request_seen)
-            fail("coincident DBGRQ pulse was never generated");
+            fail("coincident debug request was never generated");
         if (!vector_seen)
             fail("exception vector was not fetched before DBGACK");
         if (u_dut.u_core.cpsr.m !== EXPECTED_MODE)
@@ -213,34 +314,69 @@ module arm7tdmis_debug_dbgrq_exception_scenario #(
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused = &{1'b0, WRITE, SIZE, LOCK, WDATA, CPnMREQ, CPSEQ,
         CPnTRANS, CPnOPC, CPTBIT, CPnI, DBGnEXEC, DBGINSTRVALID, DBGRNG,
-        DBGCOMMTX, DBGCOMMRX, DBGTDO, DBGnTDOEN, DMORE};
+        DBGCOMMTX, DBGCOMMRX, DBGnTDOEN, DMORE, ignored_scan};
     /* verilator lint_on UNUSEDSIGNAL */
 endmodule
 /* verilator lint_on DECLFILENAME */
 
 module arm7tdmis_debug_dbgrq_exception_tb;
-    localparam int CYCLE_LIMIT = 700;
+    localparam int CYCLE_LIMIT = 1200;
 
     logic CLK = 1'b0;
     initial forever #5 CLK = ~CLK;
 
-    logic [4:0] done;
-    logic [4:0] failed;
+    logic [9:0] done;
+    logic [9:0] failed;
 
-    arm7tdmis_debug_dbgrq_exception_scenario #(.SCENARIO(0)) u_undef (
+    arm7tdmis_debug_dbgrq_exception_scenario #(
+        .SCENARIO(0), .SCAN_REQUEST(1'b0)
+    ) u_pin_undef (
         .CLK, .done(done[0]), .failed(failed[0])
     );
-    arm7tdmis_debug_dbgrq_exception_scenario #(.SCENARIO(1)) u_cp (
+    arm7tdmis_debug_dbgrq_exception_scenario #(
+        .SCENARIO(1), .SCAN_REQUEST(1'b0)
+    ) u_pin_cp (
         .CLK, .done(done[1]), .failed(failed[1])
     );
-    arm7tdmis_debug_dbgrq_exception_scenario #(.SCENARIO(2)) u_pabt (
+    arm7tdmis_debug_dbgrq_exception_scenario #(
+        .SCENARIO(2), .SCAN_REQUEST(1'b0)
+    ) u_pin_pabt (
         .CLK, .done(done[2]), .failed(failed[2])
     );
-    arm7tdmis_debug_dbgrq_exception_scenario #(.SCENARIO(3)) u_ldr (
+    arm7tdmis_debug_dbgrq_exception_scenario #(
+        .SCENARIO(3), .SCAN_REQUEST(1'b0)
+    ) u_pin_ldr (
         .CLK, .done(done[3]), .failed(failed[3])
     );
-    arm7tdmis_debug_dbgrq_exception_scenario #(.SCENARIO(4)) u_str (
+    arm7tdmis_debug_dbgrq_exception_scenario #(
+        .SCENARIO(4), .SCAN_REQUEST(1'b0)
+    ) u_pin_str (
         .CLK, .done(done[4]), .failed(failed[4])
+    );
+    arm7tdmis_debug_dbgrq_exception_scenario #(
+        .SCENARIO(0), .SCAN_REQUEST(1'b1)
+    ) u_scan_undef (
+        .CLK, .done(done[5]), .failed(failed[5])
+    );
+    arm7tdmis_debug_dbgrq_exception_scenario #(
+        .SCENARIO(1), .SCAN_REQUEST(1'b1)
+    ) u_scan_cp (
+        .CLK, .done(done[6]), .failed(failed[6])
+    );
+    arm7tdmis_debug_dbgrq_exception_scenario #(
+        .SCENARIO(2), .SCAN_REQUEST(1'b1)
+    ) u_scan_pabt (
+        .CLK, .done(done[7]), .failed(failed[7])
+    );
+    arm7tdmis_debug_dbgrq_exception_scenario #(
+        .SCENARIO(3), .SCAN_REQUEST(1'b1)
+    ) u_scan_ldr (
+        .CLK, .done(done[8]), .failed(failed[8])
+    );
+    arm7tdmis_debug_dbgrq_exception_scenario #(
+        .SCENARIO(4), .SCAN_REQUEST(1'b1)
+    ) u_scan_str (
+        .CLK, .done(done[9]), .failed(failed[9])
     );
 
     initial begin
@@ -248,7 +384,7 @@ module arm7tdmis_debug_dbgrq_exception_tb;
         $dumpvars(0, arm7tdmis_debug_dbgrq_exception_tb);
         wait (&done);
         if (|failed)
-            $fatal(1, "[debug_dbgrq_exception] FAIL scenarios=%05b",
+            $fatal(1, "[debug_dbgrq_exception] FAIL scenarios=%010b",
                    failed);
         $display("[debug_dbgrq_exception] PASS");
         $finish;
@@ -257,7 +393,7 @@ module arm7tdmis_debug_dbgrq_exception_tb;
     initial begin
         repeat (CYCLE_LIMIT) @(posedge CLK);
         $fatal(1,
-               "[debug_dbgrq_exception] TIMEOUT done=%05b failed=%05b",
+               "[debug_dbgrq_exception] TIMEOUT done=%010b failed=%010b",
                done, failed);
     end
 endmodule
