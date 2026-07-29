@@ -1,6 +1,6 @@
 // BUS-005/BUS-011 regression: the first opcode access after reset is
-// nonsequential, a taken branch restarts with N at its target, and only
-// uninterrupted following fetches use S.
+// nonsequential, a taken branch advertises its discarded pc+2i prefetch as
+// N, and Table 7-3 explicitly classifies both target refill fetches as S.
 
 module arm7tdmis_fetch_sequence_tb
     import arm7tdmis_bus_pkg::*;
@@ -27,7 +27,8 @@ module arm7tdmis_fetch_sequence_tb
     logic seen_first;
     logic [31:0] first_addr;
     logic [1:0] first_trans;
-    logic seen_target_n;
+    logic seen_source_n;
+    logic seen_target_s;
     logic seen_following_s;
 
     always_ff @(posedge CLK or negedge nRESET) begin
@@ -35,7 +36,8 @@ module arm7tdmis_fetch_sequence_tb
             seen_first       <= 1'b0;
             first_addr       <= 32'h0;
             first_trans      <= TRANS_I;
-            seen_target_n    <= 1'b0;
+            seen_source_n    <= 1'b0;
+            seen_target_s    <= 1'b0;
             seen_following_s <= 1'b0;
         end else if (u_fixture.u_dut.core_nreset
                      && (u_fixture.TRANS inside {TRANS_N, TRANS_S})) begin
@@ -44,10 +46,14 @@ module arm7tdmis_fetch_sequence_tb
                 first_addr  <= u_fixture.ADDR;
                 first_trans <= u_fixture.TRANS;
             end
-            if (u_fixture.ADDR == 32'h00000020
+            if (u_fixture.ADDR == 32'h00000008
                 && u_fixture.TRANS == TRANS_N)
-                seen_target_n <= 1'b1;
-            if (seen_target_n
+                seen_source_n <= 1'b1;
+            if (seen_source_n
+                && u_fixture.ADDR == 32'h00000020
+                && u_fixture.TRANS == TRANS_S)
+                seen_target_s <= 1'b1;
+            if (seen_target_s
                 && u_fixture.ADDR == 32'h00000024
                 && u_fixture.TRANS == TRANS_S)
                 seen_following_s <= 1'b1;
@@ -67,8 +73,13 @@ module arm7tdmis_fetch_sequence_tb
             errors = errors + 1;
         end
 
-        if (!seen_target_n) begin
-            $display("[fetch_sequence] FAIL branch target 0x20 was not N");
+        if (!seen_source_n) begin
+            $display("[fetch_sequence] FAIL discarded branch pc+8 was not N");
+            errors = errors + 1;
+        end
+
+        if (!seen_target_s) begin
+            $display("[fetch_sequence] FAIL branch target 0x20 was not S");
             errors = errors + 1;
         end
 
