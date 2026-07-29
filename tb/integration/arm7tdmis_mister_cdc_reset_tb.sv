@@ -193,7 +193,21 @@ module arm7tdmis_mister_cdc_reset_tb;
 
         repeat (5) @(posedge CLK);
         @(negedge CLK);
-        RESET_N = 1'b1;
+        // Deassert deliberately between edges. All wrapper/reset domains
+        // must remain asserted through one complete synchronizer stage and
+        // release together only on the second rising edge.
+        #2 RESET_N = 1'b1;
+        #1;
+        check(!u_dut.wrapper_reset_n,
+              "wrapper reset released asynchronously between clocks");
+        @(posedge CLK);
+        #1;
+        check(!u_dut.wrapper_reset_n,
+              "wrapper reset skipped its first release stage");
+        @(posedge CLK);
+        #1;
+        check(u_dut.wrapper_reset_n,
+              "wrapper reset did not release on its second clock edge");
 
         wait (memory[64] >= 32'd2);
 
