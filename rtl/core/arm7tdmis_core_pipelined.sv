@@ -468,6 +468,7 @@ module arm7tdmis_core_pipelined
     logic         block_first_beat_q;
     logic         block_user_mode_q;     // LDM/STM ^ — force user-bank regs
     logic         block_has_pc_q;        // r15 in this block's reg list?
+    logic         block_thumb_ldm_base_in_list_q;
 
     // §17 block-transfer writeback state. LDM defers Rn writeback until
     // all beats have completed (or the final abort boundary). STM commits
@@ -861,10 +862,12 @@ module arm7tdmis_core_pipelined
     // For an aborted LDM the final data cycle's register port is free
     // (all writes from the aborting beat onward are suppressed), so the
     // requested modified base is restored there before S_BLOCK_WB uses
-    // the port to save LR_abt.
+    // the port to save LR_abt. Thumb LDMIA is the architectural exception
+    // to normal writeback: when Rn is in the list, its loaded value wins.
     wire block_does_writeback = (state_q == S_BLOCK_WB)
                              && block_writeback_q
-                             && !data_abort_q;
+                             && !data_abort_q
+                             && !block_thumb_ldm_base_in_list_q;
 
     wire [15:0] block_after_curr = block_remaining_q & ~(16'h1 << block_curr_reg_q);
     wire        block_has_more   = (block_after_curr != 16'h0);
@@ -1804,6 +1807,7 @@ module arm7tdmis_core_pipelined
                 block_first_beat_q  <= 1'b0;
                 block_user_mode_q      <= 1'b0;
                 block_has_pc_q         <= 1'b0;
+                block_thumb_ldm_base_in_list_q <= 1'b0;
                 block_writeback_q      <= 1'b0;
                 block_writeback_addr_q <= 32'h0;
                 block_base_value_q     <= 32'h0;
@@ -1932,6 +1936,10 @@ module arm7tdmis_core_pipelined
                     block_first_beat_q     <= 1'b1;
                     block_user_mode_q      <= dec.block_user_mode;
                     block_has_pc_q         <= dec.block_reg_list[15];
+                    block_thumb_ldm_base_in_list_q
+                                           <= de_q.thumb
+                                              && dec.block_load
+                                              && dec.block_reg_list[dec.rn];
                     block_writeback_q      <= dec.block_writeback;
                     block_writeback_addr_q <= block_writeback_addr;
                     block_base_value_q     <= rf_ra_data;
