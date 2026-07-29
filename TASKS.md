@@ -3096,9 +3096,24 @@ number of cycles spent in an internal FSM state.
   breakpoint/watchpoint programming are covered by
   `tb/integration/arm7tdmis_debug_monitor_mode_tb.sv`. A real debugger process is the
   separate `JTAG-006` requirement.
-- [ ] **JTAG-006:** Demonstrate a pinned open-source debugger/GDB flow against the
+- [x] **JTAG-006:** Demonstrate a pinned open-source debugger/GDB flow against the
   simulated scan transport and on FPGA, or document precisely why the r4p3 scan
   protocol needs a project-specific bridge and release that bridge with protocol tests.
+  The release selects the explicit bridge alternative, not a claim that an
+  asynchronous pod or GDB process was run. ARM7TDMI-S exposes synchronous
+  `DBGTCKEN/DBGTMS/DBGTDI` sampled by `CLK`, not a physical TCK or RTCK
+  handshake; `docs/DEBUG.md` therefore forbids direct asynchronous-pod
+  attachment without another independently verified CDC bridge.
+  `arm7tdmis_sync_debug_port` is the released project-specific bridge: a
+  same-CLK ready/valid virtual-TCK step produces exactly one `DBGTCKEN` event,
+  buffers TDO/output-enable under backpressure, and fail-closes under reset or
+  disabled debug policy. It is part of the public MiSTer wrapper and QIP.
+  `sync_debug_port_tb.sv` verifies hold/replacement backpressure, exact event
+  count, reset/disable isolation, and a complete IDCODE scan through the real
+  TAP. The full register/PSR/memory/DCC/breakpoint/watchpoint/monitor scan
+  semantics behind that transport remain the checked JTAG-005 integration
+  matrix. `test_debug_bridge_contract.py` locks the selected alternative and
+  prevents it from being mislabeled as asynchronous JTAG interoperability.
 - [x] **ETM-001:** Define and verify `DBGINSTRVALID` and `DBGnEXEC` for commit,
   condition failure, stalls, multicycle instructions, flushes, exceptions, debug, and
   Thumb. Expose the documented bus/pipeline information required by ETM7.

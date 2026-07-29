@@ -16,10 +16,10 @@ landed since that baseline: the ARM/Thumb, exception/abort, coprocessor/CP14,
 EmbeddedICE-RT, and ETM-facing directed requirements are checked; regressions fail
 hard and publish evidence; and both FPGA characterization profiles pass checked
 Quartus flows. Current open categories are the unchecked §31 items:
-real-debugger interoperability, framework/PocketStation integration,
-random/suite/formal/soak validation, remaining FPGA/reproducibility/hardware
-work, and final release review/freezing. Consult each checkbox and its
-attached evidence before making a narrower claim.
+framework/PocketStation integration, random/suite/formal/soak validation,
+remaining FPGA/reproducibility/hardware work, and final release
+review/freezing. Consult each checkbox and its attached evidence before making
+a narrower claim.
 
 Do not mark a feature complete because its module/decoder exists or because `make`
 returns zero. Use the VERIFIED definition and evidence gates in `TASKS.md` §31.
@@ -95,9 +95,9 @@ These are the non-obvious traps the TRM and TASKS.md flag — internalize them b
 - **Banked registers depend on mode.** 31 GPRs + 6 SPSRs across User/FIQ/IRQ/Supervisor/Abort/Undefined/System; FIQ banks r8–r14, the others bank only r13/r14. Register read/write mapping is mode-driven and must be implemented for every mode (§3).
 - **Reset state is specific.** Supervisor mode, I=1, F=1, T=0, ARM state, PC=0x00000000 — set all of them, don't just clear PC.
 - **Bus is pipelined.** Address-class signals (ADDR/WRITE/SIZE/PROT/LOCK) are broadcast one bus cycle *ahead* of the data cycle they describe. `CLKEN` gates bus progression; treat it as a wait-state mechanism, not a clock gate.
-- **Remaining highest-risk blocks:** one exact all-cycle bus oracle, independent
-  architecture/formal validation, real-debugger interoperability, save-state
-  quiescence, framework/board CDC and timing, and hardware/PocketStation evidence.
+- **Remaining highest-risk blocks:** random/formal/soak validation,
+  framework/board CDC and timing, post-synthesis equivalence, and
+  hardware/PocketStation evidence.
 - **Reserved coprocessor IDs.** CP14 is the Debug Communications Channel; CP15 is system control. External coprocessors must not use those IDs.
 - **TAP IDCODE.** Rev 4 r4p3 TAP ID register value is `0x7F1F0F0F` (§23).
 - **Don't invent v5+ features or hard-macrocell pins.** ARMv4T does not have `BKPT`, `BLX`, `CLZ`, or the Q flag; r4p3 does not have `MAS[1:0]` (it's `SIZE[1:0]`), `DBGRESTART`, or `DBGINSTR` (`DBGINSTRVALID` is the real, distinct signal). Software breakpoints use EmbeddedICE-RT pattern matching, not a `BKPT` opcode. Full list of forbidden additions is in TASKS.md §30.0.

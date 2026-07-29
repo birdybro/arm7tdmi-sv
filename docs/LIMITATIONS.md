@@ -7,7 +7,6 @@ and may be stricter than this summary.
 - No real MiSTer framework, PocketStation subsystem, copyrighted BIOS or
   software image, hardware run, or long system soak is included
   (MIST-007 through MIST-009, FPGA-002, and FPGA-007).
-- Real debugger interoperability has not been demonstrated (JTAG-006).
 - Constrained-random generation, third-party ARMv4T suites, complete
   cross/functional coverage, formal proof, long sanitizing fuzz runs, and
   independent review remain open (VAL-002 through VAL-008 and VAL-010 through

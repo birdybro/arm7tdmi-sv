@@ -1,12 +1,14 @@
 # Debug Subsystem Architecture
 
-> **Audit status:** The subsystem remains partial overall. Halt-mode scan transport,
+> **Audit status:** The §31.7 debug/JTAG requirements are verified. Halt-mode scan transport,
 > debug-speed register/PSR transfer, staged system-speed access, and the bidirectional
 > CP14 DCC have fail-hard directed coverage. Monitor-mode breakpoint/watchpoint
 > aborts, CP14 Debug Abort Status coupling, synchronous DBGRQ/DBGBREAK sampling,
 > halt-mode watchpoint/exception ordering, and the synchronous FPGA debug transport
 > are also covered end to end. The adjacent ETM7-facing boundary is documented in
-> `TRACE.md`; real-debugger interoperability remains a separate release blocker.
+> `TRACE.md`. JTAG-006 closes through the released, protocol-tested
+> project-specific synchronous bridge alternative; no asynchronous pod or GDB
+> execution is claimed.
 
 EmbeddedICE-RT + JTAG TAP + CP14 DCC, as implemented in
 `rtl/debug/arm7tdmis_ice_rt.sv`, `rtl/jtag/arm7tdmis_jtag_tap.sv`, and
@@ -311,12 +313,20 @@ signals low, and clears buffered response state at the next clock. `nRESET`
 clears the transport; the integration must also route its intended TAP reset
 policy to `DBGnTRST`.
 
-This module is not a TCK synchronizer and exposes no RTCK claim. A board-level
-asynchronous JTAG pod therefore requires a separately specified and verified
-CDC bridge. The provided interface avoids that clock domain entirely.
+This module is not a TCK synchronizer and exposes no RTCK claim. An
+asynchronous JTAG pod therefore requires a separately specified and verified CDC bridge.
+The provided interface avoids that clock domain entirely.
 `tb/unit/sync_debug_port_tb.sv` checks backpressure and replacement, exact
 event count, reset/disable isolation, and an end-to-end 32-bit IDCODE scan
 through the real TAP.
+
+This is the selected JTAG-006 release path. The bridge is included in the
+public MiSTer wrapper and portable QIP, and the JTAG-005 tests cover the full
+scan operations behind it. It deliberately does not translate a host
+debugger protocol such as GDB remote serial protocol or OpenOCD's adapter
+driver API. A containing system may place such software above `STEP_*`; a
+physical asynchronous pod still needs its own independently verified CDC
+transport.
 
 ### IR opcodes (TRM §5.13)
 

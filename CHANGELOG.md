@@ -16,6 +16,9 @@ sign-off gate in `TASKS.md` §31.13.
   memory signatures on the RTL.
 - Add fail-hard bidirectional traceability for every §31 requirement and every
   tracked RTL/verification source, with latest results in release evidence.
+- Close the JTAG interoperability requirement through its project-specific
+  bridge alternative: the public synchronous debug-step transport is packaged,
+  documented, and protocol-tested without claiming asynchronous pod/GDB use.
 - Complete the remaining independent validation, formal, toolchain,
   MiSTer-framework, PocketStation, and hardware requirements in `TASKS.md`.
 - Freeze v1.0 only after every release-gate statement has durable evidence.

@@ -1,4 +1,4 @@
-// JTAG-004 fail-first regression for the explicitly synchronous FPGA debug
+// JTAG-004/JTAG-006 regression for the explicitly synchronous FPGA debug
 // transport. Every STEP request and response is in CLK's domain. The adapter
 // must emit exactly one DBGTCKEN event per accepted request, preserve a
 // response under backpressure, isolate the raw pins while disabled, and carry
