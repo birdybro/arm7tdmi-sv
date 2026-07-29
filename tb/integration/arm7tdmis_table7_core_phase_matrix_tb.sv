@@ -31,6 +31,7 @@ module arm7tdmis_table7_core_phase_matrix_tb
     end
 
     logic nRESET = 1'b0;
+    logic CLKEN  = 1'b1;
     logic [31:0] ADDR;
     logic        WRITE;
     logic [1:0]  SIZE;
@@ -48,7 +49,7 @@ module arm7tdmis_table7_core_phase_matrix_tb
     int unsigned errors = 0;
 
     arm7tdmis_top u_dut (
-        .CLK, .CLKEN(1'b1), .nRESET, .CFGBIGEND(1'b0),
+        .CLK, .CLKEN, .nRESET, .CFGBIGEND(1'b0),
         .nIRQ(1'b1), .nFIQ(1'b1), .ABORT,
         .ADDR, .WRITE, .SIZE, .PROT, .LOCK, .TRANS, .WDATA, .RDATA,
         .CPnMREQ, .CPSEQ, .CPnTRANS, .CPnOPC, .CPTBIT, .CPnI,
@@ -62,7 +63,7 @@ module arm7tdmis_table7_core_phase_matrix_tb
     arm7tdmis_memory #(
         .WORDS(256)
     ) u_mem (
-        .CLK, .CLKEN(1'b1), .nRESET, .CFGBIGEND(1'b0),
+        .CLK, .CLKEN, .nRESET, .CFGBIGEND(1'b0),
         .ADDR, .WRITE, .SIZE, .PROT, .LOCK, .TRANS, .WDATA, .RDATA,
         .ABORT, .inject_abort(1'b0)
     );
@@ -195,6 +196,93 @@ module arm7tdmis_table7_core_phase_matrix_tb
         endcase
     endfunction
 
+    function automatic logic [31:0] expected_wdata(
+        input int row,
+        input int phase
+    );
+        unique case (row)
+            6: return phase == 1 ? 32'h0000_0005 : 32'h0000_0000;
+            // Byte/halfword stores replicate their value across lanes;
+            // address plus SIZE selects the lane sampled by the target.
+            8: return phase == 1 ? 32'h0005_0005 : 32'h0000_0000;
+            10: begin
+                if (phase == 1) return 32'h0000_0003;
+                if (phase == 2) return 32'h0000_0004;
+                return 32'h0000_0000;
+            end
+            11: return phase == 2 ? 32'h0000_0003 : 32'h0000_0000;
+            default: return 32'h0000_0000;
+        endcase
+    endfunction
+
+    function automatic logic expected_dmore(input int row, input int phase);
+        return (row inside {9, 10}) && phase == 0;
+    endfunction
+
+    function automatic logic [4:0] expected_state(
+        input int row,
+        input int phase
+    );
+        if (phase == 0)
+            return 5'd0;  // S_EXEC
+        unique case (row)
+            1:  return 5'd9;   // S_DP_SHIFT
+            2, 3: return 5'd6; // S_MUL_BUSY
+            4:  return phase == 1 ? 5'd6 : 5'd5; // BUSY, MULL_HI
+            5, 7: return phase == 1 ? 5'd1 : 5'd10; // DDATA, LOAD_WB
+            6, 8: return 5'd1; // S_DDATA
+            9:  return phase < 3 ? 5'd2 : 5'd8; // BLOCK_DATA, BLOCK_WB
+            10: return 5'd2;   // S_BLOCK_DATA
+            11: begin
+                if (phase == 1) return 5'd3;  // S_SWP_RDATA
+                if (phase == 2) return 5'd4;  // S_SWP_WDATA
+                return 5'd11;                 // S_SWP_WB
+            end
+            14: return phase == 1 ? 5'd16 : 5'd0; // UNDEF_WAIT, refill
+            default: return 5'd0;
+        endcase
+    endfunction
+
+    function automatic logic [31:0] expected_cpsr(
+        input int row,
+        input int phase
+    );
+        // Reset/setup leave NZCV clear with I/F set in Supervisor mode.
+        // Undefined switches only the mode field after its recognition I
+        // cycle; SWI is already executing in Supervisor mode.
+        return (row == 14 && phase >= 2) ? 32'h0000_00DB
+                                         : 32'h0000_00D3;
+    endfunction
+
+    function automatic logic [31:0] expected_rdata();
+        logic       halfword_high;
+        logic [1:0] byte_lane;
+        logic [31:0] word;
+
+        if (!u_mem.is_active_q || u_mem.write_q)
+            return 32'h0000_0000;
+
+        word = u_mem.mem[u_mem.index_q];
+        unique case (u_mem.size_q)
+            2'(SIZE_WORD): return word;
+            2'(SIZE_HALFWORD): begin
+                halfword_high = u_mem.addr_q[1];
+                return halfword_high ? {word[31:16], 16'h0000}
+                                     : {16'h0000, word[15:0]};
+            end
+            2'(SIZE_BYTE): begin
+                byte_lane = u_mem.addr_q[1:0];
+                unique case (byte_lane)
+                    2'd0: return {24'h0, word[7:0]};
+                    2'd1: return {16'h0, word[15:8], 8'h0};
+                    2'd2: return {8'h0, word[23:16], 16'h0};
+                    default: return {word[31:24], 24'h0};
+                endcase
+            end
+            default: return 32'h0000_0000;
+        endcase
+    endfunction
+
     function automatic instr_class_e expected_class(input int row);
         unique case (row)
             0, 1: return INSTR_DP;
@@ -296,14 +384,62 @@ module arm7tdmis_table7_core_phase_matrix_tb
                 || SIZE !== expected_size(row, phase)
                 || PROT !== expected_prot(row, phase)
                 || LOCK !== expected_lock(row, phase)
-                || TRANS !== expected_trans(row, phase))
+                || TRANS !== expected_trans(row, phase)
+                || WDATA !== expected_wdata(row, phase)
+                || DMORE !== expected_dmore(row, phase))
                 fail(row, $sformatf(
-                    "phase %0d A/W/S/P/L/T=%08x/%0b/%02b/%02b/%0b/%02b expected %08x/%0b/%02b/%02b/%0b/%02b",
+                    "phase %0d A/W/S/P/L/T/WD/M=%08x/%0b/%02b/%02b/%0b/%02b/%08x/%0b expected %08x/%0b/%02b/%02b/%0b/%02b/%08x/%0b",
                     phase + 1, ADDR, WRITE, SIZE, PROT, LOCK, TRANS,
+                    WDATA, DMORE,
                     expected_addr(row, phase),
                     expected_write(row, phase), expected_size(row, phase),
                     expected_prot(row, phase), expected_lock(row, phase),
-                    expected_trans(row, phase)));
+                    expected_trans(row, phase), expected_wdata(row, phase),
+                    expected_dmore(row, phase)));
+
+            if (RDATA !== expected_rdata() || ABORT !== 1'b0)
+                fail(row, $sformatf(
+                    "phase %0d response RDATA/ABORT=%08x/%0b expected %08x/0",
+                    phase + 1, RDATA, ABORT, expected_rdata()));
+
+            if (!CLKEN
+                || CPnMREQ !== !(TRANS inside {TRANS_N, TRANS_S})
+                || CPSEQ !== TRANS[0]
+                || CPnTRANS !== 1'b1
+                || CPnOPC !== PROT[PROT_BIT_DATA]
+                || CPTBIT !== 1'b0
+                || CPnI !== 1'b1)
+                fail(row, $sformatf(
+                    "phase %0d CLKEN/CP MREQ/SEQ/TRANS/OPC/T/I=%0b/%0b/%0b/%0b/%0b/%0b/%0b",
+                    phase + 1, CLKEN, CPnMREQ, CPSEQ, CPnTRANS,
+                    CPnOPC, CPTBIT, CPnI));
+
+            if (u_dut.u_core.state_q !== expected_state(row, phase)
+                || u_dut.u_core.cpsr !== expected_cpsr(row, phase)
+                || (phase == 0
+                    && (!u_dut.u_core.de_q.valid
+                        || u_dut.u_core.de_q.pc !== TEST_PC
+                        || u_dut.u_core.de_q.instr !== row_opcode(row)))
+                || (phase != 0 && u_dut.u_core.pc_q !== TEST_PC))
+                fail(row, $sformatf(
+                    "phase %0d state/CPSR/de-valid/de-PC/de-instr/last-PC=%0d/%08x/%0b/%08x/%08x/%08x expected %0d/%08x/%0b/%08x/%08x/%08x",
+                    phase + 1, u_dut.u_core.state_q, u_dut.u_core.cpsr,
+                    u_dut.u_core.de_q.valid, u_dut.u_core.de_q.pc,
+                    u_dut.u_core.de_q.instr, u_dut.u_core.pc_q,
+                    expected_state(row, phase), expected_cpsr(row, phase),
+                    phase == 0, TEST_PC, row_opcode(row), TEST_PC));
+
+            if (DBGINSTRVALID !== (phase == 0)
+                || DBGnEXEC !== !((phase == 0) && (row != 15))
+                || DBGACK !== 1'b0
+                || u_dut.u_core.any_exc_fires
+                   !== ((row == 13 && phase == 0)
+                        || (row == 14 && phase == 1)))
+                fail(row, $sformatf(
+                    "phase %0d debug/exception IV/nEX/ACK/EXC=%0b/%0b/%0b/%0b",
+                    phase + 1, DBGINSTRVALID, DBGnEXEC, DBGACK,
+                    u_dut.u_core.any_exc_fires));
+
             if (phase + 1 < expected_phase_count(row))
                 @(negedge CLK);
         end
@@ -326,10 +462,8 @@ module arm7tdmis_table7_core_phase_matrix_tb
     end
 
     /* verilator lint_off UNUSEDSIGNAL */
-    wire _unused = &{1'b0, WDATA, RDATA, ABORT, CPnMREQ, CPSEQ,
-        CPnTRANS, CPnOPC, CPTBIT, CPnI, DBGACK, DBGnEXEC,
-        DBGINSTRVALID, DBGRNG, DBGCOMMTX, DBGCOMMRX, DBGTDO,
-        DBGnTDOEN, DMORE};
+    wire _unused = &{1'b0, DBGRNG, DBGCOMMTX, DBGCOMMRX, DBGTDO,
+        DBGnTDOEN};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule
