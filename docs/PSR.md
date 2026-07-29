@@ -22,6 +22,13 @@ There is no Q flag in ARMv4T. Reserved storage is not assumed to be zero:
 field writes are true read-modify-write preservation even when exception state
 or a future implementation supplies nonzero reserved bits.
 
+Arithmetic result instructions update V from signed overflow when S is set.
+Logical result instructions update N, Z, and the shifter carry while preserving
+the old V flag. The test-only logical instructions TST and TEQ follow that rule;
+CMP and CMN are arithmetic tests and update V from subtraction/addition,
+respectively. `alu_tb`, `flags_preserve`, and `mull_flags` are the focused
+fail-hard evidence.
+
 ## Privilege and SPSR access
 
 User mode can change only CPSR.NZCV. It cannot change I, F, T, the mode, or
@@ -39,8 +46,7 @@ The zero read is intentional. The internal bank-index default must never make
 an absent SPSR expose FIQ state.
 
 If an S+PC data-processing operation is executed without an SPSR, the core
-still commits its ordinary current-state-aligned PC result and leaves the
-complete CPSR unchanged. All twelve result-writing DP opcodes are checked in
+still commits its ordinary current-state-aligned PC result and leaves the complete CPSR unchanged. All twelve result-writing DP opcodes are checked in
 both User and System modes by
 `tb/integration/arm7tdmis_dp_pc_no_spsr_policy_tb.sv`.
 

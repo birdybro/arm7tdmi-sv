@@ -3,8 +3,8 @@
 This document defines version 1 of the canonical `arm7tdmi_mister` interface.
 The wrapper is synthesizable and independent of any particular MiSTer memory
 controller. `TASKS.md` §31.9 remains the audited status ledger; save states,
-framework builds, PocketStation integration, bus adapters, and hardware
-evidence remain separate requirements.
+framework builds, PocketStation integration, and hardware evidence remain
+separate requirements.
 
 ## Clock and reset
 
@@ -193,6 +193,18 @@ one-response holding register. A bus fabric must return exactly one done,
 acknowledge, or error for each enabled request; for a locked SWP/SWPB pair it
 must not grant the protected target to another master between the two
 `WB_LOCK`/`HOST_LOCK` transfers.
+
+## DFT and scan policy
+
+The FPGA source package does not provide a scan-insertion flow and makes no
+ASIC production-test claim. `rtl/top/arm7tdmis_no_dft.sv` is only an explicitly
+named compatibility facade: it ties `SO` low, does not consume `SE` or `SI`,
+and is excluded from the simulation and FPGA source manifests. There is no
+misleading `arm7tdmis_chip` wrapper.
+
+An ASIC consumer that requires scan stitching, ATPG, pad cells, or foundry
+test modes must provide and verify that separate technology-owned integration.
+Those functions are not implied by the working JTAG debug scan chains.
 
 ## Portable FPGA package
 

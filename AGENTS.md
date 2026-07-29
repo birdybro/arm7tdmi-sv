@@ -6,19 +6,21 @@ working in this repository.
 ## Project status
 
 **Not sign-off ready.** The 2026-07-28 audit in `TASKS.md` §31 supersedes all
-earlier completion claims. The current tree is a substantial RTL prototype, not a
-drop-in MiSTer CPU or conformant ARM7TDMI-S release.
+earlier completion claims. The tree has extensive directed subsystem evidence and a
+checked FPGA package, but it is not yet a conformant ARM7TDMI-S release or a complete
+MiSTer/PocketStation system.
 
 The exact current blockers are the unchecked requirements in §31; do not copy the
 historical baseline table in §31.1 forward as current state. Substantial fixes have
-landed since that baseline, including fail-hard benches, architectural/abort/bus
-corrections, external-coprocessor protocols, removal of the fabricated internal CP15,
-conformant CP14 c0/c1 DCC ownership, and halt-mode scan execution. Known open
-categories still include exact debug-pin sampling, a published synchronous FPGA
-debug transport, ETM-facing closure, differential/formal/coverage closure,
-synthesis/timing evidence, and MiSTer/PocketStation packaging. Monitor-mode
-PABT/DABT and CP14 Debug Abort Status coupling have end-to-end directed evidence.
-Consult each §31 checkbox and its attached evidence before making a narrower claim.
+landed since that baseline: the ARM/Thumb, exception/abort, coprocessor/CP14,
+EmbeddedICE-RT, and ETM-facing directed requirements are checked; regressions fail
+hard and publish evidence; and both FPGA characterization profiles pass checked
+Quartus flows. Current open categories are the unchecked §31 items: final all-cycle
+bus conformance, real-debugger interoperability, save states/framework/
+PocketStation/generic-SoC integration, independent differential/random/formal/
+compiler/soak validation, remaining FPGA/reproducibility/hardware work, and release
+documentation. Consult each checkbox and its attached evidence before making a
+narrower claim.
 
 Do not mark a feature complete because its module/decoder exists or because `make`
 returns zero. Use the VERIFIED definition and evidence gates in `TASKS.md` §31.
@@ -32,15 +34,17 @@ flag, `MAS[1:0]`, `DBGRESTART`, or separate `DBGINSTR`.
   linked fail-hard evidence before it can be closed.
 - **`ARM_DDI_0234B_ARM7TDMI-S_r4p3_TRM.pdf`** — the ARM Technical Reference Manual for ARM7TDMI-S r4p3. This is the architectural spec the implementation must match. TASKS.md cites it heavily ("the TRM states…", "Chapter 7 says…"); when a task references TRM behavior, read the cited section before implementing rather than going from memory. Particularly load-bearing chapters: Ch. 7 (instruction cycle timings), Figure 1-3 (datapath block diagram), the exception/vector tables, and the EmbeddedICE-RT + JTAG TAP chapters.
 
-## Planned repository layout
+## Repository layout
 
-TASKS.md §1 fixes the directory structure. Use it when creating new files — do not invent alternative locations:
+Use the established directory structure when creating new files:
 
 ```
-rtl/{core,decode,datapath,memory,coproc,debug,jtag,etm,top}/
+rtl/{core,decode,datapath,debug,jtag,trace,top}/
 tb/{unit,integration,formal,programs}/
+verification/
 docs/
 scripts/
+fpga/
 ```
 
 Common SystemVerilog packages live at the `rtl/` root: `arm7tdmis_types_pkg.sv`, `arm7tdmis_instr_pkg.sv`, `arm7tdmis_psr_pkg.sv`, `arm7tdmis_bus_pkg.sv`, `arm7tdmis_debug_pkg.sv`. Shared enums (ARM/Thumb state, processor modes, exception types, ALU/shift ops, TRANS cycle types, etc.) belong in these packages, not redefined per module.
@@ -51,9 +55,19 @@ The `arm7tdmis_top` port list is fixed by the TRM and enumerated in TASKS.md §1
 
 ## Build / lint / test
 
-Toolchain: **Verilator 5.x** for simulation and `verilator --lint-only -Wall` for lint. **GTKWave** for waveforms (Verilator emits FST via `--trace-fst`). No commercial simulator; no Yosys/SymbiYosys yet (defer until §27 formal work). No Quartus on the build box yet — FPGA bring-up (§26) will install it. ARM cross-assembler (`arm-none-eabi-binutils`) is **not** installed; install before §27 instruction tests, not before. Build scripts and `.f` filelists live in `scripts/`; commit-message convention `§N.M description …` per the working-style note below.
+Toolchain: **Verilator 5.x** for simulation and fatal `--lint-only -Wall` lint;
+**GTKWave** for optional FST viewing; and **Quartus Lite 17.0.2** for the checked
+Cyclone V characterization flows. Yosys/SymbiYosys and the ARM cross-assembler are
+not currently installed. Icarus Verilog 13.0 has been evaluated but rejects the
+package syntax used by the source and is not a supported simulation flow. Build
+scripts and `.f` file lists live in `scripts/`; commit-message convention
+`§N.M description …` per the working-style note below.
 
-Reference-model strategy for §2 cross-checking is **hand-written TRM-derived expected state per test** — no QEMU/Unicorn cosim. Each unit/instruction test embeds the expected register/CPSR/memory state derived directly from the TRM; failures point at the spec, not at a foreign model's quirks.
+Directed tests use hand-written, TRM-derived expected state. That is not an
+independent reference model: VAL-001 still requires an independently derived model or
+external emulator comparison, and subsequent VAL items require random programs,
+public suites, compiler tests, formal properties, and long soaks. Never describe the
+current hand-written expectations as differential validation.
 
 ## RTL coding discipline (load-bearing — read before writing any `.sv`)
 
@@ -73,13 +87,15 @@ The `rtl/` tree must be **synthesizable SystemVerilog that describes parallel ha
 These are the non-obvious traps the TRM and TASKS.md flag — internalize them before writing execution logic:
 
 - **Build verification before the CPU.** TASKS.md §2 deliberately puts the testbench, behavioral memory model, cycle logger, and reference-model path *before* the core. Don't skip ahead to RTL without the surrounding harness.
-- **Pipeline structure.** §16 landed: F (continuous prefetch via `fetch_pc_q` + `inflight_pc_q` + F→D register), D (combinational decode through `arm7tdmis_decoder` / `arm7tdmis_thumb_decoder` muxed on the latched T-bit, D→E register), and E (single S_EXEC cycle plus the existing 10-state memory/multiply substate FSM as substates). Flush triggers (branch, BX, exception, DP-to-PC, LDR-to-PC, LDM-with-PC) invalidate F and D and redirect `fetch_pc_q`. The non-obvious-but-load-bearing trick: F's `issue_fetch` is gated by `state_next == S_EXEC` to avoid speculatively prefetching the cycle E enters a multi-cycle substate (else the result arrives during a cycle F can't latch and the instruction is lost). Cycle-accurate timing (§18) refines from here.
+- **Pipeline structure.** The core uses F (continuous prefetch via `fetch_pc_q` + `inflight_pc_q` + F→D register), D (combinational decode through `arm7tdmis_decoder` / `arm7tdmis_thumb_decoder` muxed on the latched T-bit, D→E register), and E (`S_EXEC` plus instruction-specific memory, multiply, coprocessor, debug, and exception substates). Flush triggers (branch, BX, exception, DP-to-PC, LDR-to-PC, LDM-with-PC) invalidate F and D and redirect `fetch_pc_q`. The non-obvious-but-load-bearing trick: F's `issue_fetch` is gated by `state_next == S_EXEC` to avoid speculatively prefetching the cycle E enters a multicycle substate (else the result arrives during a cycle F cannot latch and the instruction is lost). `docs/PIPELINE.md` and the checked §31 cycle tasks, rather than an old state count, define the current implementation.
 - **PC pipeline semantics.** In ARM state the executing instruction sees PC ahead of itself due to the pipeline; Thumb has its own offset rule. Any code that reads or writes PC must respect this — a write to PC also forces a pipeline flush + refill.
 - **Conditional execution is universal in ARM state.** Every ARM instruction has a `cond[31:28]` field; condition-fail must suppress register writes, memory writes, and CPSR writes — but cycles still elapse and `DBGnEXEC` must be driven correctly. Thumb only has conditional branches.
 - **Banked registers depend on mode.** 31 GPRs + 6 SPSRs across User/FIQ/IRQ/Supervisor/Abort/Undefined/System; FIQ banks r8–r14, the others bank only r13/r14. Register read/write mapping is mode-driven and must be implemented for every mode (§3).
 - **Reset state is specific.** Supervisor mode, I=1, F=1, T=0, ARM state, PC=0x00000000 — set all of them, don't just clear PC.
 - **Bus is pipelined.** Address-class signals (ADDR/WRITE/SIZE/PROT/LOCK) are broadcast one bus cycle *ahead* of the data cycle they describe. `CLKEN` gates bus progression; treat it as a wait-state mechanism, not a clock gate.
-- **Hardest blocks per the roadmap:** PC/pipeline semantics, LDM/STM abort behavior, ARM↔Thumb interworking, cycle-accurate bus timing, and EmbeddedICE-RT + JTAG. Budget effort accordingly.
+- **Remaining highest-risk blocks:** one exact all-cycle bus oracle, independent
+  architecture/formal validation, real-debugger interoperability, save-state
+  quiescence, framework/board CDC and timing, and hardware/PocketStation evidence.
 - **Reserved coprocessor IDs.** CP14 is the Debug Communications Channel; CP15 is system control. External coprocessors must not use those IDs.
 - **TAP IDCODE.** Rev 4 r4p3 TAP ID register value is `0x7F1F0F0F` (§23).
 - **Don't invent v5+ features or hard-macrocell pins.** ARMv4T does not have `BKPT`, `BLX`, `CLZ`, or the Q flag; r4p3 does not have `MAS[1:0]` (it's `SIZE[1:0]`), `DBGRESTART`, or `DBGINSTR` (`DBGINSTRVALID` is the real, distinct signal). Software breakpoints use EmbeddedICE-RT pattern matching, not a `BKPT` opcode. Full list of forbidden additions is in TASKS.md §30.0.

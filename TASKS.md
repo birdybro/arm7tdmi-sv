@@ -3335,12 +3335,18 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
 
 ## 31.12 Documentation and release hygiene
 
-- [ ] **DOC-001:** Replace all unconditional "Complete", "all green", and
+- [x] **DOC-001:** Replace all unconditional "Complete", "all green", and
   "cycle-accurate" claims in README, AGENTS, and `docs/` with the §31 status vocabulary
-  until linked sign-off evidence exists.
-- [ ] **DOC-002:** Correct documentation for LDM/STM aborts, exception priority/LR,
+  until linked sign-off evidence exists. `README.md` now defines VERIFIED,
+  IMPLEMENTED-UNVERIFIED, and PARTIAL; reports subsystem evidence separately from
+  whole-release status; and links every summary to the canonical ledger/contracts.
+  `test_documentation_contract.py` rejects the known stale baseline claims.
+- [x] **DOC-002:** Correct documentation for LDM/STM aborts, exception priority/LR,
   logical V preservation, PC values, STM/coprocessor cycles, endianness, CP14, absence
-  of internal CP15, monitor/debug limitations, ETM, and DFT.
+  of internal CP15, monitor/debug limitations, ETM, and DFT. The executable
+  documentation contract requires each fact in `EXCEPTIONS.md`, `PSR.md`,
+  `PIPELINE.md`, `COPROCESSOR.md`, `RAW_BUS.md`, `DEBUG.md`, `TRACE.md`, and
+  `INTEGRATION.md`.
 - [ ] **DOC-003:** Create a bidirectional traceability table:
   requirement ID → source section → RTL → directed/random/formal tests → coverage bin
   → latest result. Also prove every RTL feature and every test maps back to a
@@ -3353,9 +3359,12 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   handling. Do not redistribute copyrighted BIOS/software without permission.
 - [ ] **DOC-006:** Add a changelog, semantic version, support matrix, known-limitations
   file, security/debug notes, and a release manifest containing source/tool/spec hashes.
-- [ ] **DOC-007:** Remove stale "pending", "scaffold", and "deferred" comments only
+- [x] **DOC-007:** Remove stale "pending", "scaffold", and "deferred" comments only
   when the corresponding requirement is verified; otherwise keep them and link the
-  owning task ID.
+  owning task ID. Obsolete scaffold/milestone language was removed from the verified
+  memory and JTAG paths; remaining occurrences describe real pending state or
+  deliberate same-instruction deferral. `test_documentation_contract.py` prevents
+  those two stale comments from returning.
 
 ## 31.13 Final v1.0 release gate
 

@@ -2,8 +2,8 @@
 //
 // 16-state TAP machine driven by DBGTMS on rising DBGTCK. The on-chip
 // variant we implement uses DBGTCKEN as an enable on CLK rather than a
-// separate TCK domain — this matches the embedded-test path in §30.23.9
-// where the off-chip Multi-ICE synchronizer is deferred to a later milestone.
+// separate TCK domain. The public FPGA transport is explicitly same-clock;
+// an asynchronous external pod requires a system-owned CDC bridge.
 //
 // IR is 4 bits; valid public opcodes per debug_pkg are SCAN_N, RESTART,
 // INTEST, IDCODE, BYPASS. All other encodings BYPASS per IEEE 1149.1 default.

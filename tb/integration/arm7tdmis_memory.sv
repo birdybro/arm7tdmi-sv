@@ -149,8 +149,9 @@ module arm7tdmis_memory
         end
     end
 
-    // PROT/LOCK accepted but unused at this scaffold level — they will be
-    // checked once the core drives them with real semantics (§17/§22).
+    // This zero-wait behavioral memory intentionally does not interpret
+    // PROT/LOCK; dedicated raw-bus, protection, SWP, and DMA checkers verify
+    // their architectural semantics.
     // addr_q upper bits beyond INDEX_BITS+1 are not consulted by an N-word
     // memory; the index slice already discards them.
     /* verilator lint_off UNUSEDSIGNAL */

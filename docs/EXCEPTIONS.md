@@ -60,8 +60,8 @@ All steps commit at the same posedge. The pipeline flush invalidates F/D state; 
 
 The saved link is not one universal `PC+4` value. ARM SWI/Undefined save the
 source instruction address plus 4, while their Thumb forms save plus 2.
-PABT/IRQ/FIQ save plus 4, and DABT saves the faulting transfer instruction
-address plus 8. The retained FIQ entry after a coincident DABT links back to
+PABT/IRQ/FIQ save plus 4, and DABT saves the source instruction address plus 8
+for the faulting transfer. The retained FIQ entry after a coincident DABT links back to
 the untouched Abort vector so the standard `SUBS pc,lr,#4` return resumes it.
 
 ### r14 banked-write
