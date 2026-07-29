@@ -30,6 +30,10 @@ class FpgaQualityContractTest(unittest.TestCase):
         self.assertEqual(report["clock_domains"], ["CLK"])
         self.assertEqual(report["violations"], [])
         self.assertEqual(report["synchronizer_count"], 6)
+        self.assertEqual(
+            report["reset_synchronizer_primitive"]["status"],
+            "verified",
+        )
         self.assertGreater(report["sequential_block_count"], 20)
         self.assertGreater(report["async_reset_block_count"], 5)
 
