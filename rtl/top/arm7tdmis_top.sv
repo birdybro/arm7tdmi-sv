@@ -145,8 +145,11 @@ module arm7tdmis_top
         .dbg_halt_req     (ice_halt_request),
         .dbg_halted       (ice_core_halt),
         .dbg_breakpoint_fetch(ice_breakpoint_fetch),
+        .dbg_monitor_mode (ice_monitor_mode),
+        .dbg_watchpoint_abort(ice_monitor_data_abort),
         .dbg_halt_boundary(ice_halt_boundary),
-        .dbg_breakpoint_execute(ice_breakpoint_execute)
+        .dbg_breakpoint_execute(ice_breakpoint_execute),
+        .dbg_abort_taken  (ice_debug_abort_taken)
     );
 
     // ---- EmbeddedICE-RT (§22 scaffold) ----
@@ -162,6 +165,9 @@ module arm7tdmis_top
     logic ice_core_halt;
     logic ice_breakpoint_fetch;
     logic ice_breakpoint_execute;
+    logic ice_monitor_mode;
+    logic ice_monitor_data_abort;
+    logic ice_debug_abort_taken;
     logic tap_restart_req;
     logic        core_dcc_we;
     logic        core_dcc_re;
@@ -217,6 +223,8 @@ module arm7tdmis_top
         .tap_chain1_capture (tap_chain1_capture),
         .chain1_capture_break(ice_chain1_capture_break),
         .entry_breakpoint   (ice_entry_breakpoint),
+        .monitor_mode       (ice_monitor_mode),
+        .monitor_data_abort (ice_monitor_data_abort),
         .dbg_break_internal (ice_dbg_break),
         .breakpoint_fetch   (ice_breakpoint_fetch),
         .dbg_ack            (ice_dbg_ack),
@@ -238,7 +246,7 @@ module arm7tdmis_top
         .core_dbgabt_we     (core_dbgabt_we),
         .core_dbgabt_wdata  (core_dbgabt_wdata),
         .core_dbgabt_rdata  (core_dbgabt_rdata),
-        .debug_abort_set    (1'b0),
+        .debug_abort_set    (ice_debug_abort_taken),
         .dcc_tx_empty       (dcc_tx_empty),
         .dcc_rx_full        (dcc_rx_full),
         .tap_inject_we      (tap_inject_we_to_ice),

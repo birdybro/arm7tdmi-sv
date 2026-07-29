@@ -115,8 +115,11 @@ module arm7tdmis_core_pipelined
     input  logic        dbg_halt_req,
     input  logic        dbg_halted,
     input  logic        dbg_breakpoint_fetch,
+    input  logic        dbg_monitor_mode,
+    input  logic        dbg_watchpoint_abort,
     output logic        dbg_halt_boundary,
-    output logic        dbg_breakpoint_execute
+    output logic        dbg_breakpoint_execute,
+    output logic        dbg_abort_taken
 );
 
     // =====================================================================
@@ -1113,7 +1116,9 @@ module arm7tdmis_core_pipelined
     // §17: the prefetch-abort metadata travels with the fetched
     // instruction. It remains a request even when that instruction also
     // decodes Undefined; the priority selector below chooses PABT.
-    wire pabt_pending = executing && de_q.pabort;
+    wire debug_pabt_pending = executing && de_q.breakpoint
+                            && dbg_monitor_mode;
+    wire pabt_pending = executing && (de_q.pabort || debug_pabt_pending);
 
     // TRM §2.9.10 fixed priority below Data Abort:
     // FIQ > IRQ > PABT > UNDEF > SWI. These are selected, one-hot events,
@@ -1134,23 +1139,40 @@ module arm7tdmis_core_pipelined
     // returned data response from the accepted instruction's preceding N
     // opcode cycle. Latched so the exception can be raised only after a
     // variable-length transfer reaches its coprocessor-selected final word.
-    wire data_abort_now = CLKEN && ABORT && ((state_q == S_DDATA)
-                                           || (state_q == S_BLOCK_DATA)
-                                           || (state_q == S_SWP_RDATA)
-                                           || (state_q == S_SWP_WDATA)
-                                           || (cp_ls_response_q
-                                               && (cp_ls_data_state
-                                                   || cp_ls_cleanup_state)));
+    wire active_data_response = (state_q == S_DDATA)
+                              || (state_q == S_BLOCK_DATA)
+                              || (state_q == S_SWP_RDATA)
+                              || (state_q == S_SWP_WDATA)
+                              || (cp_ls_response_q
+                                  && (cp_ls_data_state
+                                      || cp_ls_cleanup_state));
+    wire external_data_abort_now = CLKEN && ABORT
+                                 && active_data_response;
+    wire debug_data_abort_now = CLKEN && dbg_watchpoint_abort
+                              && active_data_response;
+    wire data_abort_now = external_data_abort_now || debug_data_abort_now;
 
     logic data_abort_q;
+    logic external_data_abort_q;
+    logic debug_data_abort_q;
     always_ff @(posedge CLK) begin
         if (!nRESET) begin
-            data_abort_q <= 1'b0;
+            data_abort_q          <= 1'b0;
+            external_data_abort_q <= 1'b0;
+            debug_data_abort_q    <= 1'b0;
         end else if (CLKEN) begin
             if (state_q == S_EXEC) begin
-                data_abort_q <= 1'b0;             // clear on entering a new instr
-            end else if (data_abort_now) begin
-                data_abort_q <= 1'b1;
+                // Clear on entering a new instruction.
+                data_abort_q          <= 1'b0;
+                external_data_abort_q <= 1'b0;
+                debug_data_abort_q    <= 1'b0;
+            end else begin
+                if (data_abort_now)
+                    data_abort_q <= 1'b1;
+                if (external_data_abort_now)
+                    external_data_abort_q <= 1'b1;
+                if (debug_data_abort_now)
+                    debug_data_abort_q <= 1'b1;
             end
         end
     end
@@ -1167,6 +1189,14 @@ module arm7tdmis_core_pipelined
     wire dabt_fires = (data_abort_q || data_abort_now)
                    && (state_next == S_EXEC)
                    && (state_q != S_EXEC);
+    wire external_dabt_cause = external_data_abort_q
+                             || external_data_abort_now;
+    wire debug_dabt_cause = debug_data_abort_q || debug_data_abort_now;
+    wire debug_pabt_fires = pabt_fires && debug_pabt_pending
+                          && !de_q.pabort;
+    wire debug_dabt_fires = dabt_fires && debug_dabt_cause
+                          && !external_dabt_cause;
+    assign dbg_abort_taken = debug_pabt_fires || debug_dabt_fires;
 
     // TRM §2.9.10 DABT+FIQ interlock. DABT must save the interrupted
     // program first, without setting CPSR.F. The immediately following

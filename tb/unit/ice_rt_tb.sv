@@ -73,6 +73,8 @@ module ice_rt_tb
         .tap_chain1_capture (1'b0),
         .chain1_capture_break(tb_chain1_capture_break),
         .entry_breakpoint   (tb_entry_breakpoint),
+        .monitor_mode       (tb_monitor_mode),
+        .monitor_data_abort (tb_monitor_data_abort),
         .core_halt          (core_halt),
         .dbg_break_internal (dbg_break_internal),
         .breakpoint_fetch   (breakpoint_fetch),
@@ -116,6 +118,8 @@ module ice_rt_tb
     logic        tb_inject_active;
     logic        tb_chain1_capture_break;
     logic        tb_entry_breakpoint;
+    logic        tb_monitor_mode;
+    logic        tb_monitor_data_abort;
 
     int errors = 0;
 
@@ -240,6 +244,7 @@ module ice_rt_tb
                      tb_dcc_rx_full, tb_inject_we, tb_inject_instr,
                      tb_inject_active, tb_chain1_capture_break,
                      tb_entry_breakpoint,
+                     tb_monitor_mode, tb_monitor_data_abort,
                      scan_raddr};
     /* verilator lint_on UNUSEDSIGNAL */
 

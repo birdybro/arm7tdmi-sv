@@ -30,6 +30,8 @@ module arm7tdmis_ice_rt
                                             //      latched entry-cause bit
     output logic        chain1_capture_break,
     output logic        entry_breakpoint,  // retained for r15 scan formula
+    output logic        monitor_mode,       // Debug Control[4], DBGEN-gated
+    output logic        monitor_data_abort, // aligned enabled data WP hit
 
     // §20: CP14 DCC and Debug Abort Status paths. Processor c1 writes fill
     // TX; processor c1 reads consume RX. c0 returns live version/W/R status.
@@ -123,6 +125,9 @@ module arm7tdmis_ice_rt
     // Async reset (DBGnTRST) per TRM. Normal ICE registers are writable
     // from scan chain 2. DCC control/data are live resources implemented
     // separately below rather than ordinary storage slots.
+    localparam logic [4:0] DEBUG_CTRL_ADDR = 5'h00;
+    localparam logic [4:0] DEBUG_STAT_ADDR = 5'h01;
+    localparam logic [4:0] VECTOR_CATCH_ADDR = 5'h02;
     localparam logic [4:0] DCC_CTRL_ADDR = 5'h04;
     always_ff @(posedge CLK or negedge DBGnTRST) begin
         if (!DBGnTRST) begin
@@ -130,7 +135,23 @@ module arm7tdmis_ice_rt
         end else begin
             if (scan_we && (scan_addr != DCC_CTRL_ADDR)
                         && (scan_addr != 5'h05)) begin
-                regs[scan_addr] <= scan_wdata[31:0];
+                unique case (scan_addr)
+                    // Debug Control is six bits wide and bit 3 is SBZ/RAZ.
+                    DEBUG_CTRL_ADDR:
+                        regs[scan_addr] <=
+                            {26'h0, scan_wdata[5:4], 1'b0,
+                             scan_wdata[2:0]};
+                    // Debug Status is a live, read-only register.
+                    DEBUG_STAT_ADDR: ;
+                    VECTOR_CATCH_ADDR:
+                        regs[scan_addr] <= {24'h0, scan_wdata[7:0]};
+                    WP0_CTRL_VAL, WP1_CTRL_VAL:
+                        regs[scan_addr] <= {23'h0, scan_wdata[8:0]};
+                    WP0_CTRL_MASK, WP1_CTRL_MASK:
+                        regs[scan_addr] <= {24'h0, scan_wdata[7:0]};
+                    default:
+                        regs[scan_addr] <= scan_wdata[31:0];
+                endcase
             end
         end
     end
@@ -209,11 +230,11 @@ module arm7tdmis_ice_rt
     wire dbg_rq_synced    = dbg_rq_sync_q[1];
     wire dbg_break_synced = dbg_break_sync_q[1];
 
-    // §22 / §30.22.4: Debug-state FSM. Three-state at the architectural
-    // level (RUNNING / HALTED / MONITOR), but this implementation only has
-    // the HALTED branch; MONITOR mode (where a debug-abort exception
-    // fires instead of stopping the pipeline) is left for the cycle-
-    // accuracy pass since it overlaps the DABT exception path.
+    // §22 / §30.22.4: Debug-state FSM. Monitor mode is a comparator-output
+    // policy, not a halted core state: enabled breakpoint/watchpoint hits
+    // are exported to the core as Prefetch/Data Abort requests while the
+    // FSM remains RUNNING. DBGRQ can still request an explicit debug halt;
+    // external DBGBREAK is unsupported while monitor mode is selected.
     //
     // Entry conditions (any of):
     //   - dbg_break_internal (WP/VC hit, see above)
@@ -245,12 +266,17 @@ module arm7tdmis_ice_rt
             && tap_inject_instr[7] && tap_inject_instr[4]
             && (tap_inject_instr[6:5] != 2'b00));
 
-    wire ice_dbgrq_force = regs[5'h00][1];
+    assign monitor_mode = DBGEN && regs[DEBUG_CTRL_ADDR][4];
+
+    wire ice_dbgrq_force = regs[DEBUG_CTRL_ADDR][1];
     wire dbgrqi          = (ice_dbgrq_force || dbg_rq_synced) && DBGEN;
     wire halt_entry_req  = DBGEN
-                         && (watchpoint_halt_pre || dbg_break_synced || dbgrqi);
+                         && (watchpoint_halt_pre
+                             || (dbg_break_synced && !monitor_mode)
+                             || dbgrqi);
     wire halt_entry_watchpoint = watchpoint_halt_pre
-                               || (dbg_break_synced && watch_nopc_q);
+                               || (dbg_break_synced && !monitor_mode
+                                   && watch_nopc_q);
 
     // dbg_break_internal_pre exists so we can use it BEFORE the wires
     // below see the FSM output — recursive feedback otherwise.
@@ -271,7 +297,7 @@ module arm7tdmis_ice_rt
     };
     always_comb begin
         unique case (scan_addr)
-            5'h01: scan_rdata = {27'h0, dbg_status};
+            DEBUG_STAT_ADDR: scan_rdata = {27'h0, dbg_status};
             5'h04: scan_rdata = core_dcc_control;
             5'h05: scan_rdata = dcc_tx_data_q;
             default: scan_rdata = regs[scan_addr];
@@ -409,9 +435,12 @@ module arm7tdmis_ice_rt
     wire wp0_enable = regs[WP0_CTRL_VAL][8];
     wire wp1_enable = regs[WP1_CTRL_VAL][8];
 
-    // DBGRNG includes address, data, and all control fields, ignores ENABLE,
-    // and is forced LOW with all other debug outputs when DBGEN is LOW.
-    assign DBGRNG = DBGEN ? {wp1_rangeout, wp0_rangeout} : 2'b00;
+    // Debug Control[5] suppresses comparator outputs while their registers
+    // are being reprogrammed. DBGRNG otherwise includes address, data, and
+    // all control fields and remains independent of ENABLE.
+    wire comparators_enabled = DBGEN && !regs[DEBUG_CTRL_ADDR][5];
+    assign DBGRNG = comparators_enabled
+                  ? {wp1_rangeout, wp0_rangeout} : 2'b00;
 
     // §22: Vector Catch (ICE-RT register 0x02, 8 bits) — trap on opcode
     // fetch of an exception vector address. Each bit corresponds to one
@@ -435,16 +464,50 @@ module arm7tdmis_ice_rt
     // PC write, or exception therefore cancels a breakpoint by flushing
     // its tag. Data watchpoints instead request a halt after the current
     // instruction reaches its architectural completion boundary.
-    wire enabled_wp_match = (wp0_rangeout && wp0_enable)
-                         || (wp1_rangeout && wp1_enable);
-    assign breakpoint_fetch_pre = DBGEN
-                                && ((enabled_wp_match && !watch_nopc_q)
-                                    || vec_catch_hit);
-    assign watchpoint_halt_pre   = DBGEN && enabled_wp_match && watch_nopc_q;
+    wire enabled_wp_match = comparators_enabled
+                         && ((wp0_rangeout && wp0_enable)
+                             || (wp1_rangeout && wp1_enable));
+
+    // Monitor mode cannot use data-dependent or RANGE/CHAIN-coupled
+    // comparisons (TRM §5.9.2). Generate its abort from the supported
+    // address and control qualifiers only, and fail closed if a debugger
+    // leaves either forbidden feature selected. DBGEXT remains a supported
+    // external conditioner in the published r4p3 list.
+    wire wp0_monitor_supported = &regs[WP0_DATA_MASK]
+                               && &regs[WP0_CTRL_MASK][7:6];
+    wire wp1_monitor_supported = &regs[WP1_DATA_MASK]
+                               && &regs[WP1_CTRL_MASK][7:6];
+    wire wp0_monitor_ctrl_match =
+        &((regs[WP0_CTRL_VAL][5:0]
+           ~^ {watch_extern_q[0], watch_control_low})
+          | regs[WP0_CTRL_MASK][5:0]);
+    wire wp1_monitor_ctrl_match =
+        &((regs[WP1_CTRL_VAL][5:0]
+           ~^ {watch_extern_q[1], watch_control_low})
+          | regs[WP1_CTRL_MASK][5:0]);
+    wire monitor_wp0_match = comparators_enabled && watch_valid_q
+                           && wp0_enable && wp0_monitor_supported
+                           && wp0_addr_match && wp0_monitor_ctrl_match;
+    wire monitor_wp1_match = comparators_enabled && watch_valid_q
+                           && wp1_enable && wp1_monitor_supported
+                           && wp1_addr_match && wp1_monitor_ctrl_match;
+    wire monitor_enabled_wp_match = monitor_wp0_match || monitor_wp1_match;
+
+    assign breakpoint_fetch_pre =
+        monitor_mode
+        ? (monitor_enabled_wp_match && !watch_nopc_q)
+        : (comparators_enabled
+           && ((enabled_wp_match && !watch_nopc_q) || vec_catch_hit));
+    wire data_watchpoint_pre = enabled_wp_match && watch_nopc_q;
+    assign monitor_data_abort = monitor_mode
+                              && monitor_enabled_wp_match
+                              && watch_nopc_q;
+    assign watchpoint_halt_pre = !monitor_mode && data_watchpoint_pre;
 
     // §30.22.1: DBGEN=0 forces all debug outputs LOW.
     assign dbg_break_internal_pre = breakpoint_fetch_pre
-                                  || watchpoint_halt_pre;
+                                  || watchpoint_halt_pre
+                                  || monitor_data_abort;
     assign dbg_break_internal     = dbg_break_internal_pre;
     assign breakpoint_fetch       = breakpoint_fetch_pre;
 
@@ -491,7 +554,8 @@ module arm7tdmis_ice_rt
                                 halt_pending_q <= 1'b1;
                                 halt_watchpoint_q <= halt_entry_watchpoint;
                             end
-                        end else if (core_breakpoint_execute) begin
+                        end else if (core_breakpoint_execute
+                                     && !monitor_mode) begin
                             // The core suppresses this edge's execution and
                             // freezes while this FSM enters debug state.
                             dbg_state_q       <= DBG_HALTED;
@@ -518,7 +582,13 @@ module arm7tdmis_ice_rt
                     DBG_HALTED: begin
                         halt_pending_q    <= 1'b0;
                         halt_watchpoint_q <= 1'b0;
-                        if (tap_restart_req && !system_speed_pending_q
+                        if (!DBGEN) begin
+                            dbg_state_q <= DBG_RUNNING;
+                            breakpoint_halt_q <= 1'b0;
+                            breakpoint_resume_q <= 1'b0;
+                            entry_watchpoint_q <= 1'b0;
+                        end else if (tap_restart_req
+                                            && !system_speed_pending_q
                                             && !system_speed_active_q) begin
                             dbg_state_q <= DBG_RUNNING;
                             breakpoint_resume_q <= breakpoint_halt_q;
@@ -620,10 +690,11 @@ module arm7tdmis_ice_rt
     // that edge; the top-level gates only the core's clock enable.
     wire breakpoint_stop = (dbg_state_q == DBG_RUNNING)
                          && DBGEN && core_breakpoint_execute
+                         && !monitor_mode
                          && !breakpoint_resume_q;
 
     // Core un-halts while injecting.
-    assign core_halt = (in_debug_halt || breakpoint_stop)
+    assign core_halt = DBGEN && (in_debug_halt || breakpoint_stop)
                      && !inject_active_q;
 
     // Hold the request until an enabled core edge accepts it.
@@ -634,7 +705,7 @@ module arm7tdmis_ice_rt
     // §30.22.6: DBGACK_pin = ICE_control[0] OR DBGACKI. DBGACKI is HIGH
     // while the debug-state FSM is in HALTED. Index 0x00 is the Debug
     // Control register.
-    wire ice_dbg_ack_forced = regs[5'h00][0];
+    wire ice_dbg_ack_forced = regs[DEBUG_CTRL_ADDR][0];
     wire dbgacki            = in_debug_halt && !system_speed_active_q;
     assign dbg_ack = DBGEN && (ice_dbg_ack_forced || dbgacki);
 
@@ -643,7 +714,7 @@ module arm7tdmis_ice_rt
     // CPSR.I/F. The debug context remains active during a system-speed
     // access even though DBGACKI temporarily drops, so pending interrupts
     // stay suppressed until a real debug exit.
-    wire ice_intdis = regs[5'h00][2];
+    wire ice_intdis = regs[DEBUG_CTRL_ADDR][2];
     assign ifen = !(DBGEN && (ice_intdis || in_debug_halt));
 
     // Scan chain 2 upper bits are decoded by the TAP-facing wrapper.
