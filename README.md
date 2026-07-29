@@ -164,7 +164,7 @@ features; the complete backlog is `TASKS.md` §31.
 |---|---|---|
 | **Quartus place-and-route** | Toolchain not installed on the build box. RTL is written to Cyclone V conventions (ALM logic, MLAB/M10K BRAM inference, DSP for `*`); SDC first pass exists. | `§26` FPGA bring-up. |
 | Correct exception, abort, endian, and bus timing | Release-blocking functional work. | Implement and verify §31.3–§31.5. |
-| MiSTer/PocketStation integration | The canonical wrapper exists, but packaging, save states, framework/hardware builds, and a reference boot do not. | Complete §31.9. |
+| MiSTer/PocketStation integration | The canonical wrapper and portable FPGA source package exist, but save states, framework/hardware builds, and a reference boot do not. | Complete §31.9. |
 | Formal/differential/coverage closure | Required sign-off evidence is absent. | Implement and verify §31.10. |
 
 ARMv4T features that don't exist in r4p3 are also not implemented (and explicitly forbidden in TASKS.md §30.0): `BKPT`, `BLX`, `CLZ`, the Q flag, the `MAS[1:0]` bus pins (it's `SIZE[1:0]` here), `DBGRESTART`, separate `DBGINSTR` (only `DBGINSTRVALID` is real). Software breakpoints work via EmbeddedICE-RT pattern matching.
@@ -200,6 +200,7 @@ docs/
   PIPELINE.md, DEBUG.md, MULTIPLY.md, EXCEPTIONS.md, README.md
 
 scripts/      Makefile, sim.f / tb.f filelists, arm7tdmis.sdc
+fpga/         portable wrapper file list/QIP/QSF/SDC and public example top
 
 ARM_DDI_0234B_ARM7TDMI-S_r4p3_TRM.pdf   authoritative spec
 TASKS.md      implementation roadmap (29 sections, 10 milestones)

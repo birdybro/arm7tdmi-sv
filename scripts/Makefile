@@ -16,6 +16,8 @@ PYTHON    ?= python3
 
 SIM_F     := sim.f
 TB_F      := tb.f
+FPGA_F    := ../fpga/arm7tdmi_mister.f
+FPGA_EXAMPLE := ../fpga/example/arm7tdmi_mister_example_top.sv
 
 TOP_RTL   := arm7tdmis_top
 TOP_TB    := arm7tdmis_tb_top
@@ -41,7 +43,7 @@ INTEG_COMMON_SRCS := \
 	../tb/integration/arm7tdmis_assertions.sv \
 	../tb/integration/arm7tdmis_test_fixture.sv
 
-.PHONY: all lint lint-mister lint-tb sim run wave clean help regress regress-quick \
+.PHONY: all lint lint-mister lint-example lint-tb sim run wave clean help regress regress-quick \
         harness-unit harness-self-test \
         $(addprefix unit-, $(UNIT_TESTS)) unit \
         $(addprefix integ-, $(INTEG_TESTS)) integ
@@ -54,6 +56,11 @@ lint:
 lint-mister:
 	$(VERILATOR) --lint-only $(VFLAGS_LINT) \
 	    --top-module arm7tdmi_mister -f $(SIM_F)
+
+lint-example:
+	$(VERILATOR) --lint-only $(VFLAGS_LINT) \
+	    --top-module arm7tdmi_mister_example_top \
+	    -f $(FPGA_F) $(FPGA_EXAMPLE)
 
 lint-tb:
 	$(VERILATOR) --lint-only $(VFLAGS_LINT) --top-module $(TOP_TB) -f $(SIM_F) -f $(TB_F)
@@ -142,6 +149,7 @@ help:
 	@echo "Targets:"
 	@echo "  lint         Verilator --lint-only on RTL only (default)"
 	@echo "  lint-mister  Verilator --lint-only on the canonical FPGA wrapper"
+	@echo "  lint-example Verilator --lint-only on the portable FPGA example"
 	@echo "  lint-tb      Verilator --lint-only including the integration TB"
 	@echo "  sim          build the integration testbench binary"
 	@echo "  run          build and run; emits cycle.csv + waves.fst"

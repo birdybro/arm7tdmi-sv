@@ -2872,9 +2872,16 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   all eight combinations. It checks both external byte-lane maps, a complete
   IDCODE scan versus disabled-debug isolation, and claimed versus
   forced-absent external CDP behavior for each relevant profile.
-- [ ] **MIST-005:** Add complete `.qip`/file-list/QSF integration fragments and an
+- [x] **MIST-005:** Add complete `.qip`/file-list/QSF integration fragments and an
   example top that can be consumed without private include paths, hierarchical peeks,
   or hand-edited generated files.
+  `fpga/arm7tdmi_mister.{f,qip,qsf,sdc}` and
+  `fpga/example/arm7tdmi_mister_example_top.sv` form the portable package.
+  `scripts/tests/test_fpga_package.py` proves exact source-manifest parity,
+  repository-relative paths, public-fragment references, and absence of
+  hierarchy-dependent integration; `make -C scripts lint-example` elaborates
+  the complete package as the selected Cyclone V example top. Both checks are
+  release-regression phases.
 - [ ] **MIST-006:** Add a versioned architectural state export/import handshake for
   MiSTer save states. Include all visible registers, banked registers, CPSR/SPSRs,
   pipeline and any in-flight bus/debug state (including a snapshot between Thumb BL

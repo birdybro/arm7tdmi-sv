@@ -122,6 +122,36 @@ The `DBG_STEP_*` interface is the explicitly synchronous transport specified
 in [DEBUG.md](DEBUG.md). It remains isolated when debug is disabled. It is not
 an asynchronous TCK/RTCK interface.
 
+## Portable FPGA package
+
+`fpga/arm7tdmi_mister.f` is the simulator/tool-neutral ordered source list.
+Paths are relative to the file, so a consumer can pass it directly to a tool
+that supports Verilog file lists. `fpga/arm7tdmi_mister.qip` contains the same
+source set using Quartus's QIP-relative path anchor. A MiSTer project can add
+that one QIP and instantiate `arm7tdmi_mister`; it does not need private
+include paths or generated source edits.
+
+`fpga/arm7tdmi_mister.qsf` is a standalone Cyclone V/DE10-Nano elaboration
+example, not a complete MiSTer framework project. It selects
+`5CSEBA6U23I7`, imports the QIP, the example SDC, and
+`fpga/example/arm7tdmi_mister_example_top.sv`. The example top exposes only
+the canonical memory and event boundary and trims debug/coprocessor features.
+It contains no hierarchy-dependent integration.
+
+From the repository root, run:
+
+```sh
+make -C scripts harness-unit
+make -C scripts lint-example
+```
+
+The first command proves that the plain file list and QIP contain exactly the
+public wrapper dependencies and that all package paths are portable. The
+second elaborates the package and example through the public wrapper only.
+The supplied SDC assumes a 50 MHz standalone `CLK`; a containing MiSTer
+project must replace boundary delays and the clock period with its selected
+framework constraints while retaining equivalent reset/CDC treatment.
+
 ## Evidence and current limits
 
 `make -C scripts lint-mister` elaborates this wrapper as the synthesis top.
@@ -148,7 +178,7 @@ The following are intentionally not claimed by this version of the wrapper:
 
 - save-state export/import or quiescent snapshot;
 - a PocketStation subsystem or BIOS/software bundle;
-- MiSTer framework, QSF/QIP, fitted/timed, or on-board evidence;
+- MiSTer framework integration, fitted/timed, or on-board evidence;
 - DMA/arbitration behavior beyond the exposed lock/more hints; or
 - Avalon-MM, Wishbone, or MiSTer `enable/done` thin adapters.
 

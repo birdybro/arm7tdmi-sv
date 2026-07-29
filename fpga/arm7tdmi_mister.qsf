@@ -1,0 +1,15 @@
+# Standalone elaboration example. A host MiSTer project normally imports only
+# arm7tdmi_mister.qip and supplies its own top, pins, device, and timing policy.
+
+set_global_assignment -name FAMILY "Cyclone V"
+set_global_assignment -name DEVICE 5CSEBA6U23I7
+set_global_assignment -name TOP_LEVEL_ENTITY arm7tdmi_mister_example_top
+
+set_global_assignment -name QIP_FILE arm7tdmi_mister.qip
+set_global_assignment -name SYSTEMVERILOG_FILE example/arm7tdmi_mister_example_top.sv
+set_global_assignment -name SDC_FILE arm7tdmi_mister.sdc
+
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
+
+set_global_assignment -name LAST_QUARTUS_VERSION "17.0.2 Lite Edition"

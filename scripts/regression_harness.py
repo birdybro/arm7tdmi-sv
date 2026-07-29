@@ -48,7 +48,7 @@ def _utc_now() -> str:
 def _source_digest() -> str:
     """Hash every local source/build input, including untracked test files."""
     candidates: list[pathlib.Path] = []
-    for directory in ("rtl", "tb", "scripts"):
+    for directory in ("rtl", "tb", "scripts", "fpga"):
         root = REPO_ROOT / directory
         for path in root.rglob("*"):
             if not path.is_file():
@@ -110,7 +110,12 @@ def collect_metadata(
         "variant": variant,
         "seed": seed,
         "manifest": {
-            "lint": ["raw-core", "mister-wrapper", "testbench"],
+            "lint": [
+                "raw-core",
+                "mister-wrapper",
+                "fpga-package-example",
+                "testbench",
+            ],
             "harness": ["unit", "expected-failure"],
             "unit": list(unit_tests),
             "integration": list(integration_tests),
@@ -207,6 +212,7 @@ def _phases(
     yield _make_phase("clean", "clean")
     yield _make_phase("lint-rtl", "lint")
     yield _make_phase("lint-mister-wrapper", "lint-mister")
+    yield _make_phase("lint-fpga-package-example", "lint-example")
     yield _make_phase("lint-testbench", "lint-tb")
     yield _make_phase("harness-unit", "harness-unit")
     yield _make_phase("harness-expected-failure", "harness-self-test")
