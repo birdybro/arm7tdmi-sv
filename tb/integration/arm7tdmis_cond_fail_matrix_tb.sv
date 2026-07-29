@@ -2,8 +2,8 @@
 //
 // Every genuinely conditional ARM condition (EQ through LE) is forced false
 // for a representative of every decode class and every distinct side-effect
-// path.  An unexecuted instruction must take exactly the single S opcode
-// cycle in TRM r4p3 Table 7-23:
+// path in both Supervisor and User state.  An unexecuted instruction must
+// take exactly the single S opcode cycle in TRM r4p3 Table 7-23:
 //
 //   incoming data/address phase: PC+8 opcode, word read, S, Prot0=0
 //   outgoing address phase:      PC+12 opcode, word read, S, Prot0=0
@@ -18,11 +18,13 @@
 module arm7tdmis_cond_fail_matrix_tb
     import arm7tdmis_bus_pkg::*;
     import arm7tdmis_instr_pkg::*;
+    import arm7tdmis_types_pkg::*;
 ;
 
+    localparam int MODE_COUNT = 2;
     localparam int COND_COUNT = 14;
     localparam int OP_COUNT   = 39;
-    localparam logic [31:0] TEST_PC = 32'h0000_0040;
+    localparam logic [31:0] TEST_PC = 32'h0000_0048;
 
     logic CLK;
     initial begin
@@ -88,6 +90,7 @@ module arm7tdmis_cond_fail_matrix_tb
     logic        dcc_rx_full_before;
     logic        dbg_abt_before;
     int unsigned rows_completed = 0;
+    int          current_mode_idx = 0;
 
     function automatic logic [3:0] false_nzcv(input int cond_idx);
         unique case (cond_idx)
@@ -120,6 +123,10 @@ module arm7tdmis_cond_fail_matrix_tb
            12: return "GT"; 13: return "LE";
             default: return "invalid";
         endcase
+    endfunction
+
+    function automatic string mode_name(input int mode_idx);
+        return mode_idx == 0 ? "Supervisor" : "User";
     endfunction
 
     function automatic logic [31:0] op_opcode(input int op_idx);
@@ -240,11 +247,16 @@ module arm7tdmis_cond_fail_matrix_tb
         input int op_idx,
         input string reason
     );
-        $fatal(1, "[cond_fail_matrix] FAIL %s-failed %s: %s",
-               cond_name(cond_idx), op_name(op_idx), reason);
+        $fatal(1, "[cond_fail_matrix] FAIL %s %s-failed %s: %s",
+               mode_name(current_mode_idx), cond_name(cond_idx),
+               op_name(op_idx), reason);
     endtask
 
-    task automatic setup_row(input int cond_idx, input int op_idx);
+    task automatic setup_row(
+        input int mode_idx,
+        input int cond_idx,
+        input int op_idx
+    );
         logic [31:0] opcode;
 
         for (int word = 0; word < 256; word++)
@@ -261,15 +273,22 @@ module arm7tdmis_cond_fail_matrix_tb
         u_mem.mem[12] = 32'hE3A0_2C01; // MOV r2,#0x100
         u_mem.mem[13] = 32'hE59F_3048; // LDR r3,[pc,#0x48] -> 0x84
         u_mem.mem[14] = 32'hE16F_F003; // MSR SPSR_fsxc,r3
-        u_mem.mem[15] = 32'hE3A0_3044; // MOV r3,#0x44
+        u_mem.mem[15] = (mode_idx == 0)
+                      ? 32'hE321_F0D3  // MSR CPSR_c,#Supervisor
+                      : 32'hE321_F0D0; // MSR CPSR_c,#User
+        // Drain the mode-changing MSR from Execute before the target's
+        // PC+8/PC+12 fetch addresses are issued.  PROT[1] is sampled when
+        // each address is issued, not retroactively when its opcode executes.
+        u_mem.mem[16] = 32'hE1A0_0000;
+        u_mem.mem[17] = 32'hE1A0_0000;
 
         opcode = op_opcode(op_idx);
         opcode[31:28] = 4'(cond_idx);
-        u_mem.mem[16] = opcode;       // test at 0x40
-        u_mem.mem[17] = 32'hE1A0_0000; // NOP at 0x44
-        u_mem.mem[18] = 32'hE1A0_0000; // PC+8 returned opcode
-        u_mem.mem[19] = 32'hE1A0_0000; // PC+12 outgoing fetch
-        u_mem.mem[20] = 32'hEAFF_FFFE;
+        u_mem.mem[18] = opcode;       // test at 0x48
+        u_mem.mem[19] = 32'hE1A0_0000; // NOP at 0x4c
+        u_mem.mem[20] = 32'hE1A0_0000; // PC+8 returned opcode
+        u_mem.mem[21] = 32'hE1A0_0000; // PC+12 outgoing fetch
+        u_mem.mem[22] = 32'hEAFF_FFFE;
 
         u_mem.mem[32] = {false_nzcv(cond_idx), 28'h0};
         u_mem.mem[33] = 32'hA000_00D3;
@@ -338,6 +357,18 @@ module arm7tdmis_cond_fail_matrix_tb
         input int cond_idx,
         input int op_idx
     );
+        logic [1:0] expected_prot;
+        logic       expected_cp_ntrans;
+
+        expected_prot = current_mode_idx == 0
+                      ? 2'(PROT_OPC_PRIV) : 2'(PROT_OPC_USR);
+        expected_cp_ntrans = current_mode_idx == 0;
+
+        if (u_dut.u_core.cpsr.m
+            !== (current_mode_idx == 0
+                ? 5'(MODE_SUPERVISOR) : 5'(MODE_USER)))
+            fail(cond_idx, op_idx, $sformatf(
+                "setup entered wrong mode %05b", u_dut.u_core.cpsr.m));
         if (u_dut.u_core.de_q.dec.instr_class
             !== expected_class(op_idx))
             fail(cond_idx, op_idx, $sformatf(
@@ -352,7 +383,7 @@ module arm7tdmis_cond_fail_matrix_tb
             || u_dut.u_core.bus_history_addr_q !== (TEST_PC + 32'd8)
             || u_dut.u_core.bus_history_write_q !== WRITE_READ
             || u_dut.u_core.bus_history_size_q !== 2'(SIZE_WORD)
-            || u_dut.u_core.bus_history_prot_q !== 2'(PROT_OPC_PRIV)
+            || u_dut.u_core.bus_history_prot_q !== expected_prot
             || u_dut.u_core.bus_history_lock_q !== LOCK_FREE
             || u_dut.u_core.bus_history_trans_q !== 2'(TRANS_S))
             fail(cond_idx, op_idx, $sformatf(
@@ -377,7 +408,7 @@ module arm7tdmis_cond_fail_matrix_tb
         if (ADDR !== (TEST_PC + 32'd12)
             || WRITE !== WRITE_READ
             || SIZE !== 2'(SIZE_WORD)
-            || PROT !== 2'(PROT_OPC_PRIV)
+            || PROT !== expected_prot
             || LOCK !== LOCK_FREE
             || TRANS !== 2'(TRANS_S))
             fail(cond_idx, op_idx, $sformatf(
@@ -389,7 +420,7 @@ module arm7tdmis_cond_fail_matrix_tb
         if (CPnI !== 1'b1)
             fail(cond_idx, op_idx, "CPnI asserted a coprocessor request");
         if (CPnMREQ !== 1'b0 || CPSEQ !== 1'b1
-            || CPnTRANS !== 1'b1 || CPnOPC !== 1'b0
+            || CPnTRANS !== expected_cp_ntrans || CPnOPC !== 1'b0
             || CPTBIT !== 1'b0)
             fail(cond_idx, op_idx, $sformatf(
                 "CP pipeline tuple MREQ/SEQ/TRANS/OPC/T=%0b/%0b/%0b/%0b/%0b",
@@ -404,13 +435,18 @@ module arm7tdmis_cond_fail_matrix_tb
                 DBGINSTRVALID, DBGnEXEC));
     endtask
 
-    task automatic run_row(input int cond_idx, input int op_idx);
+    task automatic run_row(
+        input int mode_idx,
+        input int cond_idx,
+        input int op_idx
+    );
         int wait_cycles;
 
+        current_mode_idx = mode_idx;
         @(negedge CLK);
         nRESET = 1'b0;
         repeat (4) @(posedge CLK);
-        setup_row(cond_idx, op_idx);
+        setup_row(mode_idx, cond_idx, op_idx);
         @(negedge CLK);
         nRESET = 1'b1;
 
@@ -444,18 +480,20 @@ module arm7tdmis_cond_fail_matrix_tb
     endtask
 
     initial begin
-        for (int cond_idx = 0; cond_idx < COND_COUNT; cond_idx++) begin
-            for (int op_idx = 0; op_idx < OP_COUNT; op_idx++) begin
-                run_row(cond_idx, op_idx);
-                rows_completed = rows_completed + 1;
+        for (int mode_idx = 0; mode_idx < MODE_COUNT; mode_idx++) begin
+            for (int cond_idx = 0; cond_idx < COND_COUNT; cond_idx++) begin
+                for (int op_idx = 0; op_idx < OP_COUNT; op_idx++) begin
+                    run_row(mode_idx, cond_idx, op_idx);
+                    rows_completed = rows_completed + 1;
+                end
             end
         end
 
-        if (rows_completed != (COND_COUNT * OP_COUNT))
+        if (rows_completed != (MODE_COUNT * COND_COUNT * OP_COUNT))
             $fatal(1, "[cond_fail_matrix] FAIL completed %0d/%0d rows",
-                   rows_completed, COND_COUNT * OP_COUNT);
-        $display("[cond_fail_matrix] PASS (%0d conditions x %0d paths = %0d rows)",
-                 COND_COUNT, OP_COUNT, rows_completed);
+                   rows_completed, MODE_COUNT * COND_COUNT * OP_COUNT);
+        $display("[cond_fail_matrix] PASS (%0d modes x %0d conditions x %0d paths = %0d rows)",
+                 MODE_COUNT, COND_COUNT, OP_COUNT, rows_completed);
         $finish;
     end
 
