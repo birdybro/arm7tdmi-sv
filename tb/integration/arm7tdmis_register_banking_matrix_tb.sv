@@ -232,6 +232,7 @@ module arm7tdmis_register_banking_matrix_tb
         logic test_seen;
         int data_cycles;
         int response_cycles;
+        int merged_internal_cycles;
 
         @(negedge CLK);
         nRESET = 1'b0;
@@ -243,6 +244,7 @@ module arm7tdmis_register_banking_matrix_tb
         test_seen = 1'b0;
         data_cycles = 0;
         response_cycles = 0;
+        merged_internal_cycles = 0;
         repeat (180) begin
             @(negedge CLK);
             if (u_dut.u_core.state_q == 5'd0
@@ -253,22 +255,37 @@ module arm7tdmis_register_banking_matrix_tb
             if (test_seen
                 && (TRANS inside {TRANS_N, TRANS_S})
                 && PROT[PROT_BIT_DATA]) begin
-                if (ADDR !== (TRANSFER_BASE + 32'(4 * data_cycles)))
-                    fail(case_id, $sformatf(
-                        "%s beat %0d address expected %08x got %08x",
-                        label, data_cycles,
-                        TRANSFER_BASE + 32'(4 * data_cycles), ADDR));
-                if (SIZE !== 2'(SIZE_WORD) || WRITE !== !load
-                    || !PROT[PROT_BIT_PRIV] || LOCK)
-                    fail(case_id, $sformatf(
-                        "%s beat %0d bus tuple is wrong", label,
-                        data_cycles));
-                if (TRANS !== (data_cycles == 0 ? TRANS_N : TRANS_S))
-                    fail(case_id, $sformatf(
-                        "%s beat %0d TRANS expected %02b got %02b",
-                        label, data_cycles,
-                        data_cycles == 0 ? TRANS_N : TRANS_S, TRANS));
-                data_cycles++;
+                if (ADDR >= TRANSFER_BASE
+                    && ADDR < (TRANSFER_BASE + 32'd28)) begin
+                    if (ADDR !== (TRANSFER_BASE + 32'(4 * data_cycles)))
+                        fail(case_id, $sformatf(
+                            "%s beat %0d address expected %08x got %08x",
+                            label, data_cycles,
+                            TRANSFER_BASE + 32'(4 * data_cycles), ADDR));
+                    if (SIZE !== 2'(SIZE_WORD) || WRITE !== !load
+                        || !PROT[PROT_BIT_PRIV] || LOCK)
+                        fail(case_id, $sformatf(
+                            "%s beat %0d bus tuple is wrong", label,
+                            data_cycles));
+                    if (TRANS !== (data_cycles == 0 ? TRANS_N : TRANS_S))
+                        fail(case_id, $sformatf(
+                            "%s beat %0d TRANS expected %02b got %02b",
+                            label, data_cycles,
+                            data_cycles == 0 ? TRANS_N : TRANS_S, TRANS));
+                    data_cycles++;
+                end else begin
+                    // Table 7-13 merges the LDM writeback with a pc+12/S
+                    // prefetch while retaining data-class controls.
+                    merged_internal_cycles++;
+                    if (!load || ADDR !== (TEST_PC + 32'd12)
+                        || WRITE !== WRITE_READ
+                        || SIZE !== 2'(SIZE_WORD)
+                        || PROT !== 2'(PROT_DAT_PRIV)
+                        || LOCK !== LOCK_FREE
+                        || TRANS !== 2'(TRANS_S))
+                        fail(case_id, {label,
+                            " emitted an unexpected merged LDM phase"});
+                end
             end
 
             // Data is one cycle behind its address-class phase. Check it
@@ -307,6 +324,10 @@ module arm7tdmis_register_banking_matrix_tb
             fail(case_id, $sformatf(
                 "%s expected 7 data responses got %0d",
                 label, response_cycles));
+        if (merged_internal_cycles != (load ? 1 : 0))
+            fail(case_id, $sformatf(
+                "%s expected %0d merged LDM phase got %0d",
+                label, load, merged_internal_cycles));
         if (u_dut.u_core.cpsr.m !== selected_mode
             || !u_dut.u_core.cpsr.i || !u_dut.u_core.cpsr.f
             || u_dut.u_core.cpsr.t)
