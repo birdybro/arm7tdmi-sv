@@ -2380,12 +2380,14 @@ No functional claim can become VERIFIED until every item here is complete.
   with `clean`, records the Git commit and dirty-source SHA-256, tool/platform
   versions, variant, seed, and complete manifest, then hashes every phase log in
   the atomic `arm7tdmis-regression-v1` JSON result.
-- [ ] **VER-005:** Run a harness self-test in CI that deliberately corrupts one expected
+- [x] **VER-005:** Run a harness self-test in CI that deliberately corrupts one expected
   result and proves the overall command fails. Add periodic mutation testing for major
-  writeback, flag, exception, and bus controls. The local regression now always
-  runs `tb/harness/expected_failure_tb.sv` and passes only when its real
-  simulator `$fatal` propagates nonzero; CI wiring and architectural-control
-  mutation jobs remain open.
+  writeback, flag, exception, and bus controls. The local regression and CI run
+  `tb/harness/expected_failure_tb.sv` and pass only when its real simulator
+  `$fatal` propagates nonzero. `scripts/mutation_harness.py` also requires four
+  opt-in RTL mutants to fail through their intended architectural diagnostics;
+  a surviving mutant, compile failure, or unrelated test failure fails the
+  mutation command. GitHub Actions runs this suite weekly and on manual dispatch.
 - [ ] **VER-006:** Treat assertions and simulator errors as fatal. Remove unsupported
   warning suppressions or give each one an owner, rationale, and expiry.
 - [x] **VER-007:** Stop treating `ABORT` during I/C as illegal testbench stimulus.

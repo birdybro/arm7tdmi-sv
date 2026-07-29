@@ -1,0 +1,47 @@
+name: verification
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  fail-hard-simulation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install open-source verification tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential make python3 verilator
+      - name: Prove lint and failure propagation
+        run: |
+          make -C scripts lint
+          make -C scripts lint-mister
+          make -C scripts lint-example
+          make -C scripts lint-tb
+          make -C scripts harness-unit
+          make -C scripts harness-self-test
+          make -C scripts raw-checker-self-test
+      - name: Run representative architectural paths
+        run: |
+          make -C scripts unit-regfile
+          make -C scripts integ-retire_interface
+          make -C scripts run
+
+  architectural-mutation:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install open-source verification tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential make python3 verilator
+      - name: Kill architectural-control mutants
+        run: make -C scripts mutation-self-test

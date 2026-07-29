@@ -62,7 +62,7 @@ INTEG_EXTRA_FLAGS_retire_interface := -DARM7TDMIS_VERIFICATION
         quartus-analysis quartus-compile \
         quartus-conformance-analysis quartus-conformance-compile \
         sim run wave clean help regress regress-quick \
-        harness-unit harness-self-test raw-checker-self-test \
+        harness-unit harness-self-test raw-checker-self-test mutation-self-test \
         $(addprefix unit-, $(UNIT_TESTS)) unit \
         $(addprefix integ-, $(INTEG_TESTS)) integ errata
 
@@ -228,6 +228,9 @@ raw-checker-self-test:
 	    echo "[raw-checker-self-test/$$case_name] PASS"; \
 	done
 
+mutation-self-test:
+	PYTHONPATH=. $(PYTHON) mutation_harness.py
+
 clean:
 	rm -rf $(OBJ_DIR) $(RUN_ARTIFACTS)
 
@@ -252,4 +255,5 @@ help:
 	@echo "  regress-quick lint/harness plus one unit/integration test and smoke"
 	@echo "  harness-unit unit-test the machine-readable regression harness"
 	@echo "  harness-self-test prove an intentional simulator failure stays fatal"
+	@echo "  mutation-self-test kill writeback/flag/exception/bus mutants"
 	@echo "  clean        remove obj_dir + run artifacts"

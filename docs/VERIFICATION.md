@@ -14,6 +14,21 @@ failure sentinel contains a real SystemVerilog `$fatal`; the enclosing target
 passes only when Verilator propagates that failure as a nonzero process status.
 This catches accidental loss of simulator failures in shell or result handling.
 
+`make -C scripts mutation-self-test` is the fail-closed architectural mutation
+gate. Compile-time hooks that are absent from normal builds suppress GPR
+writeback, suppress CPSR flag writes, suppress exception PSR entry, or invert
+the CPnMREQ bus contract. The sequence-dependency, flags, six-exception LR/PSR,
+and raw-bus tests must respectively kill those mutants. A nonzero compile or
+simulation exit is insufficient: each row must contain its expected
+architectural diagnostic, so a syntax error cannot masquerade as mutation
+coverage. `scripts/tests/test_mutation_harness.py` also proves that a survivor
+and a wrong detector fail orchestration.
+
+`.github/workflows/verification.yml` runs lint, all harness self-tests, the
+raw-bus mutation matrix, and representative architectural simulations for
+pushes and pull requests. Its Monday schedule and manual-dispatch path run the
+four-class architectural mutation suite.
+
 ## Machine-readable result
 
 Each run atomically updates `reports/generated/regression.json` using schema

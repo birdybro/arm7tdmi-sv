@@ -110,6 +110,13 @@ module arm7tdmis_top
     wire nFIQ_eff   = nFIQ | ~ice_ifen;
     wire core_clken = CLKEN && !ice_core_halt;
 
+    logic core_cpnmreq_unmutated;
+`ifdef ARM7TDMIS_MUTATE_BUS
+    assign CPnMREQ = ~core_cpnmreq_unmutated;
+`else
+    assign CPnMREQ = core_cpnmreq_unmutated;
+`endif
+
     arm7tdmis_core_pipelined u_core (
         .CLK       (CLK),
         .CLKEN     (core_clken),
@@ -127,7 +134,7 @@ module arm7tdmis_top
         .WDATA     (WDATA),
         .RDATA     (RDATA),
         .DMORE     (DMORE),
-        .CPnMREQ   (CPnMREQ),
+        .CPnMREQ   (core_cpnmreq_unmutated),
         .CPSEQ     (CPSEQ),
         .CPnTRANS  (CPnTRANS),
         .CPnOPC    (CPnOPC),

@@ -575,6 +575,17 @@ module arm7tdmis_core_pipelined
     logic [2:0]   exc_target_spsr_idx;
     psr_t         exc_new_cpsr;
 
+`ifdef ARM7TDMIS_MUTATE_FLAGS
+    wire cpsr_write_en_effective = cpsr_write_en && 1'b0;
+`else
+    wire cpsr_write_en_effective = cpsr_write_en;
+`endif
+`ifdef ARM7TDMIS_MUTATE_EXCEPTION
+    wire exc_enter_en_effective = exc_enter_en && 1'b0;
+`else
+    wire exc_enter_en_effective = exc_enter_en;
+`endif
+
     arm7tdmis_psr u_psr (
         .CLK                 (CLK),
         .CLKEN               (CLKEN),
@@ -582,7 +593,7 @@ module arm7tdmis_core_pipelined
         .cpsr                (cpsr),
         .spsr                (spsr_value),
         .spsr_valid          (spsr_valid),
-        .cpsr_write_en       (cpsr_write_en),
+        .cpsr_write_en       (cpsr_write_en_effective),
         .cpsr_write_data     (cpsr_write_data),
         .cpsr_write_mask     (cpsr_write_mask),
         .spsr_write_en       (msr_to_spsr),
@@ -591,7 +602,7 @@ module arm7tdmis_core_pipelined
         .cpsr_restore_en     (cpsr_restore_now),
         .bx_set_t_en         (bx_set_t_en),
         .bx_set_t_value      (bx_set_t_value),
-        .exc_enter_en        (exc_enter_en),
+        .exc_enter_en        (exc_enter_en_effective),
         .exc_target_spsr_idx (exc_target_spsr_idx),
         .exc_new_cpsr        (exc_new_cpsr)
 `ifdef ARM7TDMIS_VERIFICATION
@@ -668,6 +679,12 @@ module arm7tdmis_core_pipelined
     wire force_user_bank_eff = block_active && block_user_mode_q
                             && !(block_load_q && block_has_pc_q);
 
+`ifdef ARM7TDMIS_MUTATE_WRITEBACK
+    wire rf_write_en_effective = rf_write_en && 1'b0;
+`else
+    wire rf_write_en_effective = rf_write_en;
+`endif
+
     arm7tdmis_regfile u_regfile (
         .CLK             (CLK),
         .CLKEN           (CLKEN),
@@ -683,7 +700,7 @@ module arm7tdmis_core_pipelined
         .rc_data         (rf_rc_data),
         .wa_addr         (rf_write_addr),
         .wa_data         (rf_write_data),
-        .wa_enable       (rf_write_en),
+        .wa_enable       (rf_write_en_effective),
         .force_user_bank (force_user_bank_eff),
         .dbg_we          (dbg_reg_we),
         .dbg_addr        (dbg_reg_addr),
