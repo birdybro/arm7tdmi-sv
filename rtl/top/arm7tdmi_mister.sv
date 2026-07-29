@@ -340,7 +340,26 @@ module arm7tdmi_mister
         .DBGnTRST       (RESET_N),
         .DBGnTDOEN      (raw_dbgntdoen),
         .DMORE          (raw_dmore)
+`ifdef ARM7TDMIS_VERIFICATION
+        ,
+        .VER_RETIRE_VALID(ver_retire_unused[0]),
+        .VER_RETIRE_PC(ver_retire_unused[32:1]),
+        .VER_RETIRE_OPCODE(ver_retire_unused[64:33]),
+        .VER_RETIRE_THUMB(ver_retire_unused[65]),
+        .VER_RETIRE_CONDITION_PASS(ver_retire_unused[66]),
+        .VER_RETIRE_INJECTED(ver_retire_unused[67]),
+        .VER_RETIRE_EXCEPTION_VALID(ver_retire_unused[68]),
+        .VER_RETIRE_EXCEPTION(ver_retire_unused[71:69]),
+        .VER_RETIRE_GPRS(ver_retire_unused[1063:72]),
+        .VER_RETIRE_CPSR(ver_retire_unused[1095:1064]),
+        .VER_RETIRE_SPSRS(ver_retire_unused[1255:1096])
+`endif
     );
+
+`ifdef ARM7TDMIS_VERIFICATION
+    wire [1255:0] ver_retire_unused;
+    wire _unused_ver_retire = &{1'b0, ver_retire_unused};
+`endif
 
     // Keep optional physical inputs intentional in a trimmed elaboration.
     /* verilator lint_off UNUSEDSIGNAL */

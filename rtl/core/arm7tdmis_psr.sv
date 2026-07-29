@@ -75,6 +75,13 @@ module arm7tdmis_psr
     input  logic        exc_enter_en,
     input  logic [2:0]  exc_target_spsr_idx,
     input  psr_t        exc_new_cpsr
+`ifdef ARM7TDMIS_VERIFICATION
+    ,
+    // Stable storage snapshots for the public retirement interface.
+    // SPSR order is FIQ, IRQ, Supervisor, Abort, Undefined.
+    output logic [31:0]  VER_CPSR,
+    output logic [159:0] VER_SPSRS
+`endif
 );
 
     // ---- Storage ----
@@ -135,6 +142,14 @@ module arm7tdmis_psr
     assign cpsr       = psr_t'(cpsr_q);
     assign spsr_valid = mode_has_spsr(cur_mode);
     assign spsr       = spsr_valid ? psr_t'(spsr_q[cur_spsr_ix]) : '0;
+
+`ifdef ARM7TDMIS_VERIFICATION
+    assign VER_CPSR = cpsr_q;
+    for (genvar ver_spsr = 0; ver_spsr < 5;
+         ver_spsr = ver_spsr + 1) begin : gen_ver_spsr_snapshot
+        assign VER_SPSRS[(ver_spsr * 32) +: 32] = spsr_q[ver_spsr];
+    end
+`endif
 
     // ---- Sequential update ----
     always_ff @(posedge CLK) begin

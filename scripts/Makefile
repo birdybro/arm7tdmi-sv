@@ -54,6 +54,10 @@ INTEG_COMMON_SRCS := \
 	../tb/integration/arm7tdmis_test_fixture.sv \
 	../tb/integration/arm7tdmis_raw_bus_bind.sv
 
+# VER-009 instrumentation is absent from production/synthesis builds. Tests
+# that consume the public retirement contract opt into those ports explicitly.
+INTEG_EXTRA_FLAGS_retire_interface := -DARM7TDMIS_VERIFICATION
+
 .PHONY: all lint lint-mister lint-example lint-tb \
         quartus-analysis quartus-compile \
         quartus-conformance-analysis quartus-conformance-compile \
@@ -145,6 +149,7 @@ define INTEG_RULE
 integ-$(1):
 	mkdir -p $$(OBJ_DIR)
 	$$(VERILATOR) $$(VFLAGS_BUILD) -Wno-SYNCASYNCNET -Wno-UNOPTFLAT \
+	    $$(INTEG_EXTRA_FLAGS_$(1)) \
 	    --top-module arm7tdmis_$(1)_tb \
 	    --Mdir $$(OBJ_DIR)/integ_$(1) -f $$(SIM_F) \
 	    $$(INTEG_COMMON_SRCS) \

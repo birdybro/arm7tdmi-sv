@@ -68,6 +68,21 @@ module arm7tdmis_top
 
     // LDM/STM continuation hint to memory controllers
     output logic        DMORE
+`ifdef ARM7TDMIS_VERIFICATION
+    ,
+    // Public, verification-only architectural completion contract.
+    output logic         VER_RETIRE_VALID,
+    output logic [31:0]  VER_RETIRE_PC,
+    output logic [31:0]  VER_RETIRE_OPCODE,
+    output logic         VER_RETIRE_THUMB,
+    output logic         VER_RETIRE_CONDITION_PASS,
+    output logic         VER_RETIRE_INJECTED,
+    output logic         VER_RETIRE_EXCEPTION_VALID,
+    output logic [2:0]   VER_RETIRE_EXCEPTION,
+    output logic [991:0] VER_RETIRE_GPRS,
+    output logic [31:0]  VER_RETIRE_CPSR,
+    output logic [159:0] VER_RETIRE_SPSRS
+`endif
 );
 
     // ---- Reset synchronizer (§4) ----
@@ -157,6 +172,20 @@ module arm7tdmis_top
         .dbg_exception_vector_pc(ice_core_exception_vector_pc),
         .dbg_pc_redirect_pending(ice_core_pc_redirect_pending),
         .dbg_pc_redirect_pc(ice_core_pc_redirect_pc)
+`ifdef ARM7TDMIS_VERIFICATION
+        ,
+        .VER_RETIRE_VALID(VER_RETIRE_VALID),
+        .VER_RETIRE_PC(VER_RETIRE_PC),
+        .VER_RETIRE_OPCODE(VER_RETIRE_OPCODE),
+        .VER_RETIRE_THUMB(VER_RETIRE_THUMB),
+        .VER_RETIRE_CONDITION_PASS(VER_RETIRE_CONDITION_PASS),
+        .VER_RETIRE_INJECTED(VER_RETIRE_INJECTED),
+        .VER_RETIRE_EXCEPTION_VALID(VER_RETIRE_EXCEPTION_VALID),
+        .VER_RETIRE_EXCEPTION(VER_RETIRE_EXCEPTION),
+        .VER_RETIRE_GPRS(VER_RETIRE_GPRS),
+        .VER_RETIRE_CPSR(VER_RETIRE_CPSR),
+        .VER_RETIRE_SPSRS(VER_RETIRE_SPSRS)
+`endif
     );
 
     // ---- EmbeddedICE-RT (§22) ----

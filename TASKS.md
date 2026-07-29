@@ -2398,9 +2398,14 @@ No functional claim can become VERIFIED until every item here is complete.
   versioned regression JSON schema and per-phase log hashes are implemented and
   documented in `docs/VERIFICATION.md`; coverage generation and release-artifact
   archival remain open.
-- [ ] **VER-009:** Expose a verification-only architectural retirement interface
+- [x] **VER-009:** Expose a verification-only architectural retirement interface
   (instruction PC/opcode/state/condition result/register and CPSR effects/exception)
-  instead of making all scoreboards depend on private hierarchy.
+  instead of making all scoreboards depend on private hierarchy. Defining
+  `ARM7TDMIS_VERIFICATION` adds the stable `VER_RETIRE_*` top-level contract;
+  ordinary RTL/FPGA builds contain no instrumentation ports or logic.
+  `arm7tdmis_retire_interface_tb.sv` checks eleven exact events across ARM,
+  Thumb, condition failure, load/store substates, BX, and SWI post-state without
+  reading private CPU hierarchy.
 - [x] **VER-010:** Minimize and resolve both currently failing smoke checks. The SWPB
   check may itself be stale because later test code writes r12=13; decide RTL versus
   expectation only from an instruction trace and cited architecture behavior. Likewise,

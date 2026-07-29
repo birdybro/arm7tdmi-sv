@@ -36,6 +36,39 @@ versioned artifact archive together with the corresponding clean source commit.
 harness, and smoke path with one unit and one integration test. Its report is
 explicitly marked `"mode": "quick"` and cannot be mistaken for the full run.
 
+## Architectural retirement contract
+
+Define `ARM7TDMIS_VERIFICATION` when elaborating `arm7tdmis_top` to add the
+`VER_RETIRE_*` ports. The production and FPGA file lists do not define this
+symbol, so the interface and its identity latches are absent from synthesis.
+The `integ-retire_interface` target is the canonical opt-in example.
+
+`VER_RETIRE_VALID` is a one-clock pulse registered on the enabled edge that
+applies an instruction's final architectural effect. A condition-failed
+instruction is still one disposition. A synchronous trap or abort is one
+disposition with `VER_RETIRE_EXCEPTION_VALID`; a busy coprocessor instruction
+abandoned before completion does not retire. An asynchronous exception that
+has no paired instruction may assert only `VER_RETIRE_EXCEPTION_VALID`.
+Consumers sample the identity and snapshots after the event edge:
+
+- `VER_RETIRE_PC`, `VER_RETIRE_OPCODE`, `VER_RETIRE_THUMB`, and
+  `VER_RETIRE_CONDITION_PASS` identify the instruction. Thumb opcodes are
+  normalized into bits 15:0 independent of address lane and endianness.
+- `VER_RETIRE_INJECTED` distinguishes scan-chain debug-speed instructions.
+- `VER_RETIRE_EXCEPTION_VALID` and `VER_RETIRE_EXCEPTION` use the
+  `exception_e` values in `arm7tdmis_types_pkg`.
+- `VER_RETIRE_GPRS` is the post-event 31-slot physical regfile map documented
+  in `arm7tdmis_regfile.sv`; slot 15 is the intentional PC layout hole.
+  `VER_RETIRE_CPSR` and `VER_RETIRE_SPSRS` are post-event storage snapshots.
+  SPSR slices 0 through 4 are FIQ, IRQ, Supervisor, Abort, and Undefined.
+
+`arm7tdmis_retire_interface_tb` consumes only these CPU outputs. Its eleven
+exact events cross ARM and Thumb, a false condition, STR and LDR completion,
+BX interworking, normalized halfwords, and SWI entry. It checks the loaded
+destination, SVC link bank, CPSR, and saved pre-exception SPSR from the public
+snapshots. Memory initialization remains testbench hierarchy; architectural
+CPU observation does not.
+
 ## Exhaustive encoding evidence
 
 `reserved_decode_tb` is deliberately exhaustive rather than sample-based. It

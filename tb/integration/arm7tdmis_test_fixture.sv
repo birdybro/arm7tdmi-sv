@@ -1,9 +1,9 @@
 // Shared pin-level fixture for focused integration regressions.
 //
 // The fixture deliberately exposes the raw ARM7TDMI-S bus through hierarchy
-// and does not peek into the core to drive behavior. Tests may inspect
-// architectural state through u_dut until VER-009's retirement interface
-// replaces those read-only hierarchical checks.
+// and does not peek into the core to drive behavior. Legacy directed tests
+// retain read-only hierarchical checks; new architectural scoreboards use
+// arm7tdmis_top's ARM7TDMIS_VERIFICATION retirement contract instead.
 
 module arm7tdmis_test_fixture
     import arm7tdmis_bus_pkg::*;
@@ -108,7 +108,26 @@ module arm7tdmis_test_fixture
         .DBGnTRST       (1'b1),
         .DBGnTDOEN      (DBGnTDOEN),
         .DMORE          (DMORE)
+`ifdef ARM7TDMIS_VERIFICATION
+        ,
+        .VER_RETIRE_VALID(ver_retire_unused[0]),
+        .VER_RETIRE_PC(ver_retire_unused[32:1]),
+        .VER_RETIRE_OPCODE(ver_retire_unused[64:33]),
+        .VER_RETIRE_THUMB(ver_retire_unused[65]),
+        .VER_RETIRE_CONDITION_PASS(ver_retire_unused[66]),
+        .VER_RETIRE_INJECTED(ver_retire_unused[67]),
+        .VER_RETIRE_EXCEPTION_VALID(ver_retire_unused[68]),
+        .VER_RETIRE_EXCEPTION(ver_retire_unused[71:69]),
+        .VER_RETIRE_GPRS(ver_retire_unused[1063:72]),
+        .VER_RETIRE_CPSR(ver_retire_unused[1095:1064]),
+        .VER_RETIRE_SPSRS(ver_retire_unused[1255:1096])
+`endif
     );
+
+`ifdef ARM7TDMIS_VERIFICATION
+    wire [1255:0] ver_retire_unused;
+    wire _unused_ver_retire = &{1'b0, ver_retire_unused};
+`endif
 
     arm7tdmis_memory #(
         .WORDS    (MEMORY_WORDS),

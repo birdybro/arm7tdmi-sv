@@ -16,8 +16,11 @@ module arm7tdmis_retire_interface_tb
 
     localparam int EXPECTED_EVENTS = 11;
 
-    logic CLK = 1'b0;
-    always #5 CLK = ~CLK;
+    logic CLK;
+    initial begin
+        CLK = 1'b0;
+        forever #5 CLK = ~CLK;
+    end
 
     logic nRESET = 1'b0;
     logic [31:0] ADDR;
@@ -86,7 +89,7 @@ module arm7tdmis_retire_interface_tb
     logic [31:0] expected_opcode [0:EXPECTED_EVENTS-1];
     logic        expected_thumb  [0:EXPECTED_EVENTS-1];
     logic        expected_cond   [0:EXPECTED_EVENTS-1];
-    int unsigned event_count = 0;
+    int unsigned event_count;
 
     function automatic logic [31:0] physical_gpr(input int index);
         return VER_RETIRE_GPRS[(index * 32) +: 32];
@@ -159,10 +162,10 @@ module arm7tdmis_retire_interface_tb
                 fail("wrong exception cause");
 
             check_snapshot();
-            event_count = event_count + 1;
-            if (event_count == EXPECTED_EVENTS) begin
+            event_count <= event_count + 1;
+            if ((event_count + 1) == EXPECTED_EVENTS) begin
                 $display("[retire_interface] PASS (%0d events)",
-                         event_count);
+                         event_count + 1);
                 $finish;
             end
         end else if (VER_RETIRE_EXCEPTION_VALID) begin
@@ -171,6 +174,7 @@ module arm7tdmis_retire_interface_tb
     end
 
     initial begin
+        event_count = 0;
         for (int word = 0; word < 256; word++)
             u_mem.mem[word] = 32'hEAFF_FFFE;
 
@@ -240,5 +244,13 @@ module arm7tdmis_retire_interface_tb
         $fatal(1, "[retire_interface] TIMEOUT after %0d/%0d events",
                event_count, EXPECTED_EVENTS);
     end
+
+    // The contract test consumes only architectural retirement outputs.
+    // Drain unrelated pin-level status so -Wall remains a zero-warning gate.
+    wire _unused_pin_status = &{1'b0,
+        CPnMREQ, CPSEQ, CPnTRANS, CPnOPC, CPTBIT, CPnI,
+        DBGACK, DBGnEXEC, DBGINSTRVALID, DBGRNG,
+        DBGCOMMTX, DBGCOMMRX, DBGTDO, DBGnTDOEN, DMORE,
+        VER_RETIRE_CPSR[31:6]};
 
 endmodule

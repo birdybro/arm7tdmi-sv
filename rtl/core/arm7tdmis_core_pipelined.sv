@@ -126,6 +126,22 @@ module arm7tdmis_core_pipelined
     output logic [31:0] dbg_exception_vector_pc,
     output logic        dbg_pc_redirect_pending,
     output logic [31:0] dbg_pc_redirect_pc
+`ifdef ARM7TDMIS_VERIFICATION
+    ,
+    // VER-009 architectural retirement contract. These ports exist only
+    // when a verification build explicitly defines ARM7TDMIS_VERIFICATION.
+    output logic         VER_RETIRE_VALID,
+    output logic [31:0]  VER_RETIRE_PC,
+    output logic [31:0]  VER_RETIRE_OPCODE,
+    output logic         VER_RETIRE_THUMB,
+    output logic         VER_RETIRE_CONDITION_PASS,
+    output logic         VER_RETIRE_INJECTED,
+    output logic         VER_RETIRE_EXCEPTION_VALID,
+    output logic [2:0]   VER_RETIRE_EXCEPTION,
+    output logic [991:0] VER_RETIRE_GPRS,
+    output logic [31:0]  VER_RETIRE_CPSR,
+    output logic [159:0] VER_RETIRE_SPSRS
+`endif
 );
 
     // =====================================================================
@@ -578,6 +594,11 @@ module arm7tdmis_core_pipelined
         .exc_enter_en        (exc_enter_en),
         .exc_target_spsr_idx (exc_target_spsr_idx),
         .exc_new_cpsr        (exc_new_cpsr)
+`ifdef ARM7TDMIS_VERIFICATION
+        ,
+        .VER_CPSR            (VER_RETIRE_CPSR),
+        .VER_SPSRS           (VER_RETIRE_SPSRS)
+`endif
     );
 
     // ---- Condition evaluator (on the in-flight decoded instr) ----
@@ -670,6 +691,10 @@ module arm7tdmis_core_pipelined
         .dbg_force_user_bank(dbg_reg_force_user),
         .dbg_rdata       (dbg_reg_rdata),
         .pc_written      (rf_pc_written)
+`ifdef ARM7TDMIS_VERIFICATION
+        ,
+        .VER_GPRS        (VER_RETIRE_GPRS)
+`endif
     );
 
     // ---- Shifter ----
@@ -1391,6 +1416,134 @@ module arm7tdmis_core_pipelined
                              || pabt_fires || dabt_fires);
     wire cp_wait_interrupt_fires = (state_q == S_CP_WAIT)
                                  && (irq_fires || fiq_fires);
+
+`ifdef ARM7TDMIS_VERIFICATION
+    // -----------------------------------------------------------------
+    // Public architectural retirement event
+    // -----------------------------------------------------------------
+    //
+    // A completion pulse is registered on the same enabled edge as the
+    // instruction's final architectural effect. Consumers sample the event
+    // and the live snapshots after that edge. A trapping/aborted instruction
+    // is a disposition and therefore produces one retirement event with an
+    // exception tag. An asynchronous exception with no retiring instruction
+    // (for example, abandonment of a busy coprocessor instruction) produces
+    // only VER_RETIRE_EXCEPTION_VALID.
+    //
+    // Decode advances when a multicycle instruction leaves S_EXEC, so retain
+    // its identity until the final substate returns to S_EXEC. A coprocessor
+    // instruction abandoned by DBGRQ/IRQ/FIQ is explicitly not retirement.
+    logic        ver_active_q;
+    logic [31:0] ver_active_pc_q;
+    logic [31:0] ver_active_opcode_q;
+    logic        ver_active_thumb_q;
+    logic        ver_active_condition_q;
+    logic        ver_active_injected_q;
+
+    function automatic logic [31:0] ver_normalized_opcode(
+        input logic [31:0] instruction,
+        input logic        thumb_high_half,
+        input logic        instruction_thumb
+    );
+        if (!instruction_thumb)
+            return instruction;
+        if (thumb_high_half ^ CFGBIGEND)
+            return {16'h0000, instruction[31:16]};
+        return {16'h0000, instruction[15:0]};
+    endfunction
+
+    wire ver_instruction_starts =
+        executing && (state_next != S_EXEC);
+    wire ver_instruction_finishes_single =
+        executing && (state_next == S_EXEC);
+    wire ver_cp_instruction_abandoned =
+        (state_q == S_CP_WAIT) && cp_wait_abandon_pending;
+    wire ver_instruction_finishes_multi =
+        (state_q != S_EXEC) && (state_next == S_EXEC)
+        && ver_active_q && !ver_cp_instruction_abandoned;
+
+    logic [2:0] ver_exception_cause;
+    always_comb begin
+        if (dabt_fires)
+            ver_exception_cause = 3'(EXC_DATA_ABORT);
+        else if (fiq_fires)
+            ver_exception_cause = 3'(EXC_FIQ);
+        else if (irq_fires)
+            ver_exception_cause = 3'(EXC_IRQ);
+        else if (pabt_fires)
+            ver_exception_cause = 3'(EXC_PREFETCH_ABORT);
+        else if (undef_fires)
+            ver_exception_cause = 3'(EXC_UNDEF);
+        else
+            ver_exception_cause = 3'(EXC_SWI);
+    end
+
+    always_ff @(posedge CLK) begin
+        if (!nRESET) begin
+            VER_RETIRE_VALID           <= 1'b0;
+            VER_RETIRE_PC              <= 32'h0000_0000;
+            VER_RETIRE_OPCODE          <= 32'h0000_0000;
+            VER_RETIRE_THUMB           <= 1'b0;
+            VER_RETIRE_CONDITION_PASS  <= 1'b0;
+            VER_RETIRE_INJECTED        <= 1'b0;
+            VER_RETIRE_EXCEPTION_VALID <= 1'b0;
+            VER_RETIRE_EXCEPTION       <= 3'(EXC_RESET);
+            ver_active_q               <= 1'b0;
+            ver_active_pc_q            <= 32'h0000_0000;
+            ver_active_opcode_q        <= 32'h0000_0000;
+            ver_active_thumb_q         <= 1'b0;
+            ver_active_condition_q     <= 1'b0;
+            ver_active_injected_q      <= 1'b0;
+        end else begin
+            // Event outputs are single CLK pulses even when CLKEN is stopped
+            // immediately after a watchpoint or DBGRQ completion boundary.
+            VER_RETIRE_VALID           <= 1'b0;
+            VER_RETIRE_EXCEPTION_VALID <= 1'b0;
+
+            if (dbg_pc_write) begin
+                // A debugger-supplied resume PC abandons any held identity.
+                ver_active_q <= 1'b0;
+            end else if (CLKEN) begin
+                if (any_exc_fires) begin
+                    VER_RETIRE_EXCEPTION_VALID <= 1'b1;
+                    VER_RETIRE_EXCEPTION       <= ver_exception_cause;
+                end
+
+                if (ver_instruction_starts) begin
+                    ver_active_q           <= 1'b1;
+                    ver_active_pc_q        <= de_q.pc;
+                    ver_active_opcode_q    <= ver_normalized_opcode(
+                        de_q.instr, de_q.pc[1], de_q.thumb);
+                    ver_active_thumb_q     <= de_q.thumb;
+                    ver_active_condition_q <= condition_pass;
+                    ver_active_injected_q  <= de_q.injected;
+                end
+
+                if (ver_cp_instruction_abandoned)
+                    ver_active_q <= 1'b0;
+
+                if (ver_instruction_finishes_single) begin
+                    VER_RETIRE_VALID          <= 1'b1;
+                    VER_RETIRE_PC             <= de_q.pc;
+                    VER_RETIRE_OPCODE         <= ver_normalized_opcode(
+                        de_q.instr, de_q.pc[1], de_q.thumb);
+                    VER_RETIRE_THUMB          <= de_q.thumb;
+                    VER_RETIRE_CONDITION_PASS <= condition_pass;
+                    VER_RETIRE_INJECTED       <= de_q.injected;
+                    ver_active_q              <= 1'b0;
+                end else if (ver_instruction_finishes_multi) begin
+                    VER_RETIRE_VALID          <= 1'b1;
+                    VER_RETIRE_PC             <= ver_active_pc_q;
+                    VER_RETIRE_OPCODE         <= ver_active_opcode_q;
+                    VER_RETIRE_THUMB          <= ver_active_thumb_q;
+                    VER_RETIRE_CONDITION_PASS <= ver_active_condition_q;
+                    VER_RETIRE_INJECTED       <= ver_active_injected_q;
+                    ver_active_q              <= 1'b0;
+                end
+            end
+        end
+    end
+`endif
 
     // TRM §2.9.8 exception-link table. Synchronous SWI/UNDEF links use
     // the source instruction width; IRQ/FIQ/PABT always use PC+4; DABT

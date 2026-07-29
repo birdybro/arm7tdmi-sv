@@ -76,6 +76,12 @@ module arm7tdmis_regfile
 
     // Raised when wa_enable && wa_addr==15 — instruction wants to write PC.
     output logic        pc_written
+`ifdef ARM7TDMIS_VERIFICATION
+    ,
+    // Stable physical-bank snapshot for the public retirement interface.
+    // Index order is the storage map documented at the top of this file.
+    output logic [991:0] VER_GPRS
+`endif
 );
 
     logic [31:0] regs [0:30];
@@ -147,6 +153,13 @@ module arm7tdmis_regfile
     end
 
     assign pc_written = wa_enable && (wa_addr == 4'd15) && nRESET && CLKEN;
+
+`ifdef ARM7TDMIS_VERIFICATION
+    for (genvar ver_reg = 0; ver_reg < 31;
+         ver_reg = ver_reg + 1) begin : gen_ver_gpr_snapshot
+        assign VER_GPRS[(ver_reg * 32) +: 32] = regs[ver_reg];
+    end
+`endif
 
     // Slot 15 is reserved by the bank layout but never read (r15 reads use
     // pc_in) and never written (suppressed above). Drain it into a no-op
