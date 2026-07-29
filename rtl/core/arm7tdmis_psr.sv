@@ -11,7 +11,8 @@
 //      must not alter T via MSR; behavior is UNPREDICTABLE if they try, so
 //      we suppress the write rather than honor it).
 //   2. spsr_write_en  — same shape, targeting SPSR-of-current-mode.
-//      Ignored in User/System modes (no SPSR to write).
+//      Ignored in User/System modes (no SPSR to write); their read view
+//      is zero so the internal default bank index cannot leak FIQ state.
 //   3. cpsr_restore_en — exception return: CPSR ← SPSR-of-current-mode.
 //      Ignored in User/System modes.
 //
@@ -21,9 +22,16 @@
 // MSR field mask follows the four-bit MSR encoding from instruction[19:16],
 // passed in here as `{f, s, x, c}`:
 //   bit 0 (_c): bits [7:0]   control + mode + I/F/T
-//   bit 1 (_x): bits [15:8]  extension (RAZ/SBZP on r4p3)
-//   bit 2 (_s): bits [23:16] status    (RAZ/SBZP on r4p3)
-//   bit 3 (_f): bits [31:24] flags
+//   bit 1 (_x): bits [15:8]  extension (reserved/SBZP on r4p3)
+//   bit 2 (_s): bits [23:16] status    (reserved/SBZP on r4p3)
+//   bit 3 (_f): bits [31:24], of which only NZCV[31:28] are writable
+//
+// Deterministic policy for architecturally UNPREDICTABLE inputs:
+//   * x/s and the reserved low nibble of f preserve their stored values;
+//   * a selected control byte containing an invalid M[4:0] is rejected as
+//     a field, while an independently selected flags field may still commit;
+//   * CPSR.T writes through MSR are dropped; SPSR.T remains writable because
+//     exception-return software may deliberately select the restored state.
 
 module arm7tdmis_psr
     import arm7tdmis_psr_pkg::*, arm7tdmis_types_pkg::*;
@@ -91,14 +99,29 @@ module arm7tdmis_psr
         endcase
     endfunction
 
-    // ---- Field-mask expansion ----
-    function automatic logic [31:0] expand_mask(input logic [3:0] fld);
+    function automatic logic mode_is_valid(input logic [4:0] m);
+        unique case (m)
+            MODE_USER, MODE_FIQ, MODE_IRQ, MODE_SUPERVISOR,
+            MODE_ABORT, MODE_UNDEFINED, MODE_SYSTEM:
+                return 1'b1;
+            default:
+                return 1'b0;
+        endcase
+    endfunction
+
+    // ---- Architecturally writable field-mask expansion ----
+    // x/s and f[27:24] are reserved on ARM7TDMI-S, so an MSR targeting
+    // those locations is a read-modify-write preserve operation.
+    function automatic logic [31:0] writable_mask(
+        input logic       select_c,
+        input logic       select_f,
+        input logic       allow_t
+    );
         logic [31:0] m;
         m = '0;
-        if (fld[0]) m |= PSR_MASK_C;
-        if (fld[1]) m |= PSR_MASK_X;
-        if (fld[2]) m |= PSR_MASK_S;
-        if (fld[3]) m |= PSR_MASK_F;
+        if (select_c) m |= PSR_MASK_C;
+        if (select_f) m |= 32'hF000_0000;
+        if (!allow_t) m &= ~(32'h1 << PSR_BIT_T);
         return m;
     endfunction
 
@@ -108,7 +131,7 @@ module arm7tdmis_psr
 
     assign cpsr       = psr_t'(cpsr_q);
     assign spsr_valid = mode_has_spsr(cur_mode);
-    assign spsr       = psr_t'(spsr_q[cur_spsr_ix]);
+    assign spsr       = spsr_valid ? psr_t'(spsr_q[cur_spsr_ix]) : '0;
 
     // ---- Sequential update ----
     always_ff @(posedge CLK) begin
@@ -127,9 +150,16 @@ module arm7tdmis_psr
         end else if (CLKEN) begin
                 cpsr_next = cpsr_q;
 
-                // CPSR field-masked write — drop T (bit 5) per §30.8.3.
+                // CPSR field-masked write. Reserved x/s/f-low bits preserve,
+                // T is dropped, and an illegal requested mode rejects the
+                // complete control byte rather than entering the TRM's
+                // architecturally unrecoverable state.
                 if (cpsr_write_en) begin
-                    cpsr_mask = expand_mask(cpsr_write_mask) & ~(32'h1 << PSR_BIT_T);
+                    cpsr_mask = writable_mask(cpsr_write_mask[0],
+                                              cpsr_write_mask[3], 1'b0);
+                    if (cpsr_write_mask[0]
+                        && !mode_is_valid(cpsr_write_data[4:0]))
+                        cpsr_mask &= ~PSR_MASK_C;
                     // User mode may update NZCV only. In particular, an
                     // MSR CPSR_c cannot change mode or interrupt masks,
                     // and the unused high nibble of the flags byte is not
@@ -166,12 +196,22 @@ module arm7tdmis_psr
 
                 // SPSR field-masked write to current-mode SPSR.
                 if (spsr_write_en && mode_has_spsr(cur_mode)) begin
-                    spsr_mask = expand_mask(spsr_write_mask);
+                    spsr_mask = writable_mask(spsr_write_mask[0],
+                                              spsr_write_mask[3], 1'b1);
+                    if (spsr_write_mask[0]
+                        && !mode_is_valid(spsr_write_data[4:0]))
+                        spsr_mask &= ~PSR_MASK_C;
                     spsr_next = (spsr_q[cur_spsr_ix] & ~spsr_mask) |
                                 (spsr_write_data & spsr_mask);
                     spsr_q[cur_spsr_ix] <= spsr_next;
                 end
         end
     end
+
+    // x/s selectors are architecturally accepted but have no writable bits
+    // on ARM7TDMI-S. Consume them explicitly so strict lint distinguishes
+    // deliberate SBZP behavior from accidentally dropped interface bits.
+    wire _unused_reserved_selects = &{1'b0,
+        cpsr_write_mask[2:1], spsr_write_mask[2:1]};
 
 endmodule

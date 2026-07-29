@@ -204,7 +204,8 @@ module psr_tb
         @(posedge CLK);
         @(negedge CLK);
         spsr_write_en   = 1'b0;
-        check32("spsr_fiq after write", 32'(spsr), 32'h11111111);
+        // Reserved [27:8] preserve zero; 0x11 is a valid FIQ control byte.
+        check32("spsr_fiq after write", 32'(spsr), 32'h10000011);
 
         enter_mode(MODE_IRQ);
         @(negedge CLK);
@@ -215,23 +216,25 @@ module psr_tb
         @(posedge CLK);
         @(negedge CLK);
         spsr_write_en   = 1'b0;
-        check32("spsr_irq after write", 32'(spsr), 32'h22222222);
+        // 0x02 is not a valid ARMv4T mode, so the selected control field
+        // is rejected while the independently selected N flag commits.
+        check32("spsr_irq after write", 32'(spsr), 32'h20000000);
 
         enter_mode(MODE_FIQ);
         @(negedge CLK);
-        check32("spsr_fiq retained", 32'(spsr), 32'h11111111);
+        check32("spsr_fiq retained", 32'(spsr), 32'h10000011);
 
         // T6: cpsr_restore copies SPSR-of-current-mode into CPSR
-        // Currently in FIQ with SPSR_fiq=0x11111111. Restore should swap.
+        // Currently in FIQ with SPSR_fiq=0x10000011. Restore should swap.
         @(negedge CLK);
         cpsr_restore_en = 1'b1;
         @(posedge CLK);
         @(negedge CLK);
         cpsr_restore_en = 1'b0;
-        check32("cpsr after restore from spsr_fiq", 32'(cpsr), 32'h11111111);
+        check32("cpsr after restore from spsr_fiq", 32'(cpsr), 32'h10000011);
 
         // T7: BX path sets CPSR.T even though the MSR T-drop policy would
-        //     normally suppress it. After T6, CPSR=0x11111111 with bit 5=0.
+        //     normally suppress it. After T6, CPSR=0x10000011 with bit 5=0.
         @(negedge CLK);
         bx_set_t_en    = 1'b1;
         bx_set_t_value = 1'b1;
