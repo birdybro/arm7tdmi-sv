@@ -7,6 +7,7 @@
 //   2. a Thumb match in the upper bus half must halt;
 //   3. a lower-half Thumb fetch must ignore a matching adjacent upper half;
 //   4. an upper-half Thumb fetch must ignore a matching adjacent lower half.
+//   5-8. repeat both matches and both negative cases in big-endian mode.
 //
 // The memory deliberately returns the complete 32-bit word for halfword
 // reads, as permitted by TRM §3.5.4. EmbeddedICE-RT must select only the
@@ -32,6 +33,11 @@ module arm7tdmis_debug_software_breakpoint_scenario #(
     localparam int unsigned THUMB_HIGH_MATCH  = 2;
     localparam int unsigned THUMB_LOW_FALSE   = 3;
     localparam int unsigned THUMB_HIGH_FALSE  = 4;
+    localparam int unsigned THUMB_BE_LOW_MATCH  = 5;
+    localparam int unsigned THUMB_BE_HIGH_MATCH = 6;
+    localparam int unsigned THUMB_BE_LOW_FALSE  = 7;
+    localparam int unsigned THUMB_BE_HIGH_FALSE = 8;
+    localparam bit BIG_ENDIAN = SCENARIO >= THUMB_BE_LOW_MATCH;
 
     logic nRESET = 1'b0;
     logic CLKEN = 1'b0;
@@ -52,7 +58,7 @@ module arm7tdmis_debug_software_breakpoint_scenario #(
         .CLK,
         .CLKEN,
         .nRESET,
-        .CFGBIGEND        (1'b0),
+        .CFGBIGEND        (BIG_ENDIAN),
         .nIRQ             (1'b1),
         .nFIQ             (1'b1),
         .ABORT            (1'b0),
@@ -94,7 +100,9 @@ module arm7tdmis_debug_software_breakpoint_scenario #(
                 if (SCENARIO == ARM_MATCH)
                     memory_word = 32'hE7F1_23F4;
                 else if ((SCENARIO == THUMB_HIGH_MATCH)
-                          || (SCENARIO == THUMB_HIGH_FALSE))
+                          || (SCENARIO == THUMB_HIGH_FALSE)
+                          || (SCENARIO == THUMB_BE_HIGH_MATCH)
+                          || (SCENARIO == THUMB_BE_HIGH_FALSE))
                     memory_word = 32'hE3A0_0043; // MOV r0,#0x43
                 else
                     memory_word = 32'hE3A0_0041; // MOV r0,#0x41
@@ -107,10 +115,16 @@ module arm7tdmis_debug_software_breakpoint_scenario #(
                     THUMB_HIGH_MATCH: memory_word = 32'hDE55_2233;
                     THUMB_LOW_FALSE:  memory_word = 32'hDE55_E002;
                     THUMB_HIGH_FALSE: memory_word = 32'hE001_DE55;
+                    THUMB_BE_LOW_MATCH:  memory_word = 32'hDE55_2233;
+                    THUMB_BE_HIGH_MATCH: memory_word = 32'h2233_DE55;
+                    THUMB_BE_LOW_FALSE:  memory_word = 32'hE002_DE55;
+                    THUMB_BE_HIGH_FALSE: memory_word = 32'hDE55_E001;
                     default:          memory_word = 32'hE7FE_E7FE;
                 endcase
             end
-            6'h12: memory_word = 32'hE7FE_2155; // MOV r1,#0x55; B .
+            6'h12: memory_word = BIG_ENDIAN
+                                   ? 32'h2155_E7FE
+                                   : 32'hE7FE_2155; // MOV r1,#0x55; B .
             default: memory_word = 32'hE1A0_0000; // ARM NOP
         endcase
     endfunction
@@ -219,10 +233,12 @@ module arm7tdmis_debug_software_breakpoint_scenario #(
 
         CLKEN = 1'b1;
         halt_expected = SCENARIO inside {
-            ARM_MATCH, THUMB_LOW_MATCH, THUMB_HIGH_MATCH
+            ARM_MATCH, THUMB_LOW_MATCH, THUMB_HIGH_MATCH,
+            THUMB_BE_LOW_MATCH, THUMB_BE_HIGH_MATCH
         };
         expected_pc = (SCENARIO == ARM_MATCH) ? 32'h0000_0020
-                    : ((SCENARIO == THUMB_HIGH_MATCH)
+                    : (((SCENARIO == THUMB_HIGH_MATCH)
+                        || (SCENARIO == THUMB_BE_HIGH_MATCH))
                        ? 32'h0000_0042 : 32'h0000_0040);
         outcome_seen = 1'b0;
 
@@ -287,8 +303,8 @@ module arm7tdmis_debug_software_breakpoint_tb;
     logic CLK = 1'b0;
     initial forever #5 CLK = ~CLK;
 
-    logic [4:0] done;
-    logic [4:0] failed;
+    logic [8:0] done;
+    logic [8:0] failed;
 
     arm7tdmis_debug_software_breakpoint_scenario #(.SCENARIO(0)) u_arm (
         .CLK, .done(done[0]), .failed(failed[0])
@@ -305,13 +321,25 @@ module arm7tdmis_debug_software_breakpoint_tb;
     arm7tdmis_debug_software_breakpoint_scenario #(.SCENARIO(4)) u_false_high (
         .CLK, .done(done[4]), .failed(failed[4])
     );
+    arm7tdmis_debug_software_breakpoint_scenario #(.SCENARIO(5)) u_be_thumb_low (
+        .CLK, .done(done[5]), .failed(failed[5])
+    );
+    arm7tdmis_debug_software_breakpoint_scenario #(.SCENARIO(6)) u_be_thumb_high (
+        .CLK, .done(done[6]), .failed(failed[6])
+    );
+    arm7tdmis_debug_software_breakpoint_scenario #(.SCENARIO(7)) u_be_false_low (
+        .CLK, .done(done[7]), .failed(failed[7])
+    );
+    arm7tdmis_debug_software_breakpoint_scenario #(.SCENARIO(8)) u_be_false_high (
+        .CLK, .done(done[8]), .failed(failed[8])
+    );
 
     initial begin
         $dumpfile("debug_software_breakpoint.fst");
         $dumpvars(0, arm7tdmis_debug_software_breakpoint_tb);
         wait (&done);
         if (|failed)
-            $fatal(1, "[debug_software_breakpoint] FAIL scenarios=%05b",
+            $fatal(1, "[debug_software_breakpoint] FAIL scenarios=%09b",
                    failed);
         $display("[debug_software_breakpoint] PASS");
         $finish;
@@ -319,7 +347,7 @@ module arm7tdmis_debug_software_breakpoint_tb;
 
     initial begin
         repeat (CYCLE_LIMIT) @(posedge CLK);
-        $fatal(1, "[debug_software_breakpoint] TIMEOUT done=%05b failed=%05b",
+        $fatal(1, "[debug_software_breakpoint] TIMEOUT done=%09b failed=%09b",
                done, failed);
     end
 endmodule
