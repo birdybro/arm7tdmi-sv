@@ -48,7 +48,7 @@ def _utc_now() -> str:
 def _source_digest() -> str:
     """Hash every local source/build input, including untracked test files."""
     candidates: list[pathlib.Path] = []
-    for directory in ("rtl", "tb", "scripts", "fpga"):
+    for directory in ("rtl", "tb", "scripts", "fpga", "examples"):
         root = REPO_ROOT / directory
         for path in root.rglob("*"):
             if not path.is_file():
@@ -66,6 +66,7 @@ def _source_digest() -> str:
                 ".qip",
                 ".tcl",
                 ".json",
+                ".S",
             } or path.name == "Makefile":
                 candidates.append(path)
 
@@ -120,6 +121,8 @@ def collect_metadata(
                 "raw-core",
                 "mister-wrapper",
                 "fpga-package-example",
+                "generic-soc-verilator",
+                "generic-soc-slang",
                 "testbench",
             ],
             "harness": ["unit", "expected-failure", "raw-bus-checker"],
@@ -136,6 +139,7 @@ def collect_metadata(
             ),
             "unit": list(unit_tests),
             "integration": list(integration_tests),
+            "examples": ["generic-soc"],
             "smoke": ["arm7tdmis_tb_top"],
         },
     }
@@ -231,6 +235,9 @@ def _phases(
     yield _make_phase("lint-rtl", "lint")
     yield _make_phase("lint-mister-wrapper", "lint-mister")
     yield _make_phase("lint-fpga-package-example", "lint-example")
+    yield _make_phase("lint-generic-soc", "lint-generic-soc")
+    yield _make_phase("lint-generic-soc-slang", "lint-generic-soc-slang")
+    yield _make_phase("sim-generic-soc", "sim-generic-soc")
     if include_fpga:
         yield _make_phase("quartus-analysis", "quartus-analysis")
         yield _make_phase(

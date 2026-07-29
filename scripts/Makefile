@@ -12,6 +12,7 @@
 
 VERILATOR ?= verilator
 VERILATOR_COVERAGE ?= verilator_coverage
+SLANG     ?= slang
 GTKWAVE   ?= gtkwave
 PYTHON    ?= python3
 QUARTUS_MAP ?= quartus_map
@@ -22,6 +23,8 @@ SIM_F     := sim.f
 TB_F      := tb.f
 FPGA_F    := ../fpga/arm7tdmi_mister.f
 FPGA_EXAMPLE := ../fpga/example/arm7tdmi_mister_example_top.sv
+GENERIC_SOC := ../examples/generic_soc/arm7tdmi_generic_soc.sv
+GENERIC_SOC_TB := ../examples/generic_soc/arm7tdmi_generic_soc_tb.sv
 OPTION_PROJECTS := arm7tdmi_option_none arm7tdmi_option_debug \
 	arm7tdmi_option_coprocessor arm7tdmi_option_both
 
@@ -72,7 +75,8 @@ INTEG_COMMON_SRCS := \
 # that consume the public retirement contract opt into those ports explicitly.
 INTEG_EXTRA_FLAGS_retire_interface := -DARM7TDMIS_VERIFICATION
 
-.PHONY: all lint lint-mister lint-example lint-tb \
+.PHONY: all lint lint-mister lint-example \
+        lint-generic-soc lint-generic-soc-slang sim-generic-soc lint-tb \
         quartus-analysis quartus-compile \
         quartus-conformance-analysis quartus-conformance-compile \
         quartus-option-characterization \
@@ -95,6 +99,24 @@ lint-example:
 	$(VERILATOR) --lint-only $(VFLAGS_LINT) \
 	    --top-module arm7tdmi_mister_example_top \
 	    -f $(FPGA_F) $(FPGA_EXAMPLE)
+
+lint-generic-soc:
+	$(VERILATOR) --lint-only $(VFLAGS_LINT) \
+	    --top-module arm7tdmi_generic_soc \
+	    -f $(SIM_F) $(GENERIC_SOC)
+
+lint-generic-soc-slang:
+	$(SLANG) --version
+	$(SLANG) --allow-use-before-declare \
+	    --top arm7tdmi_generic_soc -f $(SIM_F) $(GENERIC_SOC)
+
+sim-generic-soc:
+	mkdir -p $(OBJ_DIR)
+	$(VERILATOR) $(VFLAGS_BUILD) \
+	    --top-module arm7tdmi_generic_soc_tb \
+	    --Mdir $(OBJ_DIR)/generic_soc \
+	    -f $(SIM_F) $(GENERIC_SOC) $(GENERIC_SOC_TB)
+	./$(OBJ_DIR)/generic_soc/Varm7tdmi_generic_soc_tb
 
 # Exercise the checked QSF/QIP and synthesize/elaborate every public-wrapper
 # dependency with the MiSTer-mandated Quartus 17 SystemVerilog frontend.
@@ -322,6 +344,9 @@ help:
 	@echo "  lint         Verilator --lint-only on RTL only (default)"
 	@echo "  lint-mister  Verilator --lint-only on the canonical FPGA wrapper"
 	@echo "  lint-example Verilator --lint-only on the portable FPGA example"
+	@echo "  lint-generic-soc Verilator lint on the ROM/RAM/timer/UART example"
+	@echo "  lint-generic-soc-slang Slang compile of the generic SoC example"
+	@echo "  sim-generic-soc Run the generic SoC architectural program"
 	@echo "  quartus-analysis Quartus analysis/elaboration of the FPGA package"
 	@echo "  quartus-compile Full Quartus synth/fit/timing/assembly/power flow"
 	@echo "  quartus-conformance-analysis Quartus analysis of the raw/full profile"

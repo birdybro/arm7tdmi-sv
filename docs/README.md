@@ -20,6 +20,9 @@ because they agree with each other.
 - **[INTEGRATION.md](INTEGRATION.md)** — versioned canonical FPGA wrapper,
   valid/ready memory timing, CPU clock-enable bridge, byte lanes, reset/CDC
   ownership, and optional debug/coprocessor parameters.
+- **[GENERIC_SOC.md](GENERIC_SOC.md)** — synthesizable ROM/RAM/timer/UART
+  example, memory map, executable ARM program, and independent open-source
+  frontend commands.
 - **[RAW_BUS.md](RAW_BUS.md)** — raw `arm7tdmis_top` address/response edge
   convention, N/S/I/C history, CLKEN/ABORT sampling, endian lanes,
   LOCK/DMORE promises, Chapter 7 interpretation, and reusable checker.

@@ -98,6 +98,8 @@ evidence. The §31 ledger remains authoritative if a summary conflicts with it.
   framework, and system-integration profiles.
 - [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md): checked Cyclone V clock,
   CPU-enable, transaction-latency, resource, Fmax, and power data.
+- [`docs/GENERIC_SOC.md`](docs/GENERIC_SOC.md): portable
+  ROM/RAM/timer/UART integration and executable program.
 - [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md): concise prerelease blockers
   linked to the authoritative task IDs.
 - [`docs/PROVENANCE.md`](docs/PROVENANCE.md): license, specification,
@@ -125,6 +127,9 @@ make -C scripts integ
 make -C scripts run
 
 make -C scripts lint-example
+make -C scripts lint-generic-soc
+make -C scripts lint-generic-soc-slang
+make -C scripts sim-generic-soc
 make -C scripts quartus-analysis
 make -C scripts quartus-compile
 make -C scripts quartus-conformance-analysis
@@ -162,6 +167,8 @@ scripts/
   Makefile, ordered source lists, regression/coverage/release tools
 fpga/
   portable package, constraints, characterization projects, example
+examples/generic_soc/
+  synthesizable ROM/RAM/timer/UART system and executable ARM program
 docs/
   maintained architecture, verification, and integration contracts
 ```

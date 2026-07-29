@@ -19,6 +19,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes build-essential make python3 verilator
+      - name: Install pinned SystemVerilog frontend
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/.tools"
+          curl --fail --location \
+            https://github.com/MikePopoloski/slang/releases/download/v11.0/slang-linux-x86_64.tar.gz \
+            --output "$GITHUB_WORKSPACE/.tools/slang.tar.gz"
+          echo "951a170e10e25e54c91565030acfdfc11c3226714ebf225a18ad4166a898d8a4  $GITHUB_WORKSPACE/.tools/slang.tar.gz" \
+            | sha256sum --check -
+          tar -xzf "$GITHUB_WORKSPACE/.tools/slang.tar.gz" \
+            -C "$GITHUB_WORKSPACE/.tools"
+          echo "$GITHUB_WORKSPACE/.tools" >> "$GITHUB_PATH"
       - name: Run fail-hard simulation regression
         run: make -C scripts regress-ci
       - name: Measure representative RTL coverage

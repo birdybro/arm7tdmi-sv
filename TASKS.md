@@ -3225,9 +3225,18 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
 - [ ] **MIST-009:** Run a PocketStation soak test with real software and randomized
   memory waits, reset, interrupts, and save/restore. Compare an observable execution
   trace against an independent emulator/reference where behavior is defined.
-- [ ] **MIST-010:** Add a second, generic SoC integration example (ROM/RAM/timer/UART)
+- [x] **MIST-010:** Add a second, generic SoC integration example (ROM/RAM/timer/UART)
   so the API is not accidentally PocketStation-specific. Compile it with at least two
   supported open-source FPGA tool/simulator flows where practical.
+  `examples/generic_soc/arm7tdmi_generic_soc.sv` is a synthesizable,
+  hierarchy-free system using only the canonical wrapper. Its embedded
+  repository-authored ARM program verifies RAM before exercising a
+  backpressured UART and timer IRQ under randomized CPU enables in
+  `arm7tdmi_generic_soc_tb.sv`. Verilator lint/simulation and the independent
+  Slang 11.0 frontend are mandatory regression phases; CI verifies the pinned
+  Slang archive hash. `docs/GENERIC_SOC.md` freezes the memory map, peripheral
+  semantics, clock ownership, program, tool versions, and commands, while
+  `scripts/tests/test_generic_soc_contract.py` enforces the complete contract.
 - [x] **MIST-011:** Publish maximum CPU rate, master-clock/CE ratios, latency rules,
   resource budget, required memories/DSPs, reset duration, endian configuration, and
   optional-feature costs.
