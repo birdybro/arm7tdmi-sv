@@ -262,6 +262,14 @@ user-bank selection, and keeps the external bus idle. The public-pin round
 trip for r0-r14 is verified by
 `tb/integration/arm7tdmis_debug_register_scan_tb.sv`.
 
+An STM capture of r15 includes the three-word advance contributed by the STM
+and its two pipeline NOPs, even though the FPGA stream adapter consumes those
+operations internally. Consequently, OpenOCD's ARM-state `-12` scan-pipeline
+correction followed by its ARM7TDMI `-8` DBGRQ correction produces the next
+architectural instruction address. A linear `MOV r0,pc` program verifies that
+relationship without using an internal PC signal in
+`tb/integration/arm7tdmis_debug_pc_capture_tb.sv`.
+
 Writing r15 through that stream also replaces the halted pipeline's fetch PC.
 The address is halfword-aligned in Thumb state and word-aligned in ARM state;
 all saved pre-debug fetch/decode state is discarded. The standard scan exit

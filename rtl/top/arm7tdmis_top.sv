@@ -376,9 +376,16 @@ module arm7tdmis_top
     assign dbg_reg_addr = dbg_block_reg_q;
     assign dbg_reg_force_user = dbg_block_force_user_q;
 
+    // The direct stream adapter consumes the STM plus its two pipeline
+    // NOPs without executing them in the core. A physical ARM7TDMI has
+    // advanced r15 by three ARM words when the first register reaches
+    // the scan data bus, so restore that visible bias for r15 only.
+    wire [31:0] dbg_block_capture_data =
+        (dbg_block_reg_q == 4'd15) ? (dbg_reg_rdata + 32'd12)
+                                   : dbg_reg_rdata;
     wire [31:0] tap_chain1_capture_data = dbg_block_active_q
                                        && !dbg_block_load_q
-                                       ? dbg_reg_rdata : WDATA;
+                                       ? dbg_block_capture_data : WDATA;
     wire tap_inject_we_to_ice = tap_inject_we
                               && !dbg_block_consumes_scan;
 
