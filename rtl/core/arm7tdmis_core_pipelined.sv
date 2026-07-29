@@ -493,6 +493,7 @@ module arm7tdmis_core_pipelined
     // Defer commit to S_DP_SHIFT.
     logic [3:0]   dp_shift_rd_q;
     logic [31:0]  dp_shift_result_q;
+    logic [31:0]  dp_shift_bus_addr_q;
     logic [3:0]   dp_shift_flags_q;   // {N, Z, C, V} of the ALU result
     logic         dp_shift_writes_q;
     logic         dp_shift_flags_we_q;
@@ -1934,6 +1935,7 @@ module arm7tdmis_core_pipelined
                 mull_s_q                 <= 1'b0;
                 dp_shift_rd_q            <= 4'h0;
                 dp_shift_result_q        <= 32'h0;
+                dp_shift_bus_addr_q      <= 32'h0;
                 dp_shift_flags_q         <= 4'h0;
                 dp_shift_writes_q        <= 1'b0;
                 dp_shift_flags_we_q      <= 1'b0;
@@ -2144,6 +2146,7 @@ module arm7tdmis_core_pipelined
                 if (state_q == S_EXEC && dp_shift_take_cycle) begin
                     dp_shift_rd_q        <= dec.rd;
                     dp_shift_result_q    <= alu_result;
+                    dp_shift_bus_addr_q  <= de_q.pc + 32'd12;
                     dp_shift_flags_q     <= alu_flags_merged;
                     dp_shift_writes_q    <= dp_writes_dest;
                     dp_shift_flags_we_q  <= passes_cond && instr_is_dp
@@ -2454,8 +2457,11 @@ module arm7tdmis_core_pipelined
             end
             S_DP_SHIFT: begin
                 // §18: DP shift-by-reg I cycle. No data access; bus
-                // drives the next instr fetch (overlap).
-                ADDR  = fetch_pc_q;
+                // commits the merged pc+3i address advertised by S_EXEC.
+                // The address is latched with the micro-op because de_q
+                // advances before this cycle, while debug-speed injection
+                // intentionally freezes the normal fetch pipeline.
+                ADDR  = dp_shift_bus_addr_q;
                 TRANS = 2'(TRANS_S);
                 SIZE  = fetch_size_w;
                 PROT  = {is_priv, 1'b1};
