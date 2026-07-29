@@ -788,37 +788,21 @@ module arm7tdmis_core_pipelined
     wire instr_is_mrs    = (dec.instr_class == INSTR_MRS);
     wire instr_is_undef  = (dec.instr_class == INSTR_UNDEF);
 
-    // §19/§20/§21: coprocessor instructions. With no external coprocessor
-    // present (CPA=1 from the top), CP instructions trap UNDEF except:
-    //   • CP14 (Debug Communications Channel) — internal, TRM §5.18.
-    //   • CP15 c0 (Main ID Register) read — internal, returns a fixed
-    //     implementation ID per TRM §4.1.
-    // Other CP15 ops (control, cache, MMU — none of which exist in
-    // ARM7TDMI-S r4p3 at the architectural level) still trap UNDEF.
+    // §19/§20: coprocessor instructions. With no external coprocessor
+    // present, CP instructions trap UNDEF except for the internal CP14
+    // Debug Communications Channel. A bare ARM7TDMI-S has no internal
+    // CP15; a system that needs one must claim p15 on this interface.
     wire instr_is_cp = (dec.instr_class == INSTR_CDP)
                     || (dec.instr_class == INSTR_MCR_MRC)
                     || (dec.instr_class == INSTR_LDC_STC);
     wire instr_is_cp14 = instr_is_cp && (dec.cp_num == 4'd14);
-    wire instr_is_cp15 = instr_is_cp && (dec.cp_num == 4'd15);
     wire instr_is_mrc  = (dec.instr_class == INSTR_MCR_MRC) && de_q.instr[20];
     wire instr_is_mcr  = (dec.instr_class == INSTR_MCR_MRC) && !de_q.instr[20];
     wire cp14_crn0     = (de_q.instr[19:16] == 4'd0);
-    wire cp15_crn0     = (de_q.instr[19:16] == 4'd0);
     wire cp14_mrc_dcc  = instr_is_cp14 && instr_is_mrc && cp14_crn0;
     wire cp14_mcr_dcc  = instr_is_cp14 && instr_is_mcr && cp14_crn0;
-    wire cp15_mrc_id   = instr_is_cp15 && instr_is_mrc && cp15_crn0;
-    wire cp_undef_trap = executing && instr_is_cp && CPA
-                      && !instr_is_cp14
-                      && !cp15_mrc_id;
-
-    // CP15 Main ID Register value (TRM §4.1). Layout per architecture:
-    //   [31:24] Implementor = 0x41 (ARM Ltd)
-    //   [23:20] Variant     = 4 (r4)
-    //   [19:16] Architecture= 2 (ARMv4T)
-    //   [15:4 ] Primary part= 0x924 (ARM7TDMI family)
-    //   [3:0  ] Revision    = 3 (p3)
-    localparam logic [31:0] CP15_MAIN_ID = 32'h41429243;
-    wire cp15_mrc_id_fires = passes_cond && cp15_mrc_id;
+    wire cp_undef_trap = executing && condition_pass && instr_is_cp && CPA
+                      && !instr_is_cp14;
     wire cp14_mcr_dcc_fires = passes_cond && cp14_mcr_dcc;
     wire cp14_mrc_dcc_fires = passes_cond && cp14_mrc_dcc;
 
@@ -1115,11 +1099,6 @@ module arm7tdmis_core_pipelined
         end else if (mrs_fires) begin
             rf_write_addr = dec.rd;
             rf_write_data = dec.psr_use_spsr ? 32'(spsr_value) : 32'(cpsr);
-            rf_write_en   = 1'b1;
-        end else if (cp15_mrc_id_fires) begin
-            // §21: MRC p15, 0, Rd, c0, c0, 0 — Main ID Register read.
-            rf_write_addr = dec.rd;
-            rf_write_data = CP15_MAIN_ID;
             rf_write_en   = 1'b1;
         end else if (cp14_mrc_dcc_fires) begin
             // §20: MRC p14, 0, Rd, c0, c0, 0 — DCC RX read.

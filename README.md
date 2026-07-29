@@ -258,7 +258,7 @@ do not use a successful `make` exit as sign-off evidence.
 | smoke (`make run`) | broad mixed-instruction path; currently prints two failures and exits zero |
 | `cycles` | internal E-duration checks for 26 selected instructions; not pin-level cycle conformance |
 | `umull` / `umlal` | 64-bit multiply with high-half writeback |
-| `cp15_main_id` | Checks a fabricated behavior scheduled for removal; not conformance evidence |
+| `cp15_undef` | Bare-core p15 access with no external claimant enters Undefined |
 | `cp14_dcc` | Checks the current simplified shared-register path, not the real DCC protocol |
 | `vector_catch` | preliminary vector-catch/halt path |
 | `abort` | DABT during LDR — Rd preserved, vector entry |
