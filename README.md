@@ -15,12 +15,12 @@ is the canonical status and release gate.
 
 | Area | Audited status |
 |---|---|
-| ARM/Thumb RTL | **Partial** — broad decode/datapath paths exist; flag, PC, PSR, reserved-encoding, alignment, and coverage gaps remain |
-| Exceptions/aborts | **Incorrect** — saved-LR, simultaneous priority/interlock, and LDM/STM abort behavior require fixes |
-| Bus/cycle/endian | **Incorrect** — `CFGBIGEND` is unused and tests do not check complete N/S/I/C pin waveforms |
-| Coprocessor/CP14/CP15 | **Incorrect/partial** — no busy/data protocol, simplified nonconformant DCC, and a bare ARM7TDMI-S must not invent CP15 |
-| EmbeddedICE-RT/JTAG/ETM | **Partial scaffolds** — monitor mode and conformant debug execution are among the missing paths |
-| Verification | **Not trustworthy for sign-off** — several tests can print `FAIL` and still exit zero; conformance, coverage, differential, and formal closure are absent |
+| ARM/Thumb RTL | **Partial** — directed tests cover all Thumb formats and numerous ARM edge fixes; exhaustive encoding/state coverage remains |
+| Exceptions/aborts | **Partial** — directed tests cover priority, ARM/Thumb LR values, DABT+FIQ, SWP, and per-beat LDM/STM abort behavior; full closure remains |
+| Bus/cycle/endian | **Partial** — little/big-endian lanes, fetch history, stalls, and selected burst/abort cases are tested; complete pin-level cycle closure remains |
+| Coprocessor/CP14/CP15 | **Partial** — directed tests cover external ready/busy/data transfers, absent internal CP15, and conformant c0/c1 DCC ownership; monitor-generated `DbgAbt` coupling and full closure remain |
+| EmbeddedICE-RT/JTAG/ETM | **Partial** — halt-mode scan/register/PSR/system-speed paths now have directed coverage; monitor mode, FPGA transport synchronization, ETM, and full interoperability remain |
+| Verification | **Partial** — registered benches fail hard and the smoke regression passes; exhaustive, differential, coverage, formal, and release closure are absent |
 | FPGA/MiSTer | **Missing** — no valid completed SDC, Quartus result, wrapper/package, MiSTer build, or PocketStation integration |
 
 ---
@@ -127,15 +127,15 @@ See [docs/PIPELINE.md](docs/PIPELINE.md) for the detailed FSM, bus-overlap reaso
 
 ### Debug architecture
 
-- **EmbeddedICE-RT scaffold** (`rtl/debug/arm7tdmis_ice_rt.sv`): simplified
-  comparators, registers, and halt/restart paths. Monitor mode, phase-correct
-  data-dependent watchpoints, complete registers, and conformant debug execution are
-  missing.
+- **EmbeddedICE-RT (partial)** (`rtl/debug/arm7tdmis_ice_rt.sv`): aligned
+  breakpoint/watchpoint comparators, halt/restart, debug-speed register and PSR
+  transfer, and staged system-speed access have directed tests. Monitor mode and the
+  remaining §31.7 cases are still missing.
 - **JTAG TAP (partial)** (`rtl/jtag/arm7tdmis_jtag_tap.sv`): all 16 TAP
   transitions, public/default instructions, SCAN_N, and the physical chain-1/2
-  wire orders are fail-hard tested. Chain-1 bit-33 entry/system-speed semantics,
-  off-chip TCK synchronization, and end-to-end debugger integration remain
-  incomplete.
+  wire orders are fail-hard tested. Chain-1 entry causes, debug-speed transfers,
+  scan-loaded resume, and staged bit-33 system-speed access have public-pin tests;
+  off-chip TCK synchronization and full debugger integration remain incomplete.
 - **ETM-facing instrumentation**: `DBGnEXEC` and `DBGINSTRVALID` exist, but their full
   commit semantics and the external ETM contract are unverified.
 
@@ -143,13 +143,15 @@ See [docs/DEBUG.md](docs/DEBUG.md).
 
 ### Coprocessor handshake
 
-- **CP14:** the current code provides a simplified shared-register round trip, not the
-  required c0 control/c1 RX/TX DCC with W/R ownership and `DbgAbt`.
-- **CP15:** the current fabricated `0x41429243` response is nonconformant for a bare
-  ARM7TDMI-S and is scheduled for removal; system wrappers may attach an external p15.
-- **External coprocessors:** pins are present, but `CPB` busy waiting, C cycles,
-  accepted-operation data bodies, pipeline following, and correct `CPnTRANS` behavior
-  are not implemented.
+- **CP14:** c0 control and independent c1 RX/TX buffers implement W/R ownership,
+  rev-4 chain-2 status, CLKEN, DBGEN-gated pins, and producer/consumer races. c2
+  storage/decode exists, but monitor-generated `DbgAbt` and external-abort priority
+  remain open.
+- **CP15:** there is no fabricated internal p15. An unclaimed p15 access traps
+  Undefined; a system coprocessor can claim it through the external interface.
+- **External coprocessors:** directed tests cover pipeline-follow signals,
+  privilege, ready/busy/absent handshakes, MCR/MRC/CDP, variable LDC/STC,
+  aborts, and interrupt/DBGRQ abandonment. §31.6 remains the sign-off ledger.
 
 ---
 
@@ -160,8 +162,7 @@ features; the complete backlog is `TASKS.md` §31.
 
 | Gap | Why | Re-enable when |
 |---|---|---|
-| External coprocessor data/busy protocol | Required for the pin-compatible profile; pins alone are insufficient. | Implement and verify §31.6. |
-| Correct CP14 DCC and removal of internal CP15 | Current tests encode simplified/nonconformant behavior. | Implement and verify §31.6. |
+| Monitor-mode CP14 Debug Abort Status coupling | c2 storage/decode is present, but monitor-generated abort events and external-ABORT priority are not connected end to end. | Complete CP-009 and DBG-005. |
 | **Quartus place-and-route** | Toolchain not installed on the build box. RTL is written to Cyclone V conventions (ALM logic, MLAB/M10K BRAM inference, DSP for `*`); SDC first pass exists. | `§26` FPGA bring-up. |
 | Correct exception, abort, endian, and bus timing | Release-blocking functional work. | Implement and verify §31.3–§31.5. |
 | MiSTer/PocketStation integration | No wrapper, package, build, or reference boot exists. | Implement and verify §31.9. |
@@ -220,19 +221,19 @@ make sim             # build the smoke integration testbench
 make run             # build + run smoke → cycle.csv + waves.fst
 make wave            # open waves.fst in GTKWave
 
-make unit            # run every unit test (10 tests)
+make unit            # run every registered unit test
 make unit-<name>     # run one (e.g. make unit-shifter)
 
-make integ           # run every integration test (15 tests)
+make integ           # run every registered integration test
 make integ-<name>    # run one (e.g. make integ-cycles)
 
 make clean
 ```
 
-The audited harness is not yet fail-safe: several benches print `FAIL` but still exit
-zero. On the 2026-07-28 audit run, `make unit integ run` exited 0 while the smoke bench
-printed two failures. Until `TASKS.md` VER-001–VER-010 are complete, inspect logs and
-do not use a successful `make` exit as sign-off evidence.
+The registered benches now terminate nonzero on failed checks, and the current smoke
+test passes. A successful directed regression is still not sign-off by itself:
+`TASKS.md` §31.10 requires independent differential, coverage, formal, and release
+evidence.
 
 ---
 
@@ -250,22 +251,22 @@ do not use a successful `make` exit as sign-off evidence.
 | `multiplier_tb` | unsigned / signed / accumulate; m-parameter cycle count |
 | `condition_tb` | all 16 ARM condition codes against flag inputs |
 | `decoder_tb` | ARM decode tables (instruction-class dispatch) |
-| `jtag_tap_tb` | basic reset, BYPASS, and IDCODE paths; failure is not fail-hard |
-| `ice_rt_tb` | preliminary watchpoint/register paths; failure is not fail-hard |
+| `jtag_tap_tb` | exhaustive TAP transitions, instructions, scan selectors/order, update atomicity, BYPASS, and default IDCODE |
+| `ice_rt_tb` | fail-hard EmbeddedICE register/watchpoint primitives |
 
 **Integration tests** (`tb/integration/`):
 
 | Test | Current exercised scope |
 |---|---|
-| smoke (`make run`) | broad mixed-instruction path; currently prints two failures and exits zero |
+| smoke (`make run`) | fail-hard broad mixed-instruction path |
 | `cycles` | internal E-duration checks for 26 selected instructions; not pin-level cycle conformance |
 | `umull` / `umlal` | 64-bit multiply with high-half writeback |
 | `cp15_undef` | Bare-core p15 access with no external claimant enters Undefined |
-| `cp14_dcc` | Checks the current simplified shared-register path, not the real DCC protocol |
+| `cp14_dcc` | Public CP14/JTAG bidirectional c0/c1 DCC ownership, rev-4 status, pins, CLKEN, and DBGEN gating |
 | `vector_catch` | preliminary vector-catch/halt path |
 | `abort` | DABT during LDR — Rd preserved, vector entry |
 | `pabt` | PABT propagation via `fd_q.pabort` |
-| `ldm_abort` | Checks an incorrect base-writeback expectation scheduled for replacement |
+| `ldm_abort` | Per-beat load suppression, base writeback/restoration, and r15 protection |
 | `ldm_pc` | LDM with PC in list + `^` — CPSR restored from SPSR |
 | `irq` / `fiq` | nIRQ / nFIQ pin → exception entry, banked r14 |
 | `swi` | SWI #imm → Supervisor mode, r14_svc, vector 0x08 |

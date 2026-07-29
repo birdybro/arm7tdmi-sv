@@ -2534,16 +2534,31 @@ number of cycles spent in an internal FSM state.
 - [ ] **CP-006:** Implement C cycles and MRC/MCR data timing; implement variable-length
   LDC/STC transfers, writeback, `CPSEQ`, aborts, and interrupt/DBGRQ abandonment with
   idempotent busy waits.
-- [ ] **CP-007:** Implement separate DCC RX and TX buffers. Exact behavior:
+- [x] **CP-007:** Implement separate DCC RX and TX buffers. Exact behavior:
   c0 control read; c1 data read/write; W/R ownership transitions; no unintended
   round-trip through a shared storage word.
-- [ ] **CP-008:** Return the selected exact-r4p3 DCC version (`0111` under the default
+  The public CP14/JTAG round trip is verified by
+  `tb/integration/arm7tdmis_cp14_dcc_tb.sv`; independent storage, ownership,
+  processor-side CLKEN behavior, and both simultaneous producer/consumer races are
+  verified by `tb/unit/dcc_tb.sv`.
+- [x] **CP-008:** Return the selected exact-r4p3 DCC version (`0111` under the default
   profile), implement DCC single-access scan-chain-2 behavior, and verify control reads
   through both CP14 and JTAG.
+  `tb/integration/arm7tdmis_cp14_dcc_tb.sv` checks the exact `0x70000000` control
+  value through both interfaces and checks the data-response address bit with W both
+  set and clear.
 - [ ] **CP-009:** Implement sticky CP14 Abort Status `DbgAbt`, debug-vs-external-abort
   priority, software clear, and exact register encoding.
-- [ ] **CP-010:** Drive `DBGCOMMRX` high for a full RX buffer and `DBGCOMMTX` high for
+  Exact c2 decode, sticky set, software clear, set-over-clear priority, and reset are
+  covered by `tb/integration/arm7tdmis_cp14_decode_tb.sv` and `tb/unit/dcc_tb.sv`.
+  This remains open because monitor-generated aborts are not connected at top level
+  (`debug_abort_set` is tied low), so external-ABORT precedence is not implemented or
+  verified end to end.
+- [x] **CP-010:** Drive `DBGCOMMRX` high for a full RX buffer and `DBGCOMMTX` high for
   an empty TX buffer, both gated by DBGEN. Verify every host/processor race and reset.
+  `tb/unit/dcc_tb.sv` covers reset, CLKEN, and both ownership races;
+  `tb/integration/arm7tdmis_cp14_dcc_tb.sv` covers the public pins through both
+  directions and gates/restores each pending-data state with DBGEN.
 - [ ] **CP-011:** Decide and test the release policy for r4p3 errata [14]
   (non-indexed LDC/STC decode) and [15] (sequential MRC timing).
 
@@ -2627,9 +2642,10 @@ number of cycles spent in an internal FSM state.
   scan-programmed instruction breakpoint; normal data-watchpoint r15 capture is
   covered by `tb/integration/arm7tdmis_debug_watchpoint_completion_tb.sv`.
   OpenOCD-compatible CPSR/SPSR read/write and scan-bus isolation are covered by
-  `tb/integration/arm7tdmis_debug_register_scan_tb.sv`. Exception-coupled entry,
-  the remaining end-to-end operations, and debugger-process integration remain
-  open.
+  `tb/integration/arm7tdmis_debug_register_scan_tb.sv`. Bidirectional CP14/JTAG DCC,
+  including rev-4 single-access status and public status pins, is covered by
+  `tb/integration/arm7tdmis_cp14_dcc_tb.sv`. Exception-coupled entry, the remaining
+  end-to-end operations, and debugger-process integration remain open.
 - [ ] **JTAG-006:** Demonstrate a pinned open-source debugger/GDB flow against the
   simulated scan transport and on FPGA, or document precisely why the r4p3 scan
   protocol needs a project-specific bridge and release that bridge with protocol tests.

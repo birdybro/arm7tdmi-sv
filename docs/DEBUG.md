@@ -1,8 +1,10 @@
 # Debug Subsystem Architecture
 
-> **Audit status:** The current EmbeddedICE-RT/JTAG/DCC implementation is a partial
-> scaffold. Monitor mode, conformant instruction injection, DCC semantics, and other
-> release blockers are tracked in `TASKS.md` §31.6–§31.8.
+> **Audit status:** The subsystem remains partial overall. Halt-mode scan transport,
+> debug-speed register/PSR transfer, staged system-speed access, and the bidirectional
+> CP14 DCC have fail-hard directed coverage. Monitor mode, debug-abort coupling,
+> a synchronous FPGA debug-port wrapper, ETM closure, and the remaining release
+> blockers are tracked in `TASKS.md` §31.6–§31.8.
 
 EmbeddedICE-RT + JTAG TAP + CP14 DCC, as implemented in `rtl/debug/arm7tdmis_ice_rt.sv` and `rtl/jtag/arm7tdmis_jtag_tap.sv`. The TRM chapters are 5.13–5.27.
 
@@ -28,11 +30,11 @@ EmbeddedICE-RT + JTAG TAP + CP14 DCC, as implemented in `rtl/debug/arm7tdmis_ice
                               ▲
                               │
                               │  CP14 DCC data
-                              │  (MCR/MRC p14, c0)
+                              │  (MCR/MRC p14, c1)
                               ▼
                         ┌──────────┐
-                        │   core   │  (MCR p14 c0 → core_dcc_we)
-                        └──────────┘  (MRC p14 c0 ← core_dcc_rdata)
+                        │   core   │  (MCR p14 c1 → TX buffer)
+                        └──────────┘  (MRC p14 c1 ← RX buffer)
 ```
 
 The TAP runs on the system CLK gated by DBGTCKEN (off-chip TCK synchronizer deferred). The core runs on CLK gated by `CLKEN && !core_halt`. This means the TAP keeps cycling JTAG state while the core is frozen — exactly what a debugger needs.
@@ -46,8 +48,8 @@ The TAP runs on the system CLK gated by DBGTCKEN (off-chip TCK synchronizer defe
 | 0x00 | Debug Control | 6 bits | Bit 0 force-DBGACK; bit 1 force-DBGRQ; bit 2 INTDIS |
 | 0x01 | Debug Status | 5 bits, read-only | Live state mux (see below) |
 | 0x02 | Vector Catch | 8 bits | One bit per exception vector |
-| 0x04 | DCC Data | 32 bits | Bidirectional, also CP14 c0 |
-| 0x05 | DCC Control | 2 bits | W/R-available flags (not yet wired) |
+| 0x04 | DCC Control | 32 bits | Version `0111`, W/R ownership; also CP14 c0 |
+| 0x05 | DCC Data | 32 bits | JTAG side of the separate CP14 c1 TX/RX buffers |
 | 0x08-0x0F | WP0 (8 regs) | 32/9 bits | Addr/Data/Ctrl value+mask + 2 reserved |
 | 0x10-0x17 | WP1 (8 regs) | same | |
 
@@ -57,7 +59,7 @@ Read of addr 0x01 returns a synthesized value, not the RAM slot:
 
 ```
 [4] TBIT          = watch_tbit (= CPSR.T)
-[3] TRANS[1]      = watch_priv (= PROT[1], privileged-mode bit)
+[3] TRANS[1]      = live core bus TRANS[1]
 [2] IFEN          = ifen output (computed locally)
 [1] DBGRQ synced  = dbg_rq_synced (2-flop sync chain)
 [0] DBGACK        = dbg_ack output
@@ -80,13 +82,13 @@ Mask bit = 1 means "this bit always matches" (don't-care); mask bit = 0 means ex
 
 ```
 [8] ENABLE          (unmaskable — no corresponding mask bit)
-[7] RANGE           (WP0 only — uses RANGEOUT from WP1)
-[6] CHAIN           (WP0 only — uses CHAINOUT from WP1)
-[5:4] EXTERN[1:0]   (DBGEXT pin compare)
-[3] nTRANS          (placeholder; not yet wired)
-[2] nOPC            (= 0 for opcode fetch, 1 for data)
-[1] nRW             (= 0 for read, 1 for write)
-[0] TBIT            (CPSR.T at the bus cycle)
+[7] RANGE           (WP0 input from WP1 RANGEOUT; zero for WP1)
+[6] CHAIN           (WP0 input from WP1 CHAINOUT; zero for WP1)
+[5] EXTERN          (DBGEXT[0] for WP0, DBGEXT[1] for WP1)
+[4] nTRANS          (= aligned address-phase PROT[1])
+[3] nOPC            (= aligned address-phase PROT[0])
+[2:1] SIZE          (= aligned address-phase SIZE)
+[0] nRW             (= aligned address-phase WRITE)
 ```
 
 ### CHAIN / RANGE coupling
@@ -313,21 +315,39 @@ at-speed path. A non-memory word following a bit-33-marked scan is the final
 debug-exit PC-control marker; it is consumed while halted and does not arm
 automatic debug re-entry.
 
-## CP14 DCC data path
+## CP14 DCC and Debug Abort Status
 
-The Debug Communications Channel is an internal coprocessor (CP14 c0) per TRM §5.18. Code-side and debugger-side both read/write a single shared 32-bit register, which is ICE-RT register 0x04.
+The internal CP14 register transfers use exact opcode-field matches:
 
-### Code → debugger (MCR p14, 0, Rd, c0, c0, 0)
+- c0 is the read-only DCC control register. Bits `[31:28]` return the selected
+  r4p3 EmbeddedICE-RT version (`0111` in the default profile), bit 1 is W
+  (processor TX full), and bit 0 is R (host RX full).
+- c1 is directional data: `MCR p14,0,Rd,c1,c0,0` fills the processor-to-host
+  TX buffer; `MRC p14,0,Rd,c1,c0,0` returns and consumes the independent
+  host-to-processor RX buffer.
+- c2 is the one-bit Debug Abort Status register. Its storage, exact CP14
+  decode, sticky set, software clear, and set-over-clear behavior exist.
+  The monitor-mode event source is not yet connected at top level, so the
+  external-ABORT precedence portion remains open under `CP-009`.
 
-Core writeback for the MCR routes `rf_rc_data` (= Rd's value via port C) into ICE-RT via `core_dcc_we`. ICE-RT writes `regs[0x04] := core_dcc_wdata`. Debugger reads via scan chain 2 at addr 0x04.
+The JTAG view uses EmbeddedICE addresses 0x04 for control and 0x05 for data.
+A chain-2 read of 0x05 returns the TX word and consumes W; a write to 0x05
+deposits the RX word and sets R. In the rev-4 single-access response, address
+bit 0 is replaced by W so the host receives data-valid status with the word.
+Ordinary chain-2 response pipelining still applies: a request is committed at
+Update-DR and shifted out by the following access.
 
-### Debugger → code (MRC p14, 0, Rd, c0, c0, 0)
+Processor-side effects honor CLKEN while JTAG remains live. If a producer and
+consumer act on the same edge, the newly produced word wins for that direction,
+so it remains pending. `DBGCOMMTX` is high when TX is empty and `DBGCOMMRX` is
+high when RX is full; DBGEN forces both pins low without changing buffered
+state.
 
-ICE-RT exposes `regs[0x04]` continuously on `core_dcc_rdata`. Core's writeback mux's `cp14_mrc_dcc_fires` branch writes `regs[Rd] := core_dcc_rdata`.
-
-### Simultaneous-write resolution
-
-Both the scan chain 2 path (`scan_we`) and the core's `core_dcc_we` path can write to `regs[0x04]`. The ICE-RT's always_ff prioritizes scan (debugger arbitrates timing per the TRM protocol; we resolve deterministically rather than fault).
+`tb/integration/arm7tdmis_cp14_dcc_tb.sv` verifies both public CP14/JTAG
+directions, c0 through both interfaces, rev-4 response status, pin transitions,
+CLKEN, and DBGEN gating with pending data. `tb/unit/dcc_tb.sv` verifies
+independent storage, both simultaneous producer/consumer races, reset, and the
+implemented c2 storage semantics.
 
 ## Forbidden pin clarifications (TRM §30.0)
 
@@ -346,3 +366,5 @@ Don't add them.
 - `rtl/arm7tdmis_debug_pkg.sv` — IR opcodes, IDCODE value, debug state enum, scan chain widths.
 - `tb/unit/ice_rt_tb.sv` — Watchpoint match + scan chain 2 R/W unit test.
 - `tb/unit/jtag_tap_tb.sv` — IDCODE shift-out + BYPASS IR-load unit test.
+- `tb/unit/dcc_tb.sv` — Independent DCC ownership/races and Debug Abort Status storage.
+- `tb/integration/arm7tdmis_cp14_dcc_tb.sv` — Public CP14/JTAG DCC round trip and pins.

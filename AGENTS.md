@@ -9,26 +9,15 @@ working in this repository.
 earlier completion claims. The current tree is a substantial RTL prototype, not a
 drop-in MiSTer CPU or conformant ARM7TDMI-S release.
 
-Known release blockers include:
-
-- ARM/Thumb edge correctness: shift-by-zero, V preservation, long-accumulate flags,
-  PSR privilege, r15 values/alignment, translated transfers, reserved encodings, and
-  broad missing coverage.
-- Exception/abort correctness: saved LR offsets, simultaneous priority and DABT+FIQ,
-  LDM/STM writeback, and post-abort destination suppression.
-- Bus correctness: `CFGBIGEND` is unused and exact N/S/I/C address/data waveforms are
-  not verified.
-- Coprocessors: CPB/busy/data/C-cycle behavior is absent, CPnTRANS is wrong, CP14 is a
-  simplified nonconformant shared register, and the fabricated internal CP15 must be
-  removed.
-- Debug: EmbeddedICE-RT and JTAG still contain deferred behavior, including missing
-  monitor mode, system-speed scan execution, chain-1 entry-cause capture, and DBGEN
-  off-chip TCK synchronization/RTCK transport.
-- Verification: several benches print `FAIL` then exit zero; there is no exhaustive,
-  differential, coverage, formal, synthesis, or hardware closure. The 2026-07-28
-  `make unit integ run` audit returned 0 even though smoke printed two failures.
-- Integration: no MiSTer wrapper/package/build, save-state API, PocketStation reference
-  boot, valid final SDC, or Quartus timing result exists.
+The exact current blockers are the unchecked requirements in §31; do not copy the
+historical baseline table in §31.1 forward as current state. Substantial fixes have
+landed since that baseline, including fail-hard benches, architectural/abort/bus
+corrections, external-coprocessor protocols, removal of the fabricated internal CP15,
+conformant CP14 c0/c1 DCC ownership, and halt-mode scan execution. Known open
+categories still include monitor-mode/debug-abort coupling, a published synchronous
+FPGA debug transport, ETM-facing closure, differential/formal/coverage closure,
+synthesis/timing evidence, and MiSTer/PocketStation packaging. Consult each §31
+checkbox and its attached evidence before making a narrower claim.
 
 Do not mark a feature complete because its module/decoder exists or because `make`
 returns zero. Use the VERIFIED definition and evidence gates in `TASKS.md` §31.
