@@ -276,6 +276,12 @@ well as the common three-word STM bias, so OpenOCD's two `-12` corrections
 recover the exact breakpoint address. The same regression verifies both the
 captured address and suppression of the breakpointed instruction.
 
+A normal data watchpoint uses the same two `-12` corrections to identify the
+instruction containing the watched access. The multibeat LDM regression proves
+that r15 remains correct after every load and base writeback commits, before
+the following instruction is allowed to execute:
+`tb/integration/arm7tdmis_debug_watchpoint_completion_tb.sv`.
+
 Writing r15 through that stream also replaces the halted pipeline's fetch PC.
 The address is halfword-aligned in Thumb state and word-aligned in ARM state;
 all saved pre-debug fetch/decode state is discarded. The standard scan exit

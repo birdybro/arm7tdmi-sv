@@ -15,6 +15,9 @@ module arm7tdmis_debug_watchpoint_completion_tb
 ;
 
     localparam int CYCLE_LIMIT = 1800;
+    localparam logic [31:0] WATCHED_INSTR_PC = 32'h0000_0024;
+    localparam logic [31:0] DEBUG_STM_PC = 32'hE880_8000;
+    localparam logic [31:0] DEBUG_NOP = 32'hE1A0_8008;
 
     logic CLK;
     initial begin
@@ -126,9 +129,32 @@ module arm7tdmis_debug_watchpoint_completion_tb
         tck(1'b0, 1'b0); // Update-DR -> RTI
     endtask
 
+    task automatic shift_dr_capture(
+        input  int unsigned width,
+        input  logic [37:0] scan_in,
+        output logic [37:0] scan_out
+    );
+        scan_out = '0;
+        tck(1'b1, 1'b0);
+        tck(1'b0, 1'b0);
+        tck(1'b0, 1'b0);
+        for (int i = 0; i < width; i++) begin
+            scan_out[i] = DBGTDO;
+            tck(i == (width - 1), scan_in[i]);
+        end
+        tck(1'b1, 1'b0);
+        tck(1'b0, 1'b0);
+    endtask
+
     task automatic select_chain2;
         load_ir(4'(IR_SCAN_N));
         shift_dr(4, 38'd2);
+        load_ir(4'(IR_INTEST));
+    endtask
+
+    task automatic select_chain1;
+        load_ir(4'(IR_SCAN_N));
+        shift_dr(4, 38'd1);
         load_ir(4'(IR_INTEST));
     endtask
 
@@ -158,6 +184,10 @@ module arm7tdmis_debug_watchpoint_completion_tb
     endtask
 
     initial begin : run_test
+        logic [37:0] captured;
+        logic [31:0] scanned_r15;
+        logic [31:0] corrected_pc;
+
         $dumpfile("debug_watchpoint_completion.fst");
         $dumpvars(0, arm7tdmis_debug_watchpoint_completion_tb);
 
@@ -211,6 +241,29 @@ module arm7tdmis_debug_watchpoint_completion_tb
         check_reg(9, 32'h0000_0000, "following instruction blocked by halt");
         if (TRANS !== 2'(TRANS_I)) begin
             $display("[debug_watchpoint_completion] FAIL halted TRANS=%02b", TRANS);
+            errors = errors + 1;
+        end
+
+        // OpenOCD arm7tdmi_read_core_regs() for r15. Its common
+        // three-word STM correction plus normal watchpoint correction
+        // must recover the LDM's own address, even though the full LDM
+        // has completed architecturally.
+        select_chain1();
+        shift_dr(SCAN_CHAIN1_WIDTH,
+                 chain1_serial_in(DEBUG_STM_PC, 1'b0));
+        shift_dr(SCAN_CHAIN1_WIDTH,
+                 chain1_serial_in(DEBUG_NOP, 1'b0));
+        shift_dr(SCAN_CHAIN1_WIDTH,
+                 chain1_serial_in(DEBUG_NOP, 1'b0));
+        shift_dr_capture(
+            SCAN_CHAIN1_WIDTH,
+            chain1_serial_in(32'h0, 1'b0),
+            captured);
+        scanned_r15 = chain1_parallel_data(captured);
+        corrected_pc = scanned_r15 - 32'd12 - 32'd12;
+        if (corrected_pc !== WATCHED_INSTR_PC) begin
+            $display("[debug_watchpoint_completion] FAIL corrected PC expected %08x got %08x (scanned %08x)",
+                     WATCHED_INSTR_PC, corrected_pc, scanned_r15);
             errors = errors + 1;
         end
 
