@@ -18,6 +18,7 @@ module arm7tdmis_debug_pc_capture_tb
     localparam int CYCLE_LIMIT = 5000;
     localparam logic [31:0] DEBUG_STM_R0_PC = 32'hE880_8001;
     localparam logic [31:0] DEBUG_NOP = 32'hE1A0_8008;
+    localparam logic [31:0] BREAKPOINT_PC = 32'h0000_0040;
 
     logic CLK = 1'b0;
     initial forever #5 CLK = ~CLK;
@@ -172,13 +173,23 @@ module arm7tdmis_debug_pc_capture_tb
         tck(1'b0, 1'b0);
     endtask
 
-    task automatic select_chain1;
+    task automatic select_chain(input logic [3:0] chain);
         logic [37:0] ignored;
         load_ir(4'(IR_SCAN_N));
-        shift_dr(4, 38'd1, ignored);
+        shift_dr(4, {34'h0, chain}, ignored);
         if (&{1'b0, ignored})
             fail("unreachable SCAN_N sentinel");
         load_ir(4'(IR_INTEST));
+    endtask
+
+    task automatic write_ice(
+        input logic [4:0]  address,
+        input logic [31:0] data
+    );
+        logic [37:0] ignored;
+        shift_dr(38, chain2_serial_in(1'b1, address, data), ignored);
+        if (&{1'b0, ignored})
+            fail("unreachable chain-2 sentinel");
     endtask
 
     task automatic clock_out(input logic [31:0] data);
@@ -235,7 +246,7 @@ module arm7tdmis_debug_pc_capture_tb
         DBGRQ = 1'b0;
 
         tck(1'b0, 1'b0);
-        select_chain1();
+        select_chain(4'd1);
         monitor_debug_bus = 1'b1;
 
         // OpenOCD arm7tdmi_read_core_regs(), reduced to r0 and r15.
@@ -262,6 +273,64 @@ module arm7tdmis_debug_pc_capture_tb
 
         if (!DBGACK)
             fail("PC capture unexpectedly left debug state");
+
+        // Repeat through an instruction breakpoint. OpenOCD applies the
+        // normal break/watch correction (three words) after removing the
+        // STM pipeline's three-word contribution.
+        monitor_debug_bus = 1'b0;
+        CLKEN = 1'b0;
+        nRESET = 1'b0;
+        DBGnTRST = 1'b0;
+        repeat (3) @(posedge CLK);
+        nRESET = 1'b1;
+        repeat (3) @(posedge CLK);
+        DBGnTRST = 1'b1;
+        tck(1'b0, 1'b0);
+        select_chain(4'd2);
+
+        // WP0: exact privileged ARM opcode fetch at BREAKPOINT_PC.
+        write_ice(5'h08, BREAKPOINT_PC);
+        write_ice(5'h09, 32'h0000_0003);
+        write_ice(5'h0A, 32'h0000_0000);
+        write_ice(5'h0B, 32'hFFFF_FFFF);
+        write_ice(5'h0C, 32'h0000_0114);
+        write_ice(5'h0D, 32'h0000_00E0);
+
+        CLKEN = 1'b1;
+        for (int i = 0; i < 280; i++) begin
+            @(posedge CLK);
+            #1;
+            if (DBGACK)
+                break;
+        end
+        if (!DBGACK)
+            fail("opcode breakpoint did not enter debug state");
+
+        // The instruction at 0x3c writes 0x44. The breakpointed MOV at
+        // 0x40 would write 0x48 and must not have executed.
+        if (u_dut.u_core.u_regfile.regs[0] !== 32'h0000_0044)
+            fail($sformatf(
+                "breakpointed instruction changed r0 to %08x",
+                u_dut.u_core.u_regfile.regs[0]));
+
+        select_chain(4'd1);
+        monitor_debug_bus = 1'b1;
+        clock_out(DEBUG_STM_R0_PC);
+        clock_out(DEBUG_NOP);
+        clock_out(DEBUG_NOP);
+        clock_data_in(scanned_r0);
+        clock_data_in(scanned_r15);
+        monitor_debug_bus = 1'b0;
+
+        corrected_pc = scanned_r15 - 32'd12 - 32'd12;
+        if (corrected_pc !== BREAKPOINT_PC)
+            fail($sformatf(
+                "OpenOCD breakpoint correction expected %08x, got %08x (scanned r15=%08x)",
+                BREAKPOINT_PC, corrected_pc, scanned_r15));
+        if (external_debug_transfers != 0)
+            fail($sformatf(
+                "breakpoint PC capture leaked %0d external accesses",
+                external_debug_transfers));
 
         if (errors != 0)
             $fatal(1, "[debug_pc_capture] FAIL (%0d errors)", errors);
