@@ -2664,7 +2664,7 @@ number of cycles spent in an internal FSM state.
   before its response edge and the pending normal instruction stays frozen.
   The system-speed test covers the four permitted at-speed classes—single
   load/store and LDM/STM—including stalls and byte/halfword/word accesses.
-- [ ] **DBG-007:** Implement debug entry/exit PC formulas, temporary DBGACK behavior,
+- [x] **DBG-007:** Implement debug entry/exit PC formulas, temporary DBGACK behavior,
   pending interrupt preservation, interrupt masking during at-speed execution, and
   the DBGRQ/PC-modify errata policy. Scan-loaded r15 now replaces all stale
   fetch/decode state and the OpenOCD-style branch/RESTART sequence resumes at that
@@ -2684,7 +2684,15 @@ number of cycles spent in an internal FSM state.
   vector. `tb/integration/arm7tdmis_debug_system_speed_tb.sv` compares public
   r15 scans across ordinary debug-speed execution and a stalled at-speed LDR,
   requiring one address per `N` instruction and exactly three per `S`
-  instruction. The documented PC-modify erratum policy remains open.
+  instruction. The corrected-default r4p3 erratum [13] policy treats the
+  canonical `DBGRQ` input as synchronous, commits every PC modification
+  atomically at a legal halt boundary, and retains its destination through
+  pipeline refill for the public r15 scan. Asynchronous board/framework
+  sources must be synchronized before this interface; no silicon-defect
+  compatibility parameter is provided for a condition outside that interface
+  contract. `tb/integration/arm7tdmis_debug_pc_modify_dbgrq_tb.sv` covers the
+  synchronous boundaries before, during, and after `MOV pc` and during the
+  execute, data, and writeback phases of `LDR pc`.
 - [x] **JTAG-001:** Exhaustively verify all 16 TAP states and transitions, async
   `DBGnTRST`, Capture/Shift/Update-IR, fixed `0001` capture, all five public
   instructions, and BYPASS for every other IR encoding. Fail-hard evidence:
@@ -2762,7 +2770,7 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
 | [10] Thumb EIS log error | Corrected / non-synthesized | Ensure project trace logger is correct |
 | [11] SWI/PABT after condition-failed Undef | Present in r4p3 | Decide corrected-default vs compatibility parameter |
 | [12] Thumb DABT LR low-bit error | Corrected in r4p3 | Regression |
-| [13] async DBGRQ during PC modification | Present in r4p3 | Decide corrected-default vs compatibility parameter |
+| [13] async DBGRQ during PC modification | Present in r4p3 | Corrected default: synchronous `DBGRQ` contract, atomic PC commit, retained redirect regression; synchronize asynchronous sources externally |
 | [14] non-indexed LDC/STC decode | Present in r4p3 | Decide corrected-default vs compatibility parameter |
 | [15] sequential MRC timing | Present in r4p3 | Decide corrected-default vs compatibility parameter |
 

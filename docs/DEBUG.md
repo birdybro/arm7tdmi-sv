@@ -237,6 +237,17 @@ external synchronous input, while bit 0 reports internal `DBGACKI` rather than
 the force-modified external pin. These distinctions are covered by
 `tb/integration/arm7tdmis_debug_control_sync_tb.sv`.
 
+That synchronous input contract also defines the corrected-default policy for
+r4p3 erratum [13]. A PC-modifying instruction commits atomically at its legal
+halt boundary, and the core retains the committed destination while its target
+pipeline refills so a public r15 scan cannot expose the old sequential PC.
+There is no silicon-defect compatibility parameter: the defect requires an
+asynchronous pin transition that is outside this soft-macrocell interface
+contract. MiSTer or other board/framework wrappers must synchronize such a
+source first. `tb/integration/arm7tdmis_debug_pc_modify_dbgrq_tb.sv` covers
+requests immediately before, during, and after `MOV pc`, plus the execute,
+data, and writeback boundaries of `LDR pc`.
+
 A halt-mode data watchpoint is remembered through the watched instruction's
 final transfer and all of its architectural writeback. If it coincides with a
 Data Abort or an unmasked IRQ/FIQ request, the core first commits the selected

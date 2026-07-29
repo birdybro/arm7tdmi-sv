@@ -125,7 +125,9 @@ module arm7tdmis_core_pipelined
     output logic        dbg_breakpoint_interrupt_pending,
     output logic        dbg_exception_entry,
     output logic        dbg_exception_vector_ready,
-    output logic [31:0] dbg_exception_vector_pc
+    output logic [31:0] dbg_exception_vector_pc,
+    output logic        dbg_pc_redirect_pending,
+    output logic [31:0] dbg_pc_redirect_pc
 );
 
     // =====================================================================
@@ -1635,6 +1637,30 @@ module arm7tdmis_core_pipelined
     assign flush_target_pc = ddata_writes_pc ? load_value_q
                            : block_writes_pc ? RDATA
                                              : pc_target_exec;
+
+    // A synchronous debug request can stop the core after a PC-modifying
+    // instruction has committed but before its destination reaches Execute.
+    // de_q still names the old instruction during that refill window, so its
+    // normal r15 debug view is stale. Retain the architectural redirect until
+    // the destination starts executing. This is the corrected soft-core
+    // policy for r4p3 erratum [13]: DBGRQ is synchronous at this interface,
+    // and a legal-boundary halt observes the complete PC modification.
+    always_ff @(posedge CLK) begin
+        if (!nRESET) begin
+            dbg_pc_redirect_pending <= 1'b0;
+            dbg_pc_redirect_pc      <= 32'h0000_0000;
+        end else if (dbg_pc_write) begin
+            dbg_pc_redirect_pending <= 1'b0;
+        end else if (CLKEN) begin
+            if (flush && !any_exc_fires) begin
+                dbg_pc_redirect_pending <= 1'b1;
+                dbg_pc_redirect_pc      <= flush_target_pc;
+            end else if (dbg_pc_redirect_pending && executing
+                         && (de_q.pc == dbg_pc_redirect_pc)) begin
+                dbg_pc_redirect_pending <= 1'b0;
+            end
+        end
+    end
 
     // =====================================================================
     // E-stage sequential state

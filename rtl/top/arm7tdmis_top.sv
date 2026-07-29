@@ -155,7 +155,9 @@ module arm7tdmis_top
             ice_core_breakpoint_interrupt_pending),
         .dbg_exception_entry(ice_core_exception_entry),
         .dbg_exception_vector_ready(ice_core_exception_vector_ready),
-        .dbg_exception_vector_pc(ice_core_exception_vector_pc)
+        .dbg_exception_vector_pc(ice_core_exception_vector_pc),
+        .dbg_pc_redirect_pending(ice_core_pc_redirect_pending),
+        .dbg_pc_redirect_pc(ice_core_pc_redirect_pc)
     );
 
     // ---- EmbeddedICE-RT (§22) ----
@@ -200,6 +202,8 @@ module arm7tdmis_top
     logic        ice_entry_exception;
     logic        ice_debug_session_active;
     logic        ice_system_speed_active;
+    logic        ice_core_pc_redirect_pending;
+    logic [31:0] ice_core_pc_redirect_pc;
     logic        ice_data_write_q;
     logic [31:0] ice_watch_data;
 
@@ -496,6 +500,8 @@ module arm7tdmis_top
     // scan data bus; dbg_pc_advance_q above records that persistent bias.
     wire [31:0] dbg_entry_r15 =
         ice_entry_exception ? (ice_core_exception_vector_pc + 32'd8)
+      : ice_core_pc_redirect_pending
+                            ? (ice_core_pc_redirect_pc + 32'd8)
                             : dbg_reg_rdata;
     wire [31:0] dbg_block_capture_data =
         (dbg_block_reg_q == 4'd15) ? (dbg_entry_r15 + dbg_pc_advance_q
