@@ -2457,14 +2457,15 @@ module arm7tdmis_core_pipelined
     //              accept or refuse.
 
     wire trans_is_active = (TRANS == 2'(TRANS_N)) || (TRANS == 2'(TRANS_S));
-    assign CPnMREQ = !trans_is_active;
-    assign CPSEQ   =  TRANS[0];
-    assign CPnTRANS = is_priv;
+    assign CPnMREQ  = !trans_is_active;
+    assign CPSEQ    =  TRANS[0];
+    assign CPnTRANS = !nRESET || is_priv;
     assign CPnOPC   =  PROT[PROT_BIT_DATA];   // mirror — opcode fetch → CPnOPC=0
-    assign CPTBIT   = cpsr.t;
-    assign CPnI     = dbg_halted || !((passes_cond && instr_is_cp)
-                      || ((state_q == S_CP_WAIT)
-                          && !cp_wait_abandon_pending));
+    assign CPTBIT   = nRESET && cpsr.t;
+    assign CPnI     = !nRESET || dbg_halted
+                      || !((passes_cond && instr_is_cp)
+                           || ((state_q == S_CP_WAIT)
+                               && !cp_wait_abandon_pending));
 
     // =====================================================================
     // §24: ETM-facing pipeline-state outputs
@@ -2477,8 +2478,8 @@ module arm7tdmis_core_pipelined
     //                (condition failed). See TRM Table 7-23 — even
     //                cond-fail instructions consume cycles but signal
     //                DBGnEXEC HIGH so ETM can distinguish.
-    assign DBGINSTRVALID = CLKEN && executing;
-    assign DBGnEXEC      = !(CLKEN && passes_cond);
+    assign DBGINSTRVALID = nRESET && CLKEN && executing;
+    assign DBGnEXEC      = !(nRESET && CLKEN && passes_cond);
 
 
     // ---- TB / debug observability ----
