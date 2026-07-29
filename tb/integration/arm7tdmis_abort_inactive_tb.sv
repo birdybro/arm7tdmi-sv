@@ -1,7 +1,7 @@
 // BUS-007 regression: ABORT has no meaning in an internal (I) or
 // coprocessor (C) cycle and must be ignored.  A multi-cycle UMLAL creates
-// consecutive I cycles; the shared fixture asserts ABORT only in the
-// interior of that inactive run, away from every N/S response phase.
+// consecutive I cycles; the shared fixture asserts ABORT only when the
+// latched response phase is inactive, never for an N/S response.
 
 module arm7tdmis_abort_inactive_tb
     import arm7tdmis_bus_pkg::*;
@@ -31,7 +31,8 @@ module arm7tdmis_abort_inactive_tb
     always_ff @(posedge CLK or negedge nRESET) begin
         if (!nRESET)
             seen_abort_i <= 1'b0;
-        else if (u_fixture.ABORT && u_fixture.TRANS == TRANS_I)
+        else if (u_fixture.ABORT
+                 && u_fixture.u_mem.trans_q == TRANS_I)
             seen_abort_i <= 1'b1;
     end
 

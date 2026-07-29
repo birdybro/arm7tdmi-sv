@@ -48,7 +48,6 @@ module arm7tdmis_test_fixture
     logic [31:0] RDATA;
     logic        ABORT;
     logic        mem_abort;
-    logic        inactive_q;
 
     logic CPnMREQ;
     logic CPSEQ;
@@ -164,18 +163,15 @@ module arm7tdmis_test_fixture
         .inject_abort (inject_abort)
     );
 
-    // BUS-007 verification hook.  ABORT is deliberately asserted only when
-    // both the previous and current address classes are I/C, so it cannot
-    // be mistaken for a response to a neighboring active transfer.
-    wire inactive_now = !(TRANS inside {TRANS_N, TRANS_S});
-    always_ff @(posedge CLK) begin
-        if (!nRESET)
-            inactive_q <= 1'b0;
-        else if (CLKEN)
-            inactive_q <= inactive_now;
-    end
+    // BUS-007 verification hook. ABORT is data-timed, so classify the
+    // response with the memory model's latched TRANS rather than the core's
+    // live address-class output. This deliberately drives ABORT only for an
+    // I/C response and cannot feed the core's bus presentation back into its
+    // exception selector.
+    wire inactive_response = !u_mem.is_active_q;
     assign ABORT = mem_abort
-                 | (ABORT_DURING_INACTIVE && inactive_q && inactive_now);
+                 | (ABORT_DURING_INACTIVE && nRESET && CLKEN
+                    && inactive_response);
 
     arm7tdmis_assertions u_assert (
         .CLK    (CLK),
