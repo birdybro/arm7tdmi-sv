@@ -65,6 +65,35 @@ class SoakContractTest(unittest.TestCase):
                 )
             )
 
+    def test_failure_signature_normalizes_volatile_values(self) -> None:
+        first = soak_harness._failure_signature(
+            timed_out=False,
+            exit_code=1,
+            output="[mister_wrapper] FAIL: request 0x1234 waited 7 cycles\n",
+        )
+        second = soak_harness._failure_signature(
+            timed_out=False,
+            exit_code=1,
+            output="[mister_wrapper] FAIL: request 0xABCD waited 19 cycles\n",
+        )
+        self.assertEqual(first, second)
+        self.assertEqual(
+            soak_harness._failure_signature(
+                timed_out=False,
+                exit_code=1,
+                output="ERROR: AddressSanitizer: heap-buffer-overflow\n",
+            ),
+            "sanitizer:address:heap-buffer-overflow",
+        )
+        self.assertEqual(
+            soak_harness._failure_signature(
+                timed_out=True,
+                exit_code=None,
+                output="",
+            ),
+            "timeout",
+        )
+
     def test_failure_artifacts_support_external_directories(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
