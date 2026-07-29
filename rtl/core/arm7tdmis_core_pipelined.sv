@@ -169,6 +169,13 @@ module arm7tdmis_core_pipelined
     logic [3:0]  cp_mrc_rd_q;
     logic        cp_wait_is_mcr_q;
     logic        cp_wait_is_mrc_q;
+    logic        cp_wait_is_ldc_q;
+    logic        cp_wait_is_stc_q;
+    logic [31:0] cp_ls_addr_q;
+    logic [31:0] cp_ls_writeback_value_q;
+    logic [3:0]  cp_ls_rn_q;
+    logic        cp_ls_writeback_q;
+    logic        cp_ls_first_q;
 
     // =====================================================================
     // F stage
@@ -197,7 +204,12 @@ module arm7tdmis_core_pipelined
     // memory substates (S_DDATA, last S_BLOCK_DATA beat, S_SWP_WDATA,
     // S_MULL_HI, last S_MUL_BUSY cycle). Result arrives next cycle when
     // state_q == S_EXEC and latch_into_fd captures it.
-    wire issue_fetch   = !flush && (state_next == S_EXEC);
+    // LDC/STC's final N data address does not also fetch an opcode. The
+    // normal S_EXEC cycle following it restarts instruction prefetch.
+    wire cp_ls_data_state = ((state_q == S_CP_MCR_DATA) && cp_wait_is_stc_q)
+                          || ((state_q == S_CP_MRC_DATA) && cp_wait_is_ldc_q);
+    wire issue_fetch   = !flush && (state_next == S_EXEC)
+                       && !cp_ls_data_state;
     wire latch_into_fd = !flush && !e_busy && inflight_valid_q;
 
     // D-stage advance — same shape; takes the decoded view of fd_q.
@@ -767,6 +779,12 @@ module arm7tdmis_core_pipelined
                                      : (external_cp_ready
                                         && external_cp_is_mrc)
                                                             ? S_CP_MRC_DATA
+                                     : (external_cp_ready
+                                        && external_cp_is_stc)
+                                                            ? S_CP_MCR_DATA
+                                     : (external_cp_ready
+                                        && external_cp_is_ldc)
+                                                            ? S_CP_MRC_DATA
                                                              : S_EXEC;
             S_DDATA:      state_next = ls_load_q ? S_LOAD_WB : S_EXEC;
             S_LOAD_WB:    state_next = S_EXEC;
@@ -793,9 +811,17 @@ module arm7tdmis_core_pipelined
             S_CP_WAIT:    state_next = !cp_wait_ready ? S_CP_WAIT
                                      : cp_wait_is_mcr_q ? S_CP_MCR_DATA
                                      : cp_wait_is_mrc_q ? S_CP_MRC_DATA
+                                     : cp_wait_is_stc_q ? S_CP_MCR_DATA
+                                     : cp_wait_is_ldc_q ? S_CP_MRC_DATA
                                                        : S_EXEC;
-            S_CP_MCR_DATA: state_next = S_EXEC;
-            S_CP_MRC_DATA: state_next = S_CP_MRC_WB;
+            S_CP_MCR_DATA: state_next = cp_wait_is_stc_q
+                                      ? (cp_ls_final ? S_EXEC
+                                                     : S_CP_MCR_DATA)
+                                      : S_EXEC;
+            S_CP_MRC_DATA: state_next = cp_wait_is_ldc_q
+                                      ? (cp_ls_final ? S_EXEC
+                                                     : S_CP_MRC_DATA)
+                                      : S_CP_MRC_WB;
             S_CP_MRC_WB:   state_next = S_EXEC;
             default:      state_next = S_EXEC;
         endcase
@@ -866,9 +892,27 @@ module arm7tdmis_core_pipelined
     wire external_cp_busy    = external_cp_request && !CPA &&  CPB;
     wire external_cp_is_mcr  = external_cp_request && instr_is_mcr;
     wire external_cp_is_mrc  = external_cp_request && instr_is_mrc;
+    wire external_cp_is_ldc  = external_cp_request
+                             && (dec.instr_class == INSTR_LDC_STC)
+                             && de_q.instr[20];
+    wire external_cp_is_stc  = external_cp_request
+                             && (dec.instr_class == INSTR_LDC_STC)
+                             && !de_q.instr[20];
     wire cp_wait_ready       = (state_q == S_CP_WAIT) && !CPA && !CPB;
+    wire cp_ls_final         = cp_ls_data_state && CPA && CPB;
     wire cp_undef_trap = executing && condition_pass && instr_is_cp
                       && (instr_is_cp14 ? !cp14_supported : CPA);
+
+    // ARM Addressing Mode 5. offset8 is scaled by four; P selects the
+    // adjusted address versus the original base, while W independently
+    // requests the adjusted value be committed to Rn.
+    wire [31:0] cp_ls_offset = {22'h0, de_q.instr[7:0], 2'b00};
+    wire [31:0] cp_ls_adjusted_base = de_q.instr[23]
+                                           ? (rf_ra_data + cp_ls_offset)
+                                           : (rf_ra_data - cp_ls_offset);
+    wire [31:0] cp_ls_start_addr = de_q.instr[24]
+                                           ? cp_ls_adjusted_base
+                                           : rf_ra_data;
 
     wire cp14_mrc_control_fires = passes_cond && cp14_mrc_control;
     wire cp14_mcr_data_fires    = passes_cond && cp14_mcr_data;
@@ -1157,6 +1201,8 @@ module arm7tdmis_core_pipelined
     wire block_writes_ldm = (state_q == S_BLOCK_DATA) && block_load_q
                           && !data_abort_q && !data_abort_now;
     wire swp_writes_rd    = (state_q == S_SWP_WB) && !data_abort_q;
+    wire cp_ls_writes_base = cp_ls_data_state && cp_ls_first_q
+                           && cp_ls_writeback_q;
 
     wire [1:0]  swp_byte_lane  = CFGBIGEND ? ~swp_addr_lo_q
                                            :  swp_addr_lo_q;
@@ -1181,6 +1227,10 @@ module arm7tdmis_core_pipelined
         end else if (swp_writes_rd) begin
             rf_write_addr = swp_rd_q;
             rf_write_data = swp_load_value;
+            rf_write_en   = 1'b1;
+        end else if (cp_ls_writes_base) begin
+            rf_write_addr = cp_ls_rn_q;
+            rf_write_data = cp_ls_writeback_value_q;
             rf_write_en   = 1'b1;
         end else if (state_q == S_CP_MRC_WB) begin
             rf_write_addr = cp_mrc_rd_q;
@@ -1370,6 +1420,13 @@ module arm7tdmis_core_pipelined
                 cp_mrc_rd_q              <= 4'h0;
                 cp_wait_is_mcr_q         <= 1'b0;
                 cp_wait_is_mrc_q         <= 1'b0;
+                cp_wait_is_ldc_q         <= 1'b0;
+                cp_wait_is_stc_q         <= 1'b0;
+                cp_ls_addr_q             <= 32'h0;
+                cp_ls_writeback_value_q  <= 32'h0;
+                cp_ls_rn_q               <= 4'h0;
+                cp_ls_writeback_q        <= 1'b0;
+                cp_ls_first_q            <= 1'b0;
         end else if (CLKEN) begin
                 state_q <= state_next;
 
@@ -1388,10 +1445,24 @@ module arm7tdmis_core_pipelined
                     cp_mrc_rd_q      <= dec.rd;
                     cp_wait_is_mcr_q <= external_cp_is_mcr;
                     cp_wait_is_mrc_q <= external_cp_is_mrc;
+                    cp_wait_is_ldc_q <= external_cp_is_ldc;
+                    cp_wait_is_stc_q <= external_cp_is_stc;
+                    if (external_cp_is_ldc || external_cp_is_stc) begin
+                        cp_ls_addr_q            <= cp_ls_start_addr;
+                        cp_ls_writeback_value_q <= cp_ls_adjusted_base;
+                        cp_ls_rn_q              <= dec.rn;
+                        cp_ls_writeback_q       <= de_q.instr[21];
+                        cp_ls_first_q           <= 1'b1;
+                    end
                 end
 
                 if (state_q == S_CP_MRC_DATA)
                     cp_mrc_data_q <= RDATA;
+
+                if (cp_ls_data_state) begin
+                    cp_ls_addr_q  <= cp_ls_addr_q + 32'd4;
+                    cp_ls_first_q <= 1'b0;
+                end
 
                 // L/S micro-op snapshot at end of S_EXEC.
                 if (state_q == S_EXEC && ls_take_data_cycle) begin
@@ -1815,22 +1886,44 @@ module arm7tdmis_core_pipelined
                 end
             end
             S_CP_MCR_DATA: begin
-                // Register-transfer data is routed to the coprocessor while
-                // the address class begins the next opcode fetch.
-                ADDR  = fetch_pc_q;
-                WRITE = WRITE_WRITE;
-                SIZE  = 2'(SIZE_WORD);
-                PROT  = {is_priv, 1'b1};
-                TRANS = 2'(TRANS_N);
-                WDATA = cp_mcr_data_q;
+                if (cp_wait_is_stc_q) begin
+                    // The external coprocessor supplies store data to the
+                    // system write-data mux. Low/low requests another word;
+                    // high/high marks this N cycle as the final transfer.
+                    ADDR  = cp_ls_addr_q;
+                    WRITE = WRITE_WRITE;
+                    SIZE  = 2'(SIZE_WORD);
+                    PROT  = {is_priv, 1'b1};
+                    TRANS = cp_ls_final ? 2'(TRANS_N) : 2'(TRANS_S);
+                end else begin
+                    // Register-transfer data is routed to the coprocessor
+                    // while the address class begins the next opcode fetch.
+                    ADDR  = fetch_pc_q;
+                    WRITE = WRITE_WRITE;
+                    SIZE  = 2'(SIZE_WORD);
+                    PROT  = {is_priv, 1'b1};
+                    TRANS = 2'(TRANS_N);
+                    WDATA = cp_mcr_data_q;
+                end
             end
             S_CP_MRC_DATA: begin
-                // Coprocessor drives RDATA during this internal data phase.
-                ADDR  = fetch_pc_q;
-                WRITE = WRITE_READ;
-                SIZE  = 2'(SIZE_WORD);
-                PROT  = {is_priv, 1'b1};
-                TRANS = 2'(TRANS_I);
+                if (cp_wait_is_ldc_q) begin
+                    // Memory supplies each word directly to the external
+                    // coprocessor over RDATA.
+                    ADDR  = cp_ls_addr_q;
+                    WRITE = WRITE_READ;
+                    SIZE  = 2'(SIZE_WORD);
+                    PROT  = {is_priv, 1'b1};
+                    TRANS = cp_ls_final ? 2'(TRANS_N) : 2'(TRANS_S);
+                end else begin
+                    // Coprocessor drives RDATA during this internal data
+                    // phase of an MRC.
+                    ADDR  = fetch_pc_q;
+                    WRITE = WRITE_READ;
+                    SIZE  = 2'(SIZE_WORD);
+                    PROT  = {is_priv, 1'b1};
+                    TRANS = 2'(TRANS_I);
+                end
             end
             S_CP_MRC_WB: begin
                 // Write the latched CP word to Rd while completing the
