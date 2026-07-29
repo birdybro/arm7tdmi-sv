@@ -564,6 +564,16 @@ module arm7tdmis_core_pipelined
         .flag_we       (alu_flag_we)
     );
 
+    // Merge the ALU's per-flag write enables before using the PSR's
+    // byte-granular flags field. Logical/move/shift operations update NZC
+    // but preserve V; any future disabled flag likewise retains its value.
+    wire [3:0] alu_flags_merged = {
+        alu_flag_we[3] ? alu_n : cpsr.n,
+        alu_flag_we[2] ? alu_z : cpsr.z,
+        alu_flag_we[1] ? alu_c : cpsr.c,
+        alu_flag_we[0] ? alu_v : cpsr.v
+    };
+
     // ---- Multiplier ----
     logic [31:0] mul_result_lo, mul_result_hi;
     logic        mul_n_out, mul_z_out;
@@ -1133,7 +1143,7 @@ module arm7tdmis_core_pipelined
     wire        flags_from_dp_shift  = (state_q == S_DP_SHIFT) && dp_shift_flags_we_q;
     wire [3:0]  flags_value          = flags_from_mul
                                        ? {mul_n_out, mul_z_out, cpsr.c, cpsr.v}
-                                       : {alu_n, alu_z, alu_c, alu_v};
+                                       : alu_flags_merged;
     assign cpsr_write_en   = writes_flags || msr_to_cpsr || flags_from_dp_shift;
     assign cpsr_write_data = msr_to_cpsr      ? sh_result
                            : flags_from_dp_shift ? {dp_shift_flags_q, 28'h0}
@@ -1341,7 +1351,7 @@ module arm7tdmis_core_pipelined
                 if (state_q == S_EXEC && dp_shift_take_cycle) begin
                     dp_shift_rd_q        <= dec.rd;
                     dp_shift_result_q    <= alu_result;
-                    dp_shift_flags_q     <= {alu_n, alu_z, alu_c, alu_v};
+                    dp_shift_flags_q     <= alu_flags_merged;
                     dp_shift_writes_q    <= dp_writes_dest;
                     dp_shift_flags_we_q  <= passes_cond && instr_is_dp && dec.s_bit;
                     dp_shift_writes_pc_q <= dp_writes_pc;
