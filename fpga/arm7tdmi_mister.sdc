@@ -1,8 +1,8 @@
-# Standalone example constraints for a 50 MHz MiSTer-style system clock.
+# Standalone example constraints for a verified 25 MHz system clock.
 # A containing project may replace the period and boundary I/O delays, but the
 # *_ASYNC and RESET_N exceptions must retain equivalent CDC/reset treatment.
 
-create_clock -name CLK -period 20.000 [get_ports {CLK}]
+create_clock -name CLK -period 40.000 [get_ports {CLK}]
 derive_clock_uncertainty
 
 # RESET_N asynchronously asserts all state. The framework must deassert it only
@@ -13,14 +13,12 @@ set_false_path -from [get_ports {RESET_N}]
 set_false_path -from [get_ports {
     IRQ_ASYNC
     FIQ_ASYNC
-    DEBUG_ENABLE_ASYNC
-    DBGRQ_ASYNC
-    DBGBREAK_ASYNC
-    DBGEXT_ASYNC[*]
 }]
 
-# All remaining boundary signals are synchronous to CLK in this example.
-set_input_delay -clock CLK -min 0.000 [get_ports {
+# All remaining boundary signals are synchronous to CLK in this example. The
+# standalone pin-level characterization assumes a 0.25-to-5 ns source delay;
+# an in-fabric integration must replace these delays with its actual paths.
+set_input_delay -clock CLK -min 0.250 [get_ports {
     CPU_CE
     MEM_READY
     MEM_RDATA[*]

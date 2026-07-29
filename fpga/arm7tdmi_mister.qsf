@@ -11,5 +11,127 @@ set_global_assignment -name SDC_FILE arm7tdmi_mister.sdc
 
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
 set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
+set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
+
+# This project characterizes the portable module, not a board pinout. CLK uses
+# one representative global-clock pin so clock-tree delay is included; every
+# interface signal is virtual to avoid accidental package assignments and the
+# misleading "unassigned physical pins" warning. A real project replaces all
+# of these assignments and supplies a clock matching its own SDC.
+set_location_assignment PIN_V11 -to CLK
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to CLK
+set_instance_assignment -name VIRTUAL_PIN ON -to RESET_N
+set_instance_assignment -name VIRTUAL_PIN ON -to CPU_CE
+set_instance_assignment -name VIRTUAL_PIN ON -to IRQ_ASYNC
+set_instance_assignment -name VIRTUAL_PIN ON -to FIQ_ASYNC
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_VALID
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_READY
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[0]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[1]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[2]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[3]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[4]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[5]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[6]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[7]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[8]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[9]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[10]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[11]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[12]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[13]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[14]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[15]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[16]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[17]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[18]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[19]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[20]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[21]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[22]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[23]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[24]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[25]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[26]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[27]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[28]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[29]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[30]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ADDR[31]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WRITE
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[0]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[1]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[2]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[3]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[4]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[5]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[6]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[7]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[8]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[9]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[10]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[11]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[12]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[13]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[14]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[15]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[16]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[17]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[18]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[19]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[20]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[21]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[22]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[23]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[24]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[25]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[26]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[27]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[28]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[29]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[30]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_WDATA[31]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_BYTE_ENABLE[0]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_BYTE_ENABLE[1]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_BYTE_ENABLE[2]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_BYTE_ENABLE[3]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_CODE
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_PRIVILEGED
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_LOCK
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_SEQUENTIAL
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_MORE
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[0]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[1]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[2]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[3]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[4]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[5]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[6]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[7]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[8]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[9]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[10]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[11]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[12]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[13]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[14]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[15]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[16]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[17]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[18]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[19]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[20]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[21]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[22]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[23]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[24]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[25]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[26]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[27]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[28]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[29]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[30]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_RDATA[31]
+set_instance_assignment -name VIRTUAL_PIN ON -to MEM_ERROR
 
 set_global_assignment -name LAST_QUARTUS_VERSION "17.0.2 Lite Edition"

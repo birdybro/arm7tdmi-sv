@@ -144,6 +144,7 @@ From the repository root, run:
 make -C scripts harness-unit
 make -C scripts lint-example
 make -C scripts quartus-analysis
+make -C scripts quartus-compile
 ```
 
 The first command proves that the plain file list and QIP contain exactly the
@@ -151,16 +152,25 @@ public wrapper dependencies and that all package paths are portable. The
 second elaborates the package and example through the public wrapper only.
 The third reads the checked QSF/QIP with the MiSTer Quartus 17 frontend and
 runs analysis/elaboration for `5CSEBA6U23I7`.
-The supplied SDC assumes a 50 MHz standalone `CLK`; a containing MiSTer
-project must replace boundary delays and the clock period with its selected
-framework constraints while retaining equivalent reset/CDC treatment.
+The fourth performs synthesis, fit, assembly, and four-corner TimeQuest, then
+fails on critical warnings, ignored constraints, unconstrained endpoints,
+negative slack, a missing image, or a resource-budget overrun. For the
+trimmed profile characterized on Quartus Lite 17.0.2, the checked result is
+3,311 ALMs, 2,611 registers, six DSPs, no memory bits, +7.638 ns worst setup
+slack, and +0.165 ns worst hold slack.
+The supplied SDC assumes a timing-verified 25 MHz standalone `CLK` and a
+0.25-to-5 ns synchronous input arrival window. A containing MiSTer project
+must replace boundary delays and the clock period with its selected framework
+constraints while retaining equivalent reset/CDC treatment.
 
 ## Evidence and current limits
 
 `make -C scripts lint-mister` elaborates this wrapper as the synthesis top.
 `make -C scripts quartus-analysis` additionally proves that Quartus 17.0.2
 accepts and elaborates the complete public package for the selected Cyclone V.
-This is not a fit or timing-closure claim.
+`make -C scripts quartus-compile` proves fit and timing only for the supplied
+trimmed characterization top and its stated 25 MHz boundary assumptions. It
+is not evidence for a containing framework's clocks, placement, or board I/O.
 `make -C scripts integ-mister_wrapper` runs a real ARM program through this
 interface with deterministic randomized CPU enables and memory waits. The
 test checks request stability and exact handshake count, accepts a response

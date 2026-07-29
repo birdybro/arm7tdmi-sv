@@ -78,13 +78,18 @@ class SdcContractTest(unittest.TestCase):
             "RESET_N",
             "IRQ_ASYNC",
             "FIQ_ASYNC",
+        ):
+            with self.subTest(async_port=async_port):
+                self.assertRegex(false_paths, rf"\b{async_port}\b")
+
+        for trimmed_port in (
             "DEBUG_ENABLE_ASYNC",
             "DBGRQ_ASYNC",
             "DBGBREAK_ASYNC",
             "DBGEXT_ASYNC",
         ):
-            with self.subTest(async_port=async_port):
-                self.assertRegex(false_paths, rf"\b{async_port}\b")
+            with self.subTest(trimmed_port=trimmed_port):
+                self.assertNotRegex(commands, rf"\b{trimmed_port}\b")
 
         for synchronous_port in ("CPU_CE", "MEM_READY", "MEM_RDATA", "MEM_ERROR"):
             with self.subTest(synchronous_port=synchronous_port):
