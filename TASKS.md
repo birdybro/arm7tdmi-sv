@@ -2526,9 +2526,23 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   ISA-016 policy takes a precise Undefined trap before any would-be data
   cycle; defined aliases retain their architectural result. Mode 2 `ROR #0`
   now selects RRX in the shared shifter control.
-- [ ] **ISA-011:** Verify LDM/STM IA/IB/DA/DB, S/W/L, all 16 register-list bits,
+- [x] **ISA-011:** Verify LDM/STM IA/IB/DA/DB, S/W/L, all 16 register-list bits,
   user-bank forms, PC-in-list CPSR restore, base-in-list rules, and a documented empty
-  list policy.
+  list policy. `tb/integration/arm7tdmis_block_ls_matrix_tb.sv` executes 256
+  one-hot rows (P/U/W/L x every r0-r15 list bit) plus 16 eight-register rows
+  spanning IA/IB/DA/DB, W, and L; every row checks address order, N/S transfer
+  classification, data order, privilege, LOCK, writeback, and r15 behavior.
+  `tb/integration/arm7tdmis_block_ls_policy_tb.sv` adds 21 reset-per-case rows
+  for privileged User-bank LDM/STM (including STM^ with r15), both LDM^+PC
+  writeback forms and CPSR restore, and all base/list policies. STM with the
+  writeback base lowest stores the original base; a non-lowest base stores the
+  deterministic updated value. LDM with writeback and its base in the list keeps
+  the r4p3-compatible Base Updated result. Empty lists, Rn=r15, invalid S/W
+  forms, and S forms in User/System take the project-wide precise Undefined
+  trap before any data beat. `arm7tdmis_stm_base_list_tb` independently covers
+  the defined STM base-lowest rule in all four addressing modes, while
+  `arm7tdmis_ldm_pc_tb`, `arm7tdmis_pc_write_alignment_tb`, and the per-beat
+  abort/base-list regressions preserve the neighboring return and abort rules.
 - [ ] **ISA-012:** Verify SWP/SWPB data, alignment, endian lanes, register aliasing,
   atomicity, and abort behavior.
 - [ ] **ISA-013:** Prove condition-failed ARM instructions have exactly the documented

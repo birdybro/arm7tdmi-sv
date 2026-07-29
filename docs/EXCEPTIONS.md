@@ -1,8 +1,8 @@
 # Exception Entry Architecture
 
-> **Audit status:** Historical implementation notes. Saved-LR offsets, simultaneous
-> priority/interlock, and LDM/STM abort behavior are known incorrect; use `TASKS.md`
-> §31.4 as the authoritative requirement and status.
+> **Audit status:** Implementation notes, not a release sign-off. Use `TASKS.md`
+> §31.4 as the authoritative requirement and status; directed evidence below does
+> not replace the remaining exception, bus, and verification gates.
 
 Seven exception types per the ARM7TDMI-S r4p3 TRM §2.9. This doc captures their entry semantics, priorities, and where they fire in our pipelined core.
 
@@ -142,23 +142,35 @@ wire swi_fires = passes_cond && instr_is_swi;
 
 Fires on commit of an `INSTR_SWI` (= `cond | 0b1111 | comment24`).
 
-## Restart-safety: LDM/STM with DABT
+## LDM/STM Data Abort completion
 
-Per TRM §12, a data abort during an LDM/STM must leave the architectural state restorable so the abort handler can re-execute the instruction. Implementation:
+The r4p3 TRM requires an LDM/STM to complete its transfer sequence after a
+Data Abort and leave the requested modified base visible. Implementation:
 
-1. **Per-beat Rd suppression**: `block_writes_ldm` gated by `!data_abort_now`. The aborting beat's load doesn't commit, so the destination register stays at its pre-LDM value.
+1. **LDM destination suppression**: `block_writes_ldm` is gated by
+   `!data_abort_q && !data_abort_now`. Loads before the abort commit; the
+   aborting and every later destination write are suppressed. Because r15 is
+   last, an abort on any beat prevents the PC write.
 
-2. **Base writeback suppression**: deferred to a dedicated `S_BLOCK_WB` cycle (was: committed at S_EXEC). `block_does_writeback` gated by `!data_abort_q`:
-   ```
-   block_does_writeback = (state_q == S_BLOCK_WB)
-                       && block_writeback_q
-                       && !data_abort_q;
-   ```
-   If any beat aborted, Rn stays at its original value.
+2. **LDM Base Updated result**: normal writeback occurs in `S_BLOCK_WB`.
+   After an abort that port is needed for LR_abt, so
+   `block_ldm_abort_writeback` restores `block_writeback_addr_q` into Rn on
+   the final data beat. This also prevents an earlier base-in-list load from
+   replacing the modified base.
 
-3. **Latched snapshots**: `block_writeback_q`, `block_writeback_addr_q`, `block_rn_q` captured at S_EXEC end so S_BLOCK_WB doesn't rely on `dec.*` (which has advanced to the next instruction by then — see PIPELINE.md `de_q` staleness traps).
+3. **STM writeback and stores**: requested STM writeback commits in the setup
+   cycle, before any response can abort. All beats are still presented; the
+   external memory contract determines that the selected failed store does
+   not commit, while the independent non-aborted beats do.
 
-Validated end-to-end by `tb/integration/arm7tdmis_ldm_abort_tb.sv`: 4-register LDM with all beats aborting, asserts r0..r3 unchanged AND r5 (the base) still = 0x100.
+4. **Latched snapshots**: `block_writeback_q`,
+   `block_writeback_addr_q`, and `block_rn_q` are captured at S_EXEC end so
+   completion never relies on `dec.*` after the pipeline advances.
+
+`arm7tdmis_ldm_abort_tb`, `arm7tdmis_ldm_abort_base_list_tb`, and
+`arm7tdmis_stm_abort_tb` inject ABORT independently on every beat and check
+all four transfers, register/store reachability, modified-base writeback,
+r15 protection, exception state, and successor suppression.
 
 ## Return from exception
 
@@ -204,7 +216,9 @@ Validated by `tb/integration/arm7tdmis_ldm_pc_tb.sv`: handler clears cpsr.F befo
 | `arm7tdmis_fiq_tb` | nFIQ pin → vector 0x1C → handler |
 | `arm7tdmis_abort_tb` | DABT during LDR → vector 0x10 → handler |
 | `arm7tdmis_pabt_tb` | PABT during fetch → vector 0x0C → handler |
-| `arm7tdmis_ldm_abort_tb` | DABT during LDM → restart-safe Rn |
+| `arm7tdmis_ldm_abort_tb` | DABT on every LDM beat → later destinations suppressed, Base Updated, r15 protected |
+| `arm7tdmis_ldm_abort_base_list_tb` | DABT on every LDM beat with Rn in list → modified base restored |
+| `arm7tdmis_stm_abort_tb` | DABT on every STM beat → sequence completes and requested writeback remains |
 | `arm7tdmis_ldm_pc_tb` | LDM ^ PC exception return → CPSR restore |
 | `arm7tdmis_tb_top` | SWI (in smoke flow) |
 

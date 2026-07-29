@@ -40,7 +40,7 @@ the evidence required to promote a path to VERIFIED are listed in `TASKS.md` §3
 | Branch | B, BL, and BX paths exist |
 | Load/Store | LDR/STR byte/word Addressing Mode 2 is verified across all P/U/B/W/L and immediate/register rows; alias/r15 policy is directed-tested |
 | Halfword / signed L/S | LDRH/STRH/LDRSH/LDRSB Addressing Mode 3 is verified across every P/U/W and immediate/register row |
-| Block transfer | LDM/STM paths include IA/IB/DA/DB, writeback, user-bank, and PC-list cases; abort behavior is wrong |
+| Block transfer | ARM LDM/STM addressing, list bits, banking, PC restore, base/list, and operand policies are directed-verified; pin-level cycle closure remains |
 | Swap | SWP/SWPB paths and LOCK output exist; atomic/abort/endian closure is missing |
 | PSR transfer | MRS/MSR register/immediate and field-mask paths exist; privilege/reserved-bit handling is incomplete |
 | Software interrupt | An SWI entry path exists |
@@ -77,16 +77,16 @@ Most formats do not yet have exhaustive or even directed integration coverage.
 
 ### Exceptions
 
-RTL entry paths exist for all seven exception types, but they are not TRM-correct yet.
-The required priority is Reset > DABT > FIQ > IRQ > PABT > UNDEF > SWI; the current
-simultaneous-event logic, saved LR values, and abort handling have known defects.
+RTL entry paths exist for all seven exception types. Directed tests cover the required
+priority, saved-LR families, DABT+FIQ interlock, and per-beat block-transfer aborts,
+but the complete exception/abort release gate remains open in `TASKS.md` §31.4.
 
 - **Reset** (vector 0x00): synchronous deassertion of `nRESET`, sets Supervisor mode, I=F=1, T=0, PC=0
 - **UNDEF** (0x04): unknown opcode, NV condition, unaccepted coprocessor op
 - **SWI** (0x08): software interrupt, banks Supervisor
 - **PABT** (0x0C): ABORT sampled during a fetch — propagates via `fd_q.pabort` through the pipeline, fires when the aborted instruction reaches E
-- **DABT** (0x10): an entry path exists, but current LDM/STM base-writeback and
-  post-abort destination suppression conflict with the r4p3 TRM
+- **DABT** (0x10): directed LDM/STM tests cover every abort beat, requested
+  base writeback, later-load suppression, PC protection, and reached stores
 - **IRQ** (0x18): nIRQ pin, gated by CPSR.I
 - **FIQ** (0x1C): nFIQ pin, gated by CPSR.F; banks r8–r14
 
@@ -271,9 +271,12 @@ evidence.
 | `single_ls_matrix` | All 64 ARM Addressing Mode 2 P/U/B/W/L and immediate/shifted-register combinations |
 | `extra_ls_matrix` | All 64 ARM Addressing Mode 3 access/P/U/W and immediate/register combinations |
 | `single_ls_policy` | Defined load/store aliases and precise-Undefined policy for 14 unsafe operand combinations |
+| `block_ls_matrix` | 256 one-hot P/U/W/L/list-bit rows plus 16 multibeat IA/IB/DA/DB rows |
+| `block_ls_policy` | User-bank/PC/base-list behavior and precise-Undefined policy across 21 rows |
 | `abort` | DABT during LDR — Rd preserved, vector entry |
 | `pabt` | PABT propagation via `fd_q.pabort` |
-| `ldm_abort` | Per-beat load suppression, base writeback/restoration, and r15 protection |
+| `ldm_abort` / `ldm_abort_base_list` | Every abort beat, later-load suppression, Base Updated writeback, and r15 protection |
+| `stm_abort` / `stm_base_list` | Every abort beat plus base writeback/store reachability and all-mode base-lowest rules |
 | `ldm_pc` | LDM with PC in list + `^` — CPSR restored from SPSR |
 | `irq` / `fiq` | nIRQ / nFIQ pin → exception entry, banked r14 |
 | `swi` | SWI #imm → Supervisor mode, r14_svc, vector 0x08 |

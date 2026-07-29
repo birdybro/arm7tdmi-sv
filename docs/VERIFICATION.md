@@ -82,6 +82,32 @@ the exact LR/SPSR/handler state, no data cycle, no successor retirement, and
 unchanged memory. The policy is implementation behavior, not an architectural
 promise about UNPREDICTABLE encodings.
 
+## ARM block-transfer evidence
+
+`arm7tdmis_block_ls_matrix_tb` executes 272 reset-per-case rows. Its 256
+one-hot rows cover every P/U/W/L combination and each individual r0-r15 list
+bit with a distinct base register. Sixteen eight-register rows cover
+IA/IB/DA/DB, W, and L with a multibeat list. The checks include exact word
+addresses, ascending register/address order, N then S transfer
+classification, data direction and values, privilege, LOCK, final base, the
+ARM r15 store value, and LDM-to-r15 pipeline redirection.
+
+`arm7tdmis_block_ls_policy_tb` adds 21 rows for base-in-list outcomes,
+privileged User-bank transfers, STM^ with r15, and LDM^+PC with and without
+writeback. It also freezes the implementation policy for statically
+detectable ARMv4T UNPREDICTABLE operands: empty lists, Rn=r15, invalid S/W
+forms, and S forms in User/System take a precise Undefined exception before
+the first data beat. Defined and deterministic-policy rows require their
+architectural register, bank, memory, writeback, CPSR, PC, and bus results.
+
+The base-in-list policy distinguishes architecture from implementation. STM
+writeback with Rn lowest stores the original base as ARMv4T specifies; a
+non-lowest Rn stores the deterministic updated value. LDM writeback with Rn in
+the list retains the r4p3-compatible Base Updated result. The independent
+`arm7tdmis_stm_base_list_tb`, `arm7tdmis_ldm_abort_base_list_tb`,
+`arm7tdmis_ldm_pc_tb`, and `arm7tdmis_pc_write_alignment_tb` regressions cover
+the adjacent all-addressing-mode, abort, CPSR-restore, and refill rules.
+
 Functional/line/toggle coverage reporting, mutation testing of architectural
 controls, differential testing, and formal evidence remain separate open
 requirements in `TASKS.md` §31.
