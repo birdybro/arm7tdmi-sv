@@ -179,6 +179,7 @@ module arm7tdmis_top
         .scan_addr          (ice_scan_addr),
         .scan_wdata         (ice_scan_wdata),
         .scan_rdata         (ice_scan_rdata),
+        .scan_raddr         (ice_scan_raddr),
         .core_dcc_we        (core_dcc_we),
         .core_dcc_re        (core_dcc_re),
         .core_dcc_wdata     (core_dcc_wdata),
@@ -221,6 +222,7 @@ module arm7tdmis_top
     logic         ice_scan_we;
     logic         ice_scan_re;
     logic [31:0]  ice_scan_rdata;
+    logic [4:0]   ice_scan_raddr;
 
     logic [31:0] tap_inject_instr;
     logic        tap_inject_break;
@@ -247,6 +249,7 @@ module arm7tdmis_top
         .ice_scan_we      (ice_scan_we),
         .ice_scan_re      (ice_scan_re),
         .ice_scan_rdata   (ice_scan_rdata),
+        .ice_scan_raddr   (ice_scan_raddr),
         .ice_inject_instr (tap_inject_instr),
         .ice_inject_break (tap_inject_break),
         .ice_inject_we    (tap_inject_we),

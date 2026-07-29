@@ -50,6 +50,7 @@ module jtag_tap_tb
         .ice_scan_we      (ice_scan_we),
         .ice_scan_re      (ice_scan_re),
         .ice_scan_rdata   (32'h0),
+        .ice_scan_raddr   (5'h0),
         .ice_inject_instr (ice_inject_instr),
         .ice_inject_break (ice_inject_break),
         .ice_inject_we    (ice_inject_we),

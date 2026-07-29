@@ -29,6 +29,7 @@ module dcc_tb;
     logic [4:0] scan_addr;
     logic [37:0] scan_wdata;
     logic [31:0] scan_rdata;
+    logic [4:0] scan_raddr;
 
     logic dbg_break_internal;
     logic dbg_ack;
@@ -78,7 +79,8 @@ module dcc_tb;
         .scan_re,
         .scan_addr,
         .scan_wdata,
-        .scan_rdata
+        .scan_rdata,
+        .scan_raddr
     );
 
     int unsigned errors = 0;
@@ -265,7 +267,7 @@ module dcc_tb;
 
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused = &{1'b0, dbg_break_internal, dbg_ack, ifen, core_halt,
-                     DBGRNG, dbg_inject_we, dbg_inject_instr};
+                     DBGRNG, dbg_inject_we, dbg_inject_instr, scan_raddr};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule

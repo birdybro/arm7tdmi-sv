@@ -45,6 +45,7 @@ module arm7tdmis_jtag_tap
     output logic        ice_scan_we,      // pulse high on Update-DR when chain 2 active and R/W=1
     output logic        ice_scan_re,      // pulse on Capture-DR for a pending R/W=0 request
     input  logic [31:0] ice_scan_rdata,   // captured at Capture-DR
+    input  logic [4:0]  ice_scan_raddr,   // echoed addr; DCC data bit 0 carries W
 
     // ---- Scan chain 1 (33-bit) — debug instruction injection.
     // Held register, written when held IR == INTEST AND scan_n_q == 1
@@ -153,10 +154,11 @@ module arm7tdmis_jtag_tap
                         4'(IR_SCAN_N): dr_shift_q <= 38'h0;
                         4'(IR_INTEST): begin
                             // Capture current chain state. For chain 2, that's
-                            // the addressed ICE-RT register (with R/W bit and
-                            // addr bits below it indeterminate — capture as 0).
+                            // the addressed ICE-RT register plus its response
+                            // address. DCC data overloads address bit 0 with W.
                             if (scan_n_q == 4'd2)
-                                dr_shift_q <= {6'h0, ice_scan_rdata};
+                                dr_shift_q <= {1'b0, ice_scan_raddr,
+                                               ice_scan_rdata};
                             else
                                 dr_shift_q <= 38'h0;
                         end

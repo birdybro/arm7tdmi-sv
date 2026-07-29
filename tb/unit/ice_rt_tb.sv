@@ -46,6 +46,7 @@ module ice_rt_tb
     logic [4:0]  scan_addr;
     logic [37:0] scan_wdata;
     logic [31:0] scan_rdata;
+    logic [4:0]  scan_raddr;
 
     arm7tdmis_ice_rt dut (
         .CLK                (CLK),
@@ -73,6 +74,7 @@ module ice_rt_tb
         .scan_addr          (scan_addr),
         .scan_wdata         (scan_wdata),
         .scan_rdata         (scan_rdata),
+        .scan_raddr         (scan_raddr),
         .core_dcc_we        (1'b0),
         .core_dcc_re        (1'b0),
         .core_dcc_wdata     (32'h0),
@@ -207,7 +209,8 @@ module ice_rt_tb
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused = &{1'b0, DBGRNG[1], dbg_ack, ifen, core_halt, tb_dcc_rdata,
                      tb_dcc_control, tb_dbgabt_rdata, tb_dcc_tx_empty,
-                     tb_dcc_rx_full, tb_inject_we, tb_inject_instr};
+                     tb_dcc_rx_full, tb_inject_we, tb_inject_instr,
+                     scan_raddr};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule

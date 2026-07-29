@@ -93,7 +93,8 @@ module arm7tdmis_ice_rt
     input  logic        scan_re,
     input  logic [4:0]  scan_addr,
     input  logic [37:0] scan_wdata,       // 38-bit chain: [37]=R/W, [36:32]=addr, [31:0]=data
-    output logic [31:0] scan_rdata
+    output logic [31:0] scan_rdata,
+    output logic [4:0]  scan_raddr
 );
 
     // ---- Register bank
@@ -260,6 +261,12 @@ module arm7tdmis_ice_rt
             default: scan_rdata = regs[scan_addr];
         endcase
     end
+    // Rev-4 DCC optimization: a data-register response replaces address
+    // bit 0 with W, so the debugger receives data-valid status in the same
+    // scan. Other reads return the addressed register number unchanged.
+    assign scan_raddr = (scan_addr == 5'h05)
+                      ? {scan_addr[4:1], dcc_tx_full_q}
+                      : scan_addr;
 
     // ---- Watchpoint comparator: XNOR-with-mask match (TRM §30.22.2).
     // match[i] = (value_i XNOR input_i) OR mask_i; full match = all bits set.
