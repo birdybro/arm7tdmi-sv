@@ -3,7 +3,9 @@
 //   0. a taken branch discards an aborted instruction in its shadow,
 //   1. an exception flush discards an aborted younger instruction, and
 //   2. corrected-default r4p3 erratum 11 behavior takes PABT, not UNDEF,
-//      when the aborted instruction follows a condition-failed UDF.
+//      when the aborted instruction follows a condition-failed UDF, and
+//   3. corrected-default r4p3 erratum 11 behavior takes SWI, not UNDEF,
+//      when SWI follows a condition-failed UDF.
 
 `timescale 1ns/1ps
 
@@ -16,10 +18,12 @@ module arm7tdmis_pabt_pipeline_scenario #(
     output logic failed
 );
     import arm7tdmis_types_pkg::*;
+    import arm7tdmis_instr_pkg::*;
 
     localparam int CASE_BRANCH  = 0;
     localparam int CASE_SWI     = 1;
     localparam int CASE_ERRATUM = 2;
+    localparam int CASE_UDF_SWI = 3;
 
     logic CLK;
     logic nRESET;
@@ -42,6 +46,7 @@ module arm7tdmis_pabt_pipeline_scenario #(
 
     // Patch the instruction at 0x20 while reset is asserted:
     //   B 0x40; SWI #0; or UDFEQ (reserved ARMv4T encoding).
+    // The fourth case also patches 0x24 to an unconditional SWI.
     initial begin
         @(posedge CLK);
         unique case (CASE_ID)
@@ -49,20 +54,66 @@ module arm7tdmis_pabt_pipeline_scenario #(
             CASE_SWI:     u_fixture.u_mem.mem[8] = 32'hEF000000;
             default:      u_fixture.u_mem.mem[8] = 32'h07F000F0;
         endcase
+        if (CASE_ID == CASE_UDF_SWI)
+            u_fixture.u_mem.mem[9] = 32'hEF000000;
     end
 
     // ABORT is data-timed. Qualify from the memory model's latched
-    // address phase so it belongs exactly to the fetch at 0x24.
-    assign inject_abort = u_fixture.u_mem.is_active_q
+    // address phase so it belongs exactly to the fetch at 0x24.  The
+    // UDF-then-SWI scenario deliberately completes that fetch normally.
+    assign inject_abort = (CASE_ID != CASE_UDF_SWI)
+                       && u_fixture.u_mem.is_active_q
                        && !u_fixture.u_mem.write_q
                        && (u_fixture.u_mem.addr_q == 32'h00000024);
 
     logic seen_aborted_fetch;
+    logic seen_ccfail_undef;
+    logic seen_expected_follower;
+    logic wrong_exception_source;
     always_ff @(posedge CLK or negedge nRESET) begin
-        if (!nRESET)
+        if (!nRESET) begin
             seen_aborted_fetch <= 1'b0;
-        else if (u_fixture.ABORT)
-            seen_aborted_fetch <= 1'b1;
+            seen_ccfail_undef <= 1'b0;
+            seen_expected_follower <= 1'b0;
+            wrong_exception_source <= 1'b0;
+        end else begin
+            if (u_fixture.ABORT)
+                seen_aborted_fetch <= 1'b1;
+
+            if ((CASE_ID == CASE_ERRATUM || CASE_ID == CASE_UDF_SWI)
+                && (u_fixture.u_dut.u_core.state_q == 4'd0)
+                && u_fixture.u_dut.u_core.de_q.valid
+                && (u_fixture.u_dut.u_core.de_q.pc == 32'h00000020)
+                && (u_fixture.u_dut.u_core.de_q.dec.instr_class
+                    == INSTR_UNDEF)
+                && !u_fixture.u_dut.u_core.condition_pass) begin
+                seen_ccfail_undef <= 1'b1;
+                if (u_fixture.u_dut.u_core.any_exc_fires)
+                    wrong_exception_source <= 1'b1;
+            end
+
+            if ((CASE_ID == CASE_ERRATUM)
+                && (u_fixture.u_dut.u_core.state_q == 4'd0)
+                && u_fixture.u_dut.u_core.de_q.valid
+                && (u_fixture.u_dut.u_core.de_q.pc == 32'h00000024)) begin
+                if (u_fixture.u_dut.u_core.pabt_fires)
+                    seen_expected_follower <= 1'b1;
+                if (u_fixture.u_dut.u_core.undef_fires
+                    || u_fixture.u_dut.u_core.swi_fires)
+                    wrong_exception_source <= 1'b1;
+            end
+
+            if ((CASE_ID == CASE_UDF_SWI)
+                && (u_fixture.u_dut.u_core.state_q == 4'd0)
+                && u_fixture.u_dut.u_core.de_q.valid
+                && (u_fixture.u_dut.u_core.de_q.pc == 32'h00000024)) begin
+                if (u_fixture.u_dut.u_core.swi_fires)
+                    seen_expected_follower <= 1'b1;
+                if (u_fixture.u_dut.u_core.undef_fires
+                    || u_fixture.u_dut.u_core.pabt_fires)
+                    wrong_exception_source <= 1'b1;
+            end
+        end
     end
 
     int unsigned errors;
@@ -75,15 +126,29 @@ module arm7tdmis_pabt_pipeline_scenario #(
         unique case (CASE_ID)
             CASE_BRANCH:  case_name = "branch-flush";
             CASE_SWI:     case_name = "exception-flush";
-            default:      case_name = "ccfail-undef-then-pabt";
+            CASE_ERRATUM: case_name = "ccfail-undef-then-pabt";
+            default:      case_name = "ccfail-undef-then-swi";
         endcase
 
         wait (nRESET);
         repeat (165) @(posedge CLK);
 
-        if (!seen_aborted_fetch) begin
+        if ((CASE_ID != CASE_UDF_SWI) && !seen_aborted_fetch) begin
             $display("[pabt_pipeline/%s] FAIL did not abort fetch 0x24",
                      case_name);
+            errors = errors + 1;
+        end
+        if ((CASE_ID == CASE_UDF_SWI) && seen_aborted_fetch) begin
+            $display("[pabt_pipeline/%s] FAIL unexpectedly aborted SWI fetch",
+                     case_name);
+            errors = errors + 1;
+        end
+        if ((CASE_ID == CASE_ERRATUM || CASE_ID == CASE_UDF_SWI)
+            && (!seen_ccfail_undef || !seen_expected_follower
+                || wrong_exception_source)) begin
+            $display("[pabt_pipeline/%s] FAIL sequence ccfail/follower/wrong=%0b/%0b/%0b",
+                     case_name, seen_ccfail_undef,
+                     seen_expected_follower, wrong_exception_source);
             errors = errors + 1;
         end
 
@@ -116,7 +181,7 @@ module arm7tdmis_pabt_pipeline_scenario #(
                     errors = errors + 1;
                 end
             end
-            default: begin
+            CASE_ERRATUM: begin
                 if (u_fixture.u_dut.u_core.u_regfile.regs[9]
                     !== 32'h000000AB
                     || u_fixture.u_dut.u_core.u_regfile.regs[11] !== 32'h0
@@ -133,6 +198,28 @@ module arm7tdmis_pabt_pipeline_scenario #(
                     errors = errors + 1;
                 end
             end
+            default: begin
+                if (u_fixture.u_dut.u_core.u_regfile.regs[10]
+                    !== 32'h0000005C
+                    || u_fixture.u_dut.u_core.u_regfile.regs[11] !== 32'h0
+                    || u_fixture.u_dut.u_core.u_regfile.regs[9] !== 32'h0
+                    || u_fixture.u_dut.u_core.u_regfile.regs[26]
+                       !== 32'h00000028
+                    || u_fixture.u_dut.u_core.u_psr.spsr_q[2]
+                       !== 32'h000000D3
+                    || u_fixture.u_dut.u_core.cpsr.m
+                       !== 5'(MODE_SUPERVISOR)) begin
+                    $display("[pabt_pipeline/%s] FAIL swi=%08x undef=%08x pabt=%08x lr=%08x spsr=%08x mode=%05b",
+                             case_name,
+                             u_fixture.u_dut.u_core.u_regfile.regs[10],
+                             u_fixture.u_dut.u_core.u_regfile.regs[11],
+                             u_fixture.u_dut.u_core.u_regfile.regs[9],
+                             u_fixture.u_dut.u_core.u_regfile.regs[26],
+                             u_fixture.u_dut.u_core.u_psr.spsr_q[2],
+                             u_fixture.u_dut.u_core.cpsr.m);
+                    errors = errors + 1;
+                end
+            end
         endcase
 
         failed = (errors != 0);
@@ -142,8 +229,8 @@ endmodule
 /* verilator lint_on DECLFILENAME */
 
 module arm7tdmis_pabt_pipeline_tb;
-    logic done0, done1, done2;
-    logic fail0, fail1, fail2;
+    logic done0, done1, done2, done3;
+    logic fail0, fail1, fail2, fail3;
 
     arm7tdmis_pabt_pipeline_scenario #(
         .CASE_ID  (0),
@@ -160,9 +247,14 @@ module arm7tdmis_pabt_pipeline_tb;
         .FST_FILE ("pabt_pipeline_erratum11.fst")
     ) u_erratum (.done(done2), .failed(fail2));
 
+    arm7tdmis_pabt_pipeline_scenario #(
+        .CASE_ID  (3),
+        .FST_FILE ("pabt_pipeline_erratum11_swi.fst")
+    ) u_erratum_swi (.done(done3), .failed(fail3));
+
     initial begin
-        wait (done0 && done1 && done2);
-        if (fail0 || fail1 || fail2)
+        wait (done0 && done1 && done2 && done3);
+        if (fail0 || fail1 || fail2 || fail3)
             $fatal(1, "[pabt_pipeline] FAIL");
         $display("[pabt_pipeline] PASS");
         $finish;
