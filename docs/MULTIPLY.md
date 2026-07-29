@@ -1,5 +1,8 @@
 # Multiply Unit Architecture
 
+> **Audit status:** Historical implementation notes. Full operand/timing coverage and
+> long-accumulate S-flag commit are open in `TASKS.md` §31.3 and §31.10.
+
 How MUL/MLA/UMULL/SMULL/UMLAL/SMLAL are sequenced through the E-stage substate FSM. The actual arithmetic lives in `rtl/datapath/arm7tdmis_multiplier.sv` (a single-cycle 32×32→64 multiplier with optional accumulate); this doc is about the control flow.
 
 ## Forms supported

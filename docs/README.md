@@ -1,6 +1,9 @@
 # Architecture Documentation
 
-Design docs for the load-bearing subsystems. Each doc focuses on the non-obvious decisions and the traps caught the hard way; the RTL itself is the source of truth for behavior.
+These are historical implementation notes, not conformance evidence. `TASKS.md` §31 is
+the canonical audited status and release gate; the ARM ARM/TRM/errata are the behavior
+specifications. Neither the RTL nor these documents are a source of truth merely
+because they agree with each other.
 
 ## Documents
 

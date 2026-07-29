@@ -1,5 +1,9 @@
 # Debug Subsystem Architecture
 
+> **Audit status:** The current EmbeddedICE-RT/JTAG/DCC implementation is a partial
+> scaffold. Monitor mode, conformant instruction injection, DCC semantics, and other
+> release blockers are tracked in `TASKS.md` §31.6–§31.8.
+
 EmbeddedICE-RT + JTAG TAP + CP14 DCC, as implemented in `rtl/debug/arm7tdmis_ice_rt.sv` and `rtl/jtag/arm7tdmis_jtag_tap.sv`. The TRM chapters are 5.13–5.27.
 
 ## Top-level data flow

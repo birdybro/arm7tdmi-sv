@@ -1,5 +1,9 @@
 # Exception Entry Architecture
 
+> **Audit status:** Historical implementation notes. Saved-LR offsets, simultaneous
+> priority/interlock, and LDM/STM abort behavior are known incorrect; use `TASKS.md`
+> §31.4 as the authoritative requirement and status.
+
 Seven exception types per the ARM7TDMI-S r4p3 TRM §2.9. This doc captures their entry semantics, priorities, and where they fire in our pipelined core.
 
 ## Vector table

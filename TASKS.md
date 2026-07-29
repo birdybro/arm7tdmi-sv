@@ -1,3 +1,36 @@
+# ARM7TDMI-S implementation and release task ledger
+
+## How to read this file
+
+Sections 0–30 are the original build roadmap plus a later TRM addendum. They describe
+work that a complete implementation requires; they are **not evidence that the work has
+been completed**. In particular, an RTL block existing, a decoder recognizing an
+instruction class, or a test printing `PASS` is not enough to mark a requirement done.
+
+Section 31 is the canonical readiness audit and release gate. It was added after a
+source-level and test-level audit of baseline commit
+`23bb86a73f60f1b64d1929632befc532e736a148` on 2026-07-28. If a status statement
+elsewhere in the repository conflicts with §31, §31 wins until the conflicting statement
+is corrected and linked to passing evidence.
+
+Use these status words consistently:
+
+- **VERIFIED** — the requirement has a fail-hard, self-checking test against an
+  identified authoritative requirement, and the release regression records it passing.
+- **IMPLEMENTED, UNVERIFIED** — a plausible RTL path exists, but the required evidence
+  does not.
+- **PARTIAL** — only a subset or simplified/scaffold behavior exists.
+- **INCORRECT** — the present RTL or test expectation conflicts with the selected
+  specification.
+- **MISSING** — no implementation or evidence was found.
+- **OUT OF SCOPE** — excluded by an explicit release profile and replaced by a defined
+  tie-off or adapter contract.
+
+Nothing in this repository is currently signed off as a drop-in MiSTer CPU IP release.
+The unchecked gates in §31 are the work needed to reach that claim.
+
+---
+
 # 0. Define the target
 
 Your final target should be a synthesizable SystemVerilog implementation with these major blocks:
@@ -20,7 +53,7 @@ arm7tdmis_top
 ├── ARM7TDMI-S memory interface
 ├── coprocessor interface
 ├── internal CP14 debug communications channel
-├── internal CP15/system-control-facing behavior, as applicable to your target
+├── external CP15/system-control attachment or no-CP15 tie-off, as selected by profile
 ├── EmbeddedICE-RT debug macrocell
 ├── JTAG/TAP scan interface
 ├── ETM7-facing trace interface
@@ -1264,23 +1297,28 @@ The TRM states that the EmbeddedICE-RT DCC is implemented as coprocessor 14, has
 
 ---
 
-# 21. Implement CP15/system-control-facing behavior
+# 21. Handle CP15/system-control attachment correctly
 
 Tasks:
 
-1. Decode CP15 instructions.
+1. Treat CP15 as an external coprocessor allocation, not an internal register bank in
+   the bare ARM7TDMI-S profile.
 
-2. Decide which CP15 behavior your target will support.
+2. With no system coprocessor attached, use `CPA=CPB=1` behavior and take Undefined
+   for executed CP15 instructions.
 
-3. Implement required system-control register behavior for compatibility with ARM7TDMI-S expectations.
+3. If a SoC profile needs an MMU/MPU/system coprocessor, implement it outside the CPU
+   and make it claim p15 through the normal coprocessor protocol.
 
-4. Return undefined for unsupported CP15 operations.
+4. Do not fabricate an ARM7TDMI-S Main ID register. ARM DAI 0099C explicitly states
+   that ARM7TDMI and ARM7TDMI-S do not have CP15.
 
-5. Verify privileged-only behavior.
+5. Verify absent-p15 Undefined behavior, condition-failed suppression, User/privileged
+   `CPnTRANS`, and an attached external p15 independently.
 
-6. Verify user-mode CP15 access traps as undefined where required.
-
-The TRM reserves coprocessor 15 for system control and coprocessor 14 for debug, so external coprocessors must not use those IDs. 
+The encoding space reserves coprocessor 15 for a system control coprocessor, but that
+does not mean the bare ARM7TDMI-S macrocell contains one. External user coprocessors
+must still use CP4–CP7.
 
 ---
 
@@ -1771,7 +1809,7 @@ This is the practical sequence I would follow.
 
 8. CP14 DCC.
 
-9. CP15/system-control-facing behavior.
+9. CP15 absent tie-off and optional external system-coprocessor attachment.
 
 ## Milestone 7 — Debug
 
@@ -2019,16 +2057,25 @@ Anchor each cycle test to an explicit TRM table:
    - n>1, dest≠PC: `+N+(n−1)S+I+S`.
    - n>1, dest=PC: `+N+(n−1)S+I+N+2S`.
 6. **STM** (Table 7-14, p. 197):
-   - 1 reg: `+N+N`.
-   - n>1: `+N+(n−1)S+N`.
+   - Chapter 7's summary table (Table 7-2) gives
+     `+N+(n−1)S+I+N`.
+   - Table 7-14's externally visible address/control rows show `N,N` for one register
+     and `N,(n−1)S,N` for multiple registers, while its prose calls the one-register
+     case two cycles. Treat this as a specification-reconciliation item: document how
+     the internal I operation is represented or overlapped and verify both architectural
+     execution time and every external bus row. Do not infer conformance from an
+     `n+1` E-state counter alone.
 7. **SWP** (Table 7-15): per §30.13.
 8. **Exception entry** (Table 7-16, p. 201): `+N+2S` total (cycle 1 N to `PC+2i` in old mode; cycle 2 S to vector `Xn` in new mode/Tbit; cycle 3 S to `Xn+4`).
 9. **B/BL** (Table 7-3): `+N+2S`.
 10. **BX** (Table 7-5): `+N+2S` with Tbit transitions per §30.10.3.
 11. **MUL/MLA/MULL/MLAL** (Tables 7-7..7-10): per §30.5.1.
 12. **CDP** (Table 7-17, p. 201): `+S` plus busy-wait I cycles if `CPB` HIGH.
-13. **LDC/STC** (Tables 7-18 / 7-19): `+N+(n−1)S+I` per word with leading busy-wait I.
-14. **MCR/MRC** (Tables 7-20 / 7-21): `+N+I+S` (`MRC`), `+N+I` (`MCR`).
+13. **LDC/STC** (Table 7-2; Tables 7-18 / 7-19):
+    `+(b)I+N+(n−1)S+N`, with the coprocessor determining the transfer length.
+14. **MCR/MRC** (Table 7-2; Tables 7-20 / 7-21):
+    `+(b)I+C+N` (`MCR`) and `+(b)I+C+I+S` (`MRC`). Verify the C cycle,
+    busy-wait cycles, data phase, and following fetch separately.
 15. **Undef / coprocessor-absent trap** (Table 7-22): same path as exception entry.
 16. **Unexecuted instruction** (Table 7-23, p. 204): exactly `+S` at `PC+2i`. All side effects suppressed except the bus cycle and `DBGnEXEC` HIGH. Easy smoke test.
 
@@ -2045,7 +2092,14 @@ Anchor each cycle test to an explicit TRM table:
 ## 30.20 CP14 / DCC (amends §20)
 
 1. **CP14 register set**:
-   - DCC control register (32-bit): `[31:28]=4'b0001` (EmbeddedICE-RT version constant), `[27:2]` reserved, `[1]=W` (W=1 ⇒ tx buffer empty, processor may write; debugger-readable, processor-writable), `[0]=R` (R=1 ⇒ rx buffer full, processor may read; debugger-writable, processor-readable).
+   - DCC control register (32-bit): `[31:28]=4'b0111` for an exact r4p3
+     implementation. DDI 0234B prints `4'b0001`, but ARM's ARM7TDMI-S Errata List
+     (FR002-PRDC-002719 7.0, erratum [9]) says the Rev-4 EmbeddedICE-RT version is
+     7 and that r4p3 corrected the JTAG view. `[27:2]` are reserved. `[1]=W`:
+     W=0 means the processor-to-debugger transmit buffer is empty and the processor
+     may write; W=1 means data is pending and the debugger may scan it out. `[0]=R`:
+     R=0 means the debugger-to-processor receive buffer is empty and the debugger may
+     write; R=1 means unread data is present and the processor may read it.
    - DCC data-read / data-write register.
    - **Abort Status Register (1 bit `DbgAbt`)** — accessed via `MRC/MCR CP14`. Set when monitor mode causes a Prefetch/Data Abort due to a breakpoint or watchpoint; if both an external `ABORT` and a debug abort coincide, external `ABORT` wins and `DbgAbt` stays 0. Sticky; cleared by software write (TRM §5.23, p. 161).
 2. **DCC instructions**:
@@ -2192,3 +2246,533 @@ Anchor each cycle test to an explicit TRM table:
 [ ] PROCID/PROCIDWR tied LOW at ETM wrapper
 [ ] No BKPT / BLX / CLZ / Q / MAS / DBGRESTART / DBGINSTR introduced
 ```
+
+---
+
+# 31. Release-readiness audit and immutable sign-off contract
+
+This section answers two different questions that the earlier roadmap mixed together:
+
+1. Does source code for a feature exist?
+2. Is that feature correct, interoperable, synthesized, and proven well enough to ship?
+
+At the audited baseline, the answer to the first question is often "partly"; the answer
+to the second is **no**. The repository is a useful prototype, but it is not yet a
+conformant ARM7TDMI-S replacement or drop-in MiSTer component. This section is the
+authoritative backlog for changing that answer.
+
+## 31.0 What "complete" and "drop-in" mean
+
+The v1.0 release has two required, versioned integration surfaces:
+
+1. **`arm7tdmis_top` conformance profile** — an ARM7TDMI-S r4p3-compatible soft
+   macrocell: ARMv4T programmer's model, documented r4p3 cycle behavior, memory bus,
+   external coprocessor protocol, CP14 DCC, EmbeddedICE-RT, JTAG scan chains, and the
+   documented ETM-facing signals. CP15 is not built into a bare ARM7TDMI-S; an external
+   system coprocessor may claim p15 through the coprocessor interface.
+2. **`arm7tdmi_mister` integration profile** — a stable FPGA wrapper around the CPU
+   with a conventional request/completion memory interface, MiSTer-style clock-enable
+   operation, reset/interrupt synchronization contract, optional debug tie-offs,
+   complete file manifest, timing constraints, and save/restore support. A
+   PocketStation reference integration and one generic SoC example prove the contract.
+
+The FPGA profile may compile out ASIC production-test scan logic and an ETM macrocell,
+but it must expose honest tie-offs and document that those blocks are **OUT OF SCOPE**.
+Merely exposing `SE/SI/SO` while tying `SO` low is not an implementation. The ETM7
+macrocell itself is not required; all signals that the r4p3 core promises to an external
+ETM are required and tested.
+
+"Drop-in" means compatible with those two published interfaces. It cannot mean
+compatible with every unknown future core without an adapter. After v1.0 sign-off, this
+ledger is frozen; a new consumer requirement opens a versioned v1.x/v2 task instead of
+retroactively invalidating v1.0.
+
+### Authoritative source hierarchy
+
+Before changing behavior, freeze exact copies and SHA-256 hashes of:
+
+1. [ARM Architecture Reference Manual ARM DDI 0100I](https://documentation-service.arm.com/static/5f8dacc8f86e16515cdb865a),
+   restricted to ARMv4T behavior.
+2. The in-repository [ARM7TDMI-S r4p3 TRM](ARM_DDI_0234B_ARM7TDMI-S_r4p3_TRM.pdf),
+   ARM DDI 0234B.
+3. [ARM7TDMI-S Errata List FR002-PRDC-002719 7.0](https://documentation-service.arm.com/static/5ed62dc5ca06a95ce53f9214)
+   (20 March 2009).
+4. [ARM Application Note 99, ARM DAI 0099C](https://documentation-service.arm.com/static/5ed1094dca06a95ce53f8a9d),
+   for CP15 and TAP identification.
+5. The applicable IEEE 1149.1 revision for TAP behavior.
+6. The versioned MiSTer wrapper specification created by §31.9.
+7. The PocketStation hardware references selected by the reference integration.
+
+The ARM ARM defines architectural instruction behavior; the r4p3 TRM defines this
+implementation's pins, pipeline, timing, and debug; the errata list supersedes known
+errors and records real-r4p3 deviations. Any conflict gets a written decision and a
+directed test. No test may cite README prose as its specification.
+
+The default release implements architecturally corrected behavior. Maintain an errata
+matrix that says whether each real-r4p3 defect is corrected or deliberately reproduced;
+if software compatibility requires a defect, put it behind an explicit synthesis
+parameter and test both settings.
+
+## 31.1 Audited baseline status
+
+| Area | Status at `23bb86a` | Audit evidence / reason |
+|---|---|---|
+| Synthesizable source structure | IMPLEMENTED, UNVERIFIED | RTL elaborates and Verilator lint completes, but there is no synthesis result. |
+| ARM decode/execute | PARTIAL | Broad class coverage exists; flag, PC, PSR, alignment, translated-transfer, reserved-encoding, and abort defects remain. |
+| Thumb decode/execute | PARTIAL | A decoder for 19 formats exists, but most formats lack integration coverage and edge encodings are wrong or untested. |
+| Modes and banked registers | IMPLEMENTED, UNVERIFIED | Unit tests cover ordinary banking, not every exception/debug/user-bank interaction. |
+| Exceptions and interrupts | INCORRECT | LR offsets, simultaneous priority/interlock, and block-abort behavior conflict with DDI 0234B. |
+| Memory bus and cycle accuracy | INCORRECT | N/S/I/C waveforms are not checked; endianness is unused; several timing paths do not match the tables. |
+| Multiplier | PARTIAL | Arithmetic and some timing paths exist; flag commit and full m/operand/unpredictable space are not proven. |
+| External coprocessor interface | INCORRECT | `CPB` is unused, accepted operations have no transfer body, `CPnTRANS` has the wrong meaning, and pipeline-follow timing is not implemented. |
+| CP14 DCC | INCORRECT | c0 is used as a shared data register; real c0 control/c1 RX/TX semantics, handshakes, status pins, and `DbgAbt` are absent. |
+| CP15 | INCORRECT / EXTRA | A fabricated internal Main ID is returned by an overly broad decode even though a bare ARM7TDMI-S has no CP15. |
+| EmbeddedICE-RT | PARTIAL | The RTL calls itself a scaffold; monitor mode, phase-correct data watchpoints, debug-abort handling, and conformant debug execution are absent. |
+| JTAG | PARTIAL | A TAP skeleton and basic IDCODE/BYPASS tests exist; scan-chain semantics, DBGEN gating, synchronization, and end-to-end debug are incomplete. |
+| ETM-facing behavior | PARTIAL | Two pins exist; commit semantics, pipeline-follow information, reset/tie-offs, and an ETM-facing checker are absent. |
+| DFT wrapper | MISSING | `SO` is tied low and `SE/SI` are unused. It must be removed from the FPGA claim or implemented for a separate ASIC profile. |
+| Unit verification | PARTIAL | Ten tests run, but `ice_rt_tb` and `jtag_tap_tb` only print failures and still exit successfully. |
+| Integration verification | NOT TRUSTWORTHY / CURRENTLY FAILING | All directed benches print failures then call `$finish`; `make` can report success after a failed check. On 2026-07-28, `make unit integ run` exited 0 while smoke printed two failures: SWPB result expected `0x05`, got `0x0d`, and committed PC expected `0x9c`, got `0x96`. The smoke bench is not in `make integ`. |
+| Architectural/cycle conformance | MISSING | No independent reference model, full encoding matrix, bus-cycle scoreboard, coverage closure, formal proof, or real conformance suite. |
+| Quartus / FPGA closure | MISSING | No QSF/QIP/IP manifest, synthesis, fit, resource, Fmax, CDC/RDC, or hardware result. The SDC names a nonexistent `DBGTCK` port and false-paths synchronous IRQ/FIQ pins. |
+| MiSTer integration | MISSING | No MiSTer wrapper, request/completion bridge, build, save-state interface, PocketStation boot test, or generic integration example. |
+| Documentation | INCORRECT | README/CLAUDE/docs call scaffolded or untested paths "complete" and document incorrect abort/cycle/CP behavior. |
+
+The useful accomplishments are therefore narrower than the old status pages claim:
+the repository has a substantial synthesizable RTL prototype, broad decoder/datapath
+scaffolding, a pin-oriented top level, ten unit benches, fifteen directed benches plus
+a separate smoke bench, and a runnable Verilator flow. Those are foundations, not
+conformance evidence.
+
+## 31.2 P0 — make the evidence fail hard
+
+No functional claim can become VERIFIED until every item here is complete.
+
+- [ ] **VER-001:** Replace every error-counter-only test ending with `$finish` with
+  `$fatal(1, ...)` on any error and `$finish` only on success. This includes every
+  integration bench, the smoke bench, `ice_rt_tb`, and `jtag_tap_tb`.
+- [ ] **VER-002:** Add a bounded timeout that fails nonzero to every bench.
+- [ ] **VER-003:** Make one `regress` target run RTL lint, TB lint, all unit tests, all
+  directed integration tests, and the smoke test from a clean build.
+- [ ] **VER-004:** Make stale cached binaries impossible to mistake for a new result;
+  record the RTL git hash, tool versions, build variant, seed, and test manifest in the
+  regression output.
+- [ ] **VER-005:** Run a harness self-test in CI that deliberately corrupts one expected
+  result and proves the overall command fails. Add periodic mutation testing for major
+  writeback, flag, exception, and bus controls.
+- [ ] **VER-006:** Treat assertions and simulator errors as fatal. Remove unsupported
+  warning suppressions or give each one an owner, rationale, and expiry.
+- [ ] **VER-007:** Stop treating `ABORT` during I/C as illegal testbench stimulus.
+  Assert that the core ignores it there, as the TRM requires.
+- [ ] **VER-008:** Publish machine-readable regression and coverage reports as release
+  artifacts. A console line containing `PASS` is not release evidence.
+- [ ] **VER-009:** Expose a verification-only architectural retirement interface
+  (instruction PC/opcode/state/condition result/register and CPSR effects/exception)
+  instead of making all scoreboards depend on private hierarchy.
+- [ ] **VER-010:** Minimize and resolve both currently failing smoke checks. The SWPB
+  check may itself be stale because later test code writes r12=13; decide RTL versus
+  expectation only from an instruction trace and cited architecture behavior. Likewise,
+  explain/fix the final `pc_q=0x96` versus expected `0x9c`. Preserve each real defect as
+  a small fail-hard regression.
+
+## 31.3 P0 — ARMv4T architectural correctness
+
+Build a requirements/encoding matrix covering every valid ARM and Thumb encoding,
+every reserved hole, every condition, register choice, shift amount, addressing mode,
+and defined boundary value. Each row links ARM ARM text to RTL and at least one test.
+
+- [ ] **ISA-001:** Fix immediate `LSR #0` and `ASR #0` to mean shift by 32, and verify
+  `ROR #0` as RRX. Cover immediate and register-specified 0/1/31/32/>32 amounts and
+  carry behavior in both states.
+- [ ] **ISA-002:** Honor the ALU/shifter flag-write mask. Logical/test/move/shift
+  instructions preserve V; arithmetic writes NZCV; instructions whose S bit is clear
+  preserve all flags.
+- [ ] **ISA-003:** Commit N/Z correctly for `UMLALS` and `SMLALS` after the final
+  accumulated 64-bit result. Cover all six multiply forms, S/non-S, aliasing, signed
+  extrema, and m=1/2/3/4 timing.
+- [ ] **ISA-004:** Enforce PSR privilege rules: User mode may change CPSR flags only;
+  SPSR access in User/System and writes to invalid modes follow the selected
+  UNPREDICTABLE policy; reserved x/s fields are preserved/SBZP; the MSR T-bit policy is
+  frozen and tested.
+- [ ] **ISA-005:** Correct every r15 operand value: normal ARM/Thumb reads, ARM
+  register-specified shift (+12 case), store-data r15, branch link, PC-relative Thumb
+  operations, and debug-state instructions.
+- [ ] **ISA-006:** Align every PC write according to the destination state. Cover BX
+  both directions, data-processing-to-PC, LDR/LDM-to-PC, POP PC, and exception return.
+  A CPSR-restoring PC write must use the restored T bit for its first refill.
+- [ ] **ISA-007:** Treat Thumb conditional-branch condition `1110` as Undefined, not
+  AL. Treat ARM condition `1111` according to ARMv4T (not later unconditional
+  encodings). Exhaustively test all Thumb reserved encodings and all ARM
+  class-overlap/invalid encodings.
+- [ ] **ISA-008:** Implement translated post-indexed loads/stores (`LDRT/STRT`,
+  `LDRBT/STRBT`, and applicable extra-transfer encodings) with User-mode `PROT` while
+  retaining the current processor mode.
+- [ ] **ISA-009:** Freeze exact ARM7TDMI unaligned-access behavior for word,
+  halfword, signed-halfword, signed-byte, SWP, and instruction fetches; verify all
+  address low bits in both endian modes.
+- [ ] **ISA-010:** Verify every load/store P/U/B/W/L combination, immediate and shifted
+  register offset, base/destination alias, writeback, r15 use, and defined/
+  UNPREDICTABLE case.
+- [ ] **ISA-011:** Verify LDM/STM IA/IB/DA/DB, S/W/L, all 16 register-list bits,
+  user-bank forms, PC-in-list CPSR restore, base-in-list rules, and a documented empty
+  list policy.
+- [ ] **ISA-012:** Verify SWP/SWPB data, alignment, endian lanes, register aliasing,
+  atomicity, and abort behavior.
+- [ ] **ISA-013:** Prove condition-failed ARM instructions have exactly the documented
+  bus cycle and no register, CPSR/SPSR, memory, lock, coprocessor, or exception side
+  effect. Include a condition-failed undefined instruction before SWI and PABT.
+- [ ] **ISA-014:** Verify all exception-return idioms (`MOVS/SUBS PC`, LDM with
+  `S+PC`) from every exception mode and return to ARM and Thumb.
+- [ ] **ISA-015:** Test instruction sequences, not only isolated opcodes: forwarding/
+  dependency pairs, self-modifying stores under the documented memory contract,
+  back-to-back PC changes, back-to-back MRC, and mode/bank transitions. Include an
+  interrupt/exception between Thumb BL prefix and suffix and an orphan suffix; prove
+  whether architectural LR alone carries all required inter-halfword state.
+- [ ] **ISA-016:** Give every architecturally UNPREDICTABLE case a stable policy
+  (`trap`, deterministic result, or real-r4p3 behavior). Tests must never accidentally
+  elevate that chosen behavior into an ARM architectural guarantee.
+- [ ] **ISA-017:** Exhaustively verify the 31 physical GPRs and six SPSRs across
+  User/System/FIQ/IRQ/SVC/Abort/Undefined, including FIQ r8–r14 banking, User/System
+  sharing, `^` transfers from every privileged mode, mode changes, and inaccessible/
+  UNKNOWN SPSR cases.
+
+## 31.4 P0 — exceptions, reset, and aborts
+
+- [ ] **EXC-001:** Generate the exact saved LR for the source state and exception:
+  ARM SWI/UNDEF +4, Thumb SWI/UNDEF +2, PABT/IRQ/FIQ +4, and DABT +8. Cover every
+  exception from ARM and Thumb.
+- [ ] **EXC-002:** Implement and prove the simultaneous priority
+  Reset > DABT > FIQ > IRQ > PABT > UNDEF > SWI. Lower-priority pending events must
+  be retained or discarded exactly as specified, not merely lost in an `if` chain.
+- [ ] **EXC-003:** Implement the DABT+FIQ interlock: enter Abort first, then vector to
+  FIQ. An abort must not spuriously set CPSR.F merely because FIQ was coincident.
+- [ ] **EXC-004:** Correct LDM abort behavior: complete the instruction, suppress the
+  aborting and every later destination write, preserve r15, and perform requested base
+  writeback. Test abort on every beat and base-in-list restoration rules.
+- [ ] **EXC-005:** Correct STM abort behavior: requested base writeback completes.
+  Test abort on every beat and verify which stores reached memory.
+- [ ] **EXC-006:** Verify single LDR/STR abort behavior for every pre/post-index and
+  writeback form: requested base modification still occurs, a load destination is not
+  overwritten, and no later side effect leaks from the aborted instruction.
+- [ ] **EXC-007:** Reconcile SWP's read-only abort requirement with the external bus
+  contract. Once a read abort occurs, do not issue/commit the write and do not change
+  the destination.
+- [ ] **EXC-008:** Prove PABT metadata follows the fetched instruction and disappears
+  when that instruction is flushed by a branch, exception, condition path, or debug
+  event.
+- [ ] **EXC-009:** Verify reset while `CLKEN=0`, reset during every multicycle state,
+  minimum-low duration, asynchronous assertion/synchronous release contract, initial
+  CPSR/mode/banks, architecturally UNKNOWN register values, bus I cycles, and first
+  fetch at zero. Document any deterministic FPGA initialization without depending on
+  it as architectural behavior.
+- [ ] **EXC-010:** Verify synchronous level-sensitive nIRQ/nFIQ sampling, masking,
+  persistence, late arrival, CLKEN stalls, simultaneous requests, and minimum/maximum
+  latency including the documented 27-cycle case.
+- [ ] **EXC-011:** Scoreboard every exception-entry and return bus cycle from Table
+  7-16, including address, T state, mode/PROT, TRANS, and discarded prefetched data.
+
+## 31.5 P0 — memory interface and cycle accuracy
+
+Cycle conformance means matching pins on every enabled clock, not matching only the
+number of cycles spent in an internal FSM state.
+
+- [ ] **BUS-001:** Implement `CFGBIGEND`; it is currently unused. Verify instruction
+  halfword selection, byte/halfword extraction, sign extension, stores, SWPB, and all
+  byte-lane mappings from the TRM in little- and big-endian configurations. Assert it
+  remains static outside reset and define behavior if an integrator violates that rule.
+- [ ] **BUS-002:** Add a phase-aware scoreboard for every clock:
+  `ADDR/WRITE/SIZE/PROT/LOCK/TRANS/WDATA/RDATA/ABORT/DMORE`, CP signals, CLKEN, PC,
+  CPSR, instruction state, and exception/debug events.
+- [ ] **BUS-003:** Re-derive and implement N/S/I/C sequences for every Table 7-2
+  category and detailed Table 7-3–7-23 row. Include DP-to-PC, LDR/LDM-to-PC, BX,
+  condition fail, exceptions, all multiply m values, and coprocessor busy cases.
+- [ ] **BUS-004:** Reconcile Table 7-2's STM `+I` with Table 7-14's visible bus rows in
+  a checked design note; do the same for every apparent summary/detail discrepancy.
+- [ ] **BUS-005:** Generate N versus S from actual burst history. Reset/redirect/first
+  accesses cannot be labeled S merely because they are fetches.
+- [ ] **BUS-006:** Verify pipelined address/data phase alignment for reads and writes.
+  A stalled cycle must keep every address-class and write-data signal stable and cause
+  exactly one architectural completion when CLKEN resumes.
+- [ ] **BUS-007:** Sample ABORT only at the specified enabled S/N data or opcode
+  phase, ignore it in I/C, and retain the sample across later stalls/phases.
+- [ ] **BUS-008:** Verify `PROT[0]` code/data and `PROT[1]` User/privileged for every
+  fetch, data access, translated access, exception mode, and debug system-speed access.
+- [ ] **BUS-009:** Hold `LOCK` across both SWP data transfers and release it on all
+  normal, abort, reset, debug, and stall exits.
+- [ ] **BUS-010:** Drive `DMORE` from the current transfer's guaranteed continuation,
+  not a loose "block active" flag. Verify first/middle/last/single-beat/stalled/aborted
+  LDM and STM.
+- [ ] **BUS-011:** Verify burst address increments, control stability, byte
+  non-bursting, alignment, reset I cycles, and branch/exception/refill waveforms.
+- [ ] **BUS-012:** Publish a precise raw-bus integration contract, including when an
+  attached memory samples address, data, ABORT, and CLKEN. Provide a protocol checker
+  that downstream cores can instantiate.
+
+## 31.6 P0 — coprocessor and CP14 behavior
+
+- [ ] **CP-001:** Remove the fabricated internal CP15 Main ID and its integration
+  test. Bare ARM7TDMI/ARM7TDMI-S has no CP15 (ARM DAI 0099C). With `CPA=CPB=1`, p15
+  traps Undefined; a system wrapper may attach its own privileged CP15.
+- [ ] **CP-002:** Decode all coprocessor classes and opcode fields exactly. CP14
+  internal operations must match exact `MRC/MCR p14,0,...` encodings; unsupported CP14
+  and CP15 operations trap rather than aliasing a broad `CRn` match.
+- [ ] **CP-003:** Drive `CPnTRANS=0` in User mode and 1 in privileged modes. It is
+  not an inverse code/data signal.
+- [ ] **CP-004:** Register CP pipeline-follow signals according to previous/current
+  `CPnOPC/CPnMREQ/CPTBIT` rules and CLKEN. Verify ARM fetch, Thumb, stalls, flushes,
+  condition fail, and back-to-back CP instructions.
+- [ ] **CP-005:** Implement CPA/CPB absent, accepted-ready, accepted-busy, completion,
+  and late-abandonment protocols for CDP/MCR/MRC/LDC/STC. Accepted instructions cannot
+  silently become no-ops.
+- [ ] **CP-006:** Implement C cycles and MRC/MCR data timing; implement variable-length
+  LDC/STC transfers, writeback, `CPSEQ`, aborts, and interrupt/DBGRQ abandonment with
+  idempotent busy waits.
+- [ ] **CP-007:** Implement separate DCC RX and TX buffers. Exact behavior:
+  c0 control read; c1 data read/write; W/R ownership transitions; no unintended
+  round-trip through a shared storage word.
+- [ ] **CP-008:** Return the selected exact-r4p3 DCC version (`0111` under the default
+  profile), implement DCC single-access scan-chain-2 behavior, and verify control reads
+  through both CP14 and JTAG.
+- [ ] **CP-009:** Implement sticky CP14 Abort Status `DbgAbt`, debug-vs-external-abort
+  priority, software clear, and exact register encoding.
+- [ ] **CP-010:** Drive `DBGCOMMRX` high for a full RX buffer and `DBGCOMMTX` high for
+  an empty TX buffer, both gated by DBGEN. Verify every host/processor race and reset.
+- [ ] **CP-011:** Decide and test the release policy for r4p3 errata [14]
+  (non-indexed LDC/STC decode) and [15] (sequential MRC timing).
+
+## 31.7 P0/P1 — EmbeddedICE-RT, JTAG, and ETM-facing behavior
+
+- [ ] **DBG-001:** Replace the scaffold debug FSM with conformant halt and monitor
+  modes. Implement Debug Control bits 5:0, Debug Status bits 4:0, IFEN/INTDIS, Vector
+  Catch, Debug Abort Status, DBGRQ/DBGBREAK priority, and all DBGEN gating. Follow each
+  pin's specified sampling/synchronization behavior rather than applying a blanket
+  two-flop policy.
+- [ ] **DBG-002:** Feed Debug Status TRANS from the actual `TRANS[1]`, not PROT.
+  Align address/control and read/write data before data-dependent watchpoint comparison.
+- [ ] **DBG-003:** Implement exact WP0/WP1 value/mask, XNOR, size, read/write,
+  opcode/data, privilege, T, EXTERN, CHAIN latch, RANGE, and ENABLE semantics. `DBGRNG`
+  remains independent of ENABLE but is disabled by DBGEN.
+- [ ] **DBG-004:** Qualify breakpoints with valid, non-flushed instructions.
+  Watchpoints enter debug only after the access and all architectural writeback
+  complete; cover LDM/STM, aborts, exceptions, and simultaneous DBGRQ.
+- [ ] **DBG-005:** Implement monitor-mode restrictions and generated PABT/DABT,
+  including `DbgAbt` and external ABORT precedence.
+- [ ] **DBG-006:** Replace the fixed eight-cycle injection window with an explicit
+  instruction accepted/retired handshake. Debug-speed and system-speed execution must
+  support wait states and every allowed multicycle instruction, including 16-register
+  LDM/STM, without fetching or retiring an extra normal instruction. Halt only at a
+  legal boundary; do not freeze and repeatedly present an unfinished external bus
+  transfer.
+- [ ] **DBG-007:** Implement debug entry/exit PC formulas, temporary DBGACK behavior,
+  pending interrupt preservation, interrupt masking during at-speed execution, and
+  the DBGRQ/PC-modify errata policy.
+- [ ] **JTAG-001:** Exhaustively verify all 16 TAP states and transitions, async
+  `DBGnTRST`, Capture/Shift/Update-IR, fixed `0001` capture, all five public
+  instructions, and BYPASS for every other IR encoding.
+- [ ] **JTAG-002:** Verify IDCODE bit fields and configurability. Do not call
+  `0x7F1F0F0F` universally correct without documenting manufacturer/part/revision
+  policy for the synthesized product.
+- [ ] **JTAG-003:** Implement and verify SCAN_N selection, chain 0, 33-bit chain 1,
+  38-bit chain 2, reserved chains, LSB-first order, update atomicity, and chain-1 bit
+  33's entry-cause/debug-speed/system-speed meanings.
+- [ ] **JTAG-004:** Gate TMS/TDI/TCKEN/TDO/TDOEN as specified by DBGEN. Implement the
+  required TCK synchronization/RTCK convention or publish a proven synchronous-only
+  FPGA debug-port wrapper with a different, explicit interface name.
+- [ ] **JTAG-005:** Run end-to-end scan scripts that halt, read/write every register
+  and memory through legal debug instructions, use a system-speed access with stalls,
+  restart, exercise DCC both directions, set break/watchpoints, and enter monitor mode.
+- [ ] **JTAG-006:** Demonstrate a pinned open-source debugger/GDB flow against the
+  simulated scan transport and on FPGA, or document precisely why the r4p3 scan
+  protocol needs a project-specific bridge and release that bridge with protocol tests.
+- [ ] **ETM-001:** Define and verify `DBGINSTRVALID` and `DBGnEXEC` for commit,
+  condition failure, stalls, multicycle instructions, flushes, exceptions, debug, and
+  Thumb. Expose the documented bus/pipeline information required by ETM7.
+- [ ] **ETM-002:** Provide and test the external ETM wrapper contract, including direct
+  RDATA/WDATA visibility, `PROCID=0`, `PROCIDWR=0`, and reset propagation.
+- [ ] **DFT-001:** For the FPGA profile, remove DFT from all "complete" claims and tie
+  it off in a named `no_dft` wrapper. If an ASIC profile remains a goal, create a
+  separate scan-insertion specification and prove SE/SI/SO rather than tying SO low.
+
+## 31.8 Required r4p3 errata matrix
+
+The release matrix must contain all fifteen entries from
+FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
+
+| Erratum | r4p3 status in Arm list | Required project action |
+|---|---|---|
+| [1] Consecutive breakpoints | Corrected before r4p3 | Regression proving corrected behavior |
+| [2] False Undefined exception | Corrected | Regression |
+| [3] DBGRQ coincident with exception | Corrected | Regression |
+| [4] Breakpoint after exception/watchpointed store | Corrected | Regression |
+| [5] Breakpoint after multicycle instruction | Corrected | Regression |
+| [6] Watchpoint followed by exception | Corrected | Regression |
+| [7] Debug entry coincident with DBGRQ | Corrected | Regression |
+| [8] Interrupt during at-speed debug instruction | Corrected in r4p3 | Regression with long LDM/STM |
+| [9] wrong ICE version through JTAG | Corrected in r4p3 | Return selected r4p3 value consistently |
+| [10] Thumb EIS log error | Corrected / non-synthesized | Ensure project trace logger is correct |
+| [11] SWI/PABT after condition-failed Undef | Present in r4p3 | Decide corrected-default vs compatibility parameter |
+| [12] Thumb DABT LR low-bit error | Corrected in r4p3 | Regression |
+| [13] async DBGRQ during PC modification | Present in r4p3 | Decide corrected-default vs compatibility parameter |
+| [14] non-indexed LDC/STC decode | Present in r4p3 | Decide corrected-default vs compatibility parameter |
+| [15] sequential MRC timing | Present in r4p3 | Decide corrected-default vs compatibility parameter |
+
+- [ ] **ERR-001:** Vendor/hash the errata list, review every entry's full conditions,
+  freeze the policy column, and link each applicable test/result.
+- [ ] **ERR-002:** Default to architectural corrections. Any real-silicon defect
+  emulation is opt-in, has a named parameter, and is included in regression and docs.
+
+## 31.9 P0 — MiSTer and PocketStation integration
+
+- [ ] **MIST-001:** Add a synthesizable `arm7tdmi_mister` wrapper with documented
+  request/ready-or-done memory transactions, address, read/write data, byte enables,
+  code/data, privilege, lock, sequential/more hints, and abort/error response.
+- [ ] **MIST-002:** Bridge raw ARM `CLKEN` semantics without gated/generated clocks.
+  A request remains stable until completion, slow memory inserts arbitrary waits, and
+  each request completes exactly once.
+- [ ] **MIST-003:** Define reset and CDC ownership. Synchronize asynchronous board/
+  framework signals at the wrapper, keep architecturally synchronous nIRQ/nFIQ clear
+  inside the CPU contract, and test reset/interrupt arrival at every phase.
+- [ ] **MIST-004:** Parameterize little/big endian and optional debug/coprocessor
+  features without changing architectural behavior or leaving floating ports. Compile
+  and regress every supported parameter combination.
+- [ ] **MIST-005:** Add complete `.qip`/file-list/QSF integration fragments and an
+  example top that can be consumed without private include paths, hierarchical peeks,
+  or hand-edited generated files.
+- [ ] **MIST-006:** Add a versioned architectural state export/import handshake for
+  MiSTer save states. Include all visible registers, banked registers, CPSR/SPSRs,
+  pipeline and any in-flight bus/debug state (including a snapshot between Thumb BL
+  halfwords), or quiesce to a precisely defined snapshot boundary. Verify restore
+  determinism.
+- [ ] **MIST-007:** Integrate into a real MiSTer framework build targeting the selected
+  Cyclone V device. Archive the exact framework commit, build command, timing report,
+  resource report, and generated bitstream hash.
+- [ ] **MIST-008:** Create a PocketStation reference system using legally supplied/
+  user-provided BIOS and software images. Implement or stub the documented SRAM, flash,
+  interrupt, timer, LCD, sound, and I/O behavior sufficiently to boot; check milestone
+  PCs, memory side effects, display output, and interrupt activity.
+- [ ] **MIST-009:** Run a PocketStation soak test with real software and randomized
+  memory waits, reset, interrupts, and save/restore. Compare an observable execution
+  trace against an independent emulator/reference where behavior is defined.
+- [ ] **MIST-010:** Add a second, generic SoC integration example (ROM/RAM/timer/UART)
+  so the API is not accidentally PocketStation-specific. Compile it with at least two
+  supported open-source FPGA tool/simulator flows where practical.
+- [ ] **MIST-011:** Publish maximum CPU rate, master-clock/CE ratios, latency rules,
+  resource budget, required memories/DSPs, reset duration, endian configuration, and
+  optional-feature costs.
+- [ ] **MIST-012:** Test coexistence with DMA/bus arbitration, including SWP LOCK,
+  LDM/STM DMORE, stalls, and abort/error responses.
+- [ ] **MIST-013:** Supply checked thin adapters from the canonical wrapper interface
+  to the selected MiSTer `enable/done` convention and at least one standard FPGA bus
+  (Avalon-MM or Wishbone). Keep the CPU contract independent of any one adapter.
+
+## 31.10 P0/P1 — verification closure
+
+- [ ] **VAL-001:** Add an independent ARMv4T instruction reference model or
+  differential co-simulation. It must not reuse this RTL's decoder or expected-value
+  functions. Normalize documented implementation-defined/UNPREDICTABLE cases.
+- [ ] **VAL-002:** Generate constrained-random ARM and Thumb programs with instruction,
+  register, flag, mode, memory, exception, alignment, endian, and dependency coverage.
+  Compare retirement state and permitted memory effects for long seeded runs.
+- [ ] **VAL-003:** Integrate legally redistributable public ARMv4T suites (for example
+  ARM/Thumb instruction exercisers used by mature open FPGA cores) after recording
+  license, source commit, expected signature, and any patches. Do not claim the
+  proprietary Arm Validation Suite was run unless it actually was.
+- [ ] **VAL-004:** Replace the current E-state-duration cycle harness with exact
+  Chapter 7 waveform tests and cross coverage over class × register/PC × m/n/b ×
+  condition × endian × stalls × abort/interrupt.
+- [ ] **VAL-005:** Add randomized CLKEN stalls to every instruction class and random
+  legal ABORT, IRQ, FIQ, reset, DBGRQ, and coprocessor handshakes at each cycle.
+- [ ] **VAL-006:** Add functional coverage for every valid encoding family and every
+  specified exceptional/reserved path. Release has zero uncovered required bins; all
+  exclusions cite specification text.
+- [ ] **VAL-007:** Add formal properties for no ghost commits, condition suppression,
+  mode/bank isolation, PC alignment, flag preservation, bus stability under CLKEN,
+  one completion per request, LOCK lifetime, exception priority, abort suppression,
+  TAP transitions, and CDC/reset assumptions. Under fair memory/coprocessor responses,
+  also prove forward progress and absence of deadlock.
+- [ ] **VAL-008:** Add bounded formal cover traces for every FSM state/transition and
+  every exception/debug entry and return.
+- [ ] **VAL-009:** Add software-level compiler tests built with pinned
+  `arm-none-eabi` tools for `-march=armv4t`, in ARM, Thumb, and interworked code.
+- [ ] **VAL-010:** Run long deterministic fuzz/soak jobs under sanitizing simulator
+  settings, X-propagation where supported, and multiple seeds. Archive failing seeds
+  and minimize them into directed regressions.
+- [ ] **VAL-011:** Have a reviewer independent of the implementation map each
+  sign-off requirement to evidence and inspect waveforms for the highest-risk
+  exception, bus, coprocessor, and debug cases.
+
+## 31.11 P0/P1 — synthesis, timing, CDC, and FPGA quality
+
+- [ ] **FPGA-001:** Fix `scripts/arm7tdmis.sdc`: there is no `DBGTCK` port; the design
+  uses `CLK` plus `DBGTCKEN`. Select the actual synthesis top before constraining DFT
+  pins. Do not false-path synchronous nIRQ/nFIQ inputs as if the RTL synchronized them.
+- [ ] **FPGA-002:** Choose exact MiSTer/Cyclone V part and board clock. Constrain all
+  real clocks, generated enables/interfaces, I/O delays, async controls, reset recovery/
+  removal, and legitimate CDC paths. Report zero unconstrained endpoints.
+- [ ] **FPGA-003:** Run clean Quartus analysis/synthesis, fit, TimeQuest at all required
+  corners, and assembly for both conformance and trimmed MiSTer profiles. Treat critical
+  warnings as failures.
+- [ ] **FPGA-004:** Run an independent synthesizer/linter where supported and CDC/RDC
+  analysis. Resolve combinational loops, inferred latches, multiple drivers,
+  simulation/synthesis mismatches, unsafe synchronizers, and reset-domain crossings.
+- [ ] **FPGA-005:** Verify RAM/DSP/clock-enable inference in reports. Publish ALM,
+  register, MLAB/M10K, DSP, clock, power estimate, and Fmax data with budget headroom.
+- [ ] **FPGA-006:** Prove synthesis equivalence or run post-synthesis simulation for
+  architectural smoke, stalls, reset, endian, exceptions, and wrapper transactions.
+- [ ] **FPGA-007:** Perform on-board bring-up with an embedded trace/signature test,
+  repeatable programming instructions, and captured evidence; then run the
+  PocketStation reference integration on hardware.
+- [ ] **FPGA-008:** Pin every tool/container version and make the release build
+  reproducible from a clean checkout in CI.
+
+## 31.12 Documentation and release hygiene
+
+- [ ] **DOC-001:** Replace all unconditional "Complete", "all green", and
+  "cycle-accurate" claims in README, CLAUDE, and `docs/` with the §31 status vocabulary
+  until linked sign-off evidence exists.
+- [ ] **DOC-002:** Correct documentation for LDM/STM aborts, exception priority/LR,
+  logical V preservation, PC values, STM/coprocessor cycles, endianness, CP14, absence
+  of internal CP15, monitor/debug limitations, ETM, and DFT.
+- [ ] **DOC-003:** Create a bidirectional traceability table:
+  requirement ID → source section → RTL → directed/random/formal tests → coverage bin
+  → latest result. Also prove every RTL feature and every test maps back to a
+  requirement.
+- [ ] **DOC-004:** Publish the two integration APIs with timing diagrams, reset and
+  clock rules, parameter/tie-off tables, error behavior, synthesis examples, and
+  compatibility/version policy.
+- [ ] **DOC-005:** Record copyright/license/SPDX status for RTL, tests, manuals,
+  third-party suites, reference emulator code, MiSTer fragments, firmware, and ROM
+  handling. Do not redistribute copyrighted BIOS/software without permission.
+- [ ] **DOC-006:** Add a changelog, semantic version, support matrix, known-limitations
+  file, security/debug notes, and a release manifest containing source/tool/spec hashes.
+- [ ] **DOC-007:** Remove stale "pending", "scaffold", and "deferred" comments only
+  when the corresponding requirement is verified; otherwise keep them and link the
+  owning task ID.
+
+## 31.13 Final v1.0 release gate
+
+The release owner may sign off only when all statements below are true:
+
+```text
+[ ] Every P0 item in §31 is checked with a durable evidence link
+[ ] Every required §0–§30 item maps to §31 evidence or an explicit OUT-OF-SCOPE decision
+[ ] No required area is MISSING, INCORRECT, PARTIAL, or IMPLEMENTED-UNVERIFIED
+[ ] Clean reproducible regression fails hard and passes all variants
+[ ] ARM/Thumb encoding, functional, exception, bus-cycle, endian, and debug coverage closed
+[ ] Independent differential tests, formal properties, compiler tests, and long soaks pass
+[ ] All selected r4p3 errata policies are documented and tested
+[ ] Raw ARM7TDMI-S and MiSTer wrapper protocol checkers pass with randomized stalls/errors
+[ ] Quartus synthesis, fit, timing, CDC/RDC, and post-synthesis checks pass without open waivers
+[ ] A real MiSTer build and on-board PocketStation reference run pass
+[ ] Save-state restore is deterministic in the PocketStation integration
+[ ] Generic second-SoC integration builds and runs
+[ ] README/CLAUDE/docs exactly match the audited state and link the release evidence
+[ ] License/provenance review is complete
+[ ] Two reviewers, including one not responsible for the RTL, approve the traceability matrix
+[ ] Release tag, source hash, spec hashes, toolchain, artifacts, and reports are frozen
+```
+
+P1/P2 work may be deferred only if it is outside both required profiles and appears in
+the signed limitations/support matrix. There are no silent waivers. A post-sign-off bug
+creates an erratum and a versioned maintenance task; it does not rewrite the historical
+v1.0 evidence.

@@ -1,5 +1,9 @@
 # 3-stage Pipeline Architecture
 
+> **Audit status:** Historical implementation notes, not a conformance specification.
+> Known cycle and bus-waveform errors are tracked in `TASKS.md` §31.5; §31 supersedes
+> every "verified" or "TRM-aligned" statement below.
+
 This document captures the architectural decisions in `rtl/core/arm7tdmis_core_pipelined.sv` — particularly the non-obvious ones, since the RTL itself is dense.
 
 ## Stage structure
