@@ -347,7 +347,10 @@ module arm7tdmis_thumb_decoder
             dec.ls_writeback   = 1'b0;
             dec.ls_load        = fmt8_S | fmt8_H;          // 0 only for STRH
             dec.hs_use_imm     = 1'b0;                       // register offset
-            dec.hs_halfword    = fmt8_H;
+            // Only S=1,H=0 is the signed-byte form. S=0,H=0 is STRH,
+            // so using H alone would incorrectly reduce that store to a
+            // byte transfer.
+            dec.hs_halfword    = !fmt8_S || fmt8_H;
             dec.hs_signed      = fmt8_S;
         end else if (is_fmt9) begin
             // Format 9: LDR/STR/LDRB/STRB Rd, [Rb, #imm5*(4|1)]
