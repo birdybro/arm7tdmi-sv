@@ -15,6 +15,7 @@ __pycache__/
 
 # Quartus project databases and generated programming/report artifacts
 /fpga/arm7tdmi_mister.qpf
+/fpga/c5_pin_model_dump.txt
 /fpga/db/
 /fpga/incremental_db/
 /fpga/output_files/
