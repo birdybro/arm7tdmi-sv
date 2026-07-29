@@ -3388,8 +3388,23 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   `scripts/tests/test_table7_cross_evidence.py` prevent the phase, manifest,
   hashes, dimensions, row minima, release validation, or checked status from
   weakening.
-- [ ] **VAL-005:** Add randomized CLKEN stalls to every instruction class and random
+- [x] **VAL-005:** Add randomized CLKEN stalls to every instruction class and random
   legal ABORT, IRQ, FIQ, reset, DBGRQ, and coprocessor handshakes at each cycle.
+  `arm7tdmis_random_event_matrix_tb.sv` closes all 16 normalized decoder-class
+  bins and a CLKEN-stall bin for each class independently in every seed. Its
+  per-cycle LFSR inserts one-to-three-cycle holds, randomizes legal opcode/data
+  read/data write ABORT response positions, interrupt arrival, reset class and
+  duration, DBGRQ arrival, and ready/busy/absent coprocessor timing. ABORT can
+  only accompany an active response, `{CPA,CPB}` can only be `00`, `01`, or
+  `11`, and each event must produce the expected abort/interrupt/debug/reset/
+  coprocessor outcome.
+  `verification/random_events.py` runs 32 deterministic nonrepeating seeds,
+  requires all 16 class and ten event bins plus at least 256 random decisions
+  in every seed, preserves exact logs and reproducers, and emits
+  `arm7tdmis-random-events-v1`. Full regression and release evidence require
+  the clean same-commit campaign; mutation tests reject reduced masks,
+  shortened/duplicate seeds, stale evidence, missing logs, or a weakened
+  decision floor.
 - [ ] **VAL-006:** Add functional coverage for every valid encoding family and every
   specified exceptional/reserved path. Release has zero uncovered required bins; all
   exclusions cite specification text.

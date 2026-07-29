@@ -257,6 +257,31 @@ campaign; quick CI runs `random-validation-quick` with two 64-instruction
 seeds. Release evidence independently revalidates the report strength, every
 input, and every generated artifact hash.
 
+## Constrained-random external-event campaign
+
+`make -C scripts random-events` builds
+`arm7tdmis_random_event_matrix_tb.sv` once and runs 32 deterministic,
+nonrepeating seeds. Every seed independently decodes all 16 normalized
+instruction classes and freezes each at an LFSR-selected two-to-five-cycle
+CLKEN hold. The scoreboard checks architectural pipeline state and every
+Chapter 7/debug/coprocessor output through the hold and first-cycle output
+settling rule.
+
+The same seed uses rejection sampling to place ABORT only on live opcode,
+data-read, and data-write responses; delays IRQ, FIQ, and DBGRQ to random
+cycles; selects the instruction class and duration of an in-flight reset; and
+varies a legal coprocessor busy interval before completion. Separate ready
+and absent cases complete the `{CPA,CPB}` coverage; `2'b10` is never
+generated. Each event must reach its expected abort/interrupt mode, reset
+state, debug acknowledge, completion, or Undefined path.
+
+Schema `arm7tdmis-random-events-v1` records exact runner/testbench/binary
+hashes, 16 class bins, 16 matching class-stall bins, ten event bins, at least
+256 per-cycle random decisions per seed, logs, and exact reproducers. The
+full regression and release archive require a clean same-commit 32-seed
+report. `test_random_event_contract.py` mutation-tests the masks, seed
+strength, decision floor, status, and provenance.
+
 ## Public ARMv4T suite
 
 `make -C scripts public-suite` fetches the MIT-licensed

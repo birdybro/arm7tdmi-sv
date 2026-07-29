@@ -35,6 +35,36 @@ TABLE7_REQUIRED_CROSSES = (
     "memory_class_abort",
     "class_interrupt_exception",
 )
+RANDOM_EVENT_CLASS_BINS = (
+    "undef",
+    "dp",
+    "msr",
+    "mrs",
+    "mul",
+    "mull",
+    "branch",
+    "bx",
+    "ldr_str",
+    "ldrh_strh",
+    "ldm_stm",
+    "swp",
+    "swi",
+    "cdp",
+    "mcr_mrc",
+    "ldc_stc",
+)
+RANDOM_EVENT_BINS = (
+    "abort_opcode_read",
+    "abort_data_read",
+    "abort_data_write",
+    "irq",
+    "fiq",
+    "reset",
+    "dbgrq",
+    "cp_ready",
+    "cp_busy",
+    "cp_absent",
+)
 
 
 def validate_evidence(
@@ -118,6 +148,80 @@ def validate_soak_evidence(
         for entry in seeds
     ):
         raise ValueError("soak report contains a non-passing seed")
+
+
+def validate_random_event_evidence(
+    report: dict[str, Any],
+    *,
+    expected_commit: str,
+) -> None:
+    """Reject incomplete, stale, or weakened VAL-005 campaign evidence."""
+    if report.get("schema") != "arm7tdmis-random-events-v1":
+        raise ValueError("random-event report has wrong schema")
+    if report.get("status") != "passed" or report.get("failures"):
+        raise ValueError("random-event report is not passed")
+    if report.get("git", {}).get("dirty"):
+        raise ValueError("random-event report describes a dirty source tree")
+    if report.get("git", {}).get("commit") != expected_commit:
+        raise ValueError("random-event report commit does not match regression")
+
+    required_classes = report.get("required_class_bins")
+    required_events = report.get("required_event_bins")
+    if (
+        not isinstance(required_classes, list)
+        or len(required_classes) != len(set(required_classes))
+        or set(required_classes) != set(RANDOM_EVENT_CLASS_BINS)
+        or not isinstance(required_events, list)
+        or len(required_events) != len(set(required_events))
+        or set(required_events) != set(RANDOM_EVENT_BINS)
+    ):
+        raise ValueError("random-event required-bin manifest was weakened")
+    if (
+        set(report.get("covered_class_bins", []))
+        != set(RANDOM_EVENT_CLASS_BINS)
+        or set(report.get("covered_class_stall_bins", []))
+        != set(RANDOM_EVENT_CLASS_BINS)
+        or set(report.get("covered_event_bins", []))
+        != set(RANDOM_EVENT_BINS)
+    ):
+        raise ValueError("random-event aggregate coverage is incomplete")
+
+    configuration = report.get("configuration", {})
+    seeds = report.get("seeds")
+    if (
+        not isinstance(seeds, list)
+        or any(not isinstance(entry, dict) for entry in seeds)
+        or not isinstance(configuration.get("seed_count"), int)
+        or configuration["seed_count"] < 32
+        or configuration["seed_count"] != len(seeds)
+        or report.get("completed_seed_count") != len(seeds)
+        or len({entry.get("seed") for entry in seeds}) != len(seeds)
+        or configuration.get("minimum_decisions_per_seed", 0) < 256
+    ):
+        raise ValueError("random-event report lacks 32 unique strong seeds")
+
+    minimum_decisions = configuration["minimum_decisions_per_seed"]
+    for entry in seeds:
+        if (
+            entry.get("status") != "passed"
+            or entry.get("exit_code") != 0
+            or not entry.get("pass_marker_found")
+            or int(entry.get("decision_count", 0)) < minimum_decisions
+            or set(entry.get("class_bins", []))
+            != set(RANDOM_EVENT_CLASS_BINS)
+            or set(entry.get("class_stall_bins", []))
+            != set(RANDOM_EVENT_CLASS_BINS)
+            or set(entry.get("event_bins", [])) != set(RANDOM_EVENT_BINS)
+            or not isinstance(entry.get("reproducer"), list)
+            or not entry["reproducer"]
+        ):
+            raise ValueError("random-event seed evidence is incomplete")
+
+    total_decisions = sum(
+        int(entry.get("decision_count", 0)) for entry in seeds
+    )
+    if report.get("total_decision_count") != total_decisions:
+        raise ValueError("random-event decision total is inconsistent")
 
 
 def validate_constrained_random_evidence(
@@ -626,6 +730,13 @@ def _validated_files(
         raise ValueError(
             "full regression is missing mandatory Chapter 7 cross evidence"
         )
+    if (
+        regression.get("mode") == "full"
+        and "random-events" not in phase_names
+    ):
+        raise ValueError(
+            "full regression is missing mandatory randomized-event evidence"
+        )
     traceability_report = REPORT_ROOT / "traceability-report.json"
     if "traceability" not in phase_names:
         raise ValueError("regression did not run mandatory traceability")
@@ -703,6 +814,46 @@ def _validated_files(
                 )
             candidates.append(input_path)
         candidates.append(soak_path.resolve())
+    if "random-events" in phase_names:
+        event_report_path = REPORT_ROOT / "random-events-report.json"
+        if not event_report_path.is_file():
+            raise ValueError("random-event report is missing")
+        event_report = json.loads(
+            event_report_path.read_text(encoding="utf-8")
+        )
+        validate_random_event_evidence(
+            event_report,
+            expected_commit=str(
+                regression.get("git", {}).get("commit", "")
+            ),
+        )
+        expected_inputs = {"runner", "testbench", "binary"}
+        inputs = event_report.get("inputs")
+        if not isinstance(inputs, dict) or set(inputs) != expected_inputs:
+            raise ValueError("random-event input manifest is incomplete")
+        for input_entry in inputs.values():
+            if not isinstance(input_entry, dict):
+                raise ValueError("random-event input entry is malformed")
+            input_path = _repo_path(str(input_entry.get("path", "")))
+            if (
+                input_path.stat().st_size != input_entry.get("bytes")
+                or _sha256(input_path) != input_entry.get("sha256")
+            ):
+                raise ValueError("random-event input hash mismatch")
+            candidates.append(input_path)
+        for seed in event_report["seeds"]:
+            log_entry = seed.get("log")
+            if not isinstance(log_entry, dict):
+                raise ValueError("random-event seed log is malformed")
+            log_path = _repo_path(str(log_entry.get("path", "")))
+            if (
+                log_path.stat().st_size != log_entry.get("bytes")
+                or _sha256(log_path) != log_entry.get("sha256")
+                or _sha256(log_path) != seed.get("output_sha256")
+            ):
+                raise ValueError("random-event seed log hash mismatch")
+            candidates.append(log_path)
+        candidates.append(event_report_path.resolve())
     random_phase_names = {
         "random-validation",
         "random-validation-quick",

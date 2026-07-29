@@ -128,6 +128,11 @@
       "tests": ["verification/table7_cross.py", "verification/table7_cross.json", "tb/integration/arm7tdmis_table7_core_phase_matrix_tb.sv", "scripts/tests/test_table7_cross_contract.py", "scripts/tests/test_table7_cross_evidence.py"],
       "source_sections": ["ARM DDI 0234B Chapter 7 and TASKS.md section 31.10 VAL-004"]
     },
+    "VAL-005": {
+      "rtl": ["rtl/core/", "rtl/debug/", "rtl/top/arm7tdmis_top.sv"],
+      "tests": ["verification/random_events.py", "tb/integration/arm7tdmis_random_event_matrix_tb.sv", "scripts/tests/test_random_event_contract.py"],
+      "source_sections": ["ARM DDI 0234B external event sampling and TASKS.md section 31.10 VAL-005"]
+    },
     "VAL-009": {
       "rtl": ["rtl/core/", "rtl/top/arm7tdmis_top.sv"],
       "tests": ["verification/compiler/", "tb/integration/arm7tdmis_compiler_tb.sv"],
@@ -171,6 +176,9 @@
     {"glob": "verification/table7_cross.py", "requirements": ["VAL-004"]},
     {"glob": "tb/integration/arm7tdmis_table7_core_phase_matrix_tb.sv", "requirements": ["VAL-004", "BUS-002", "BUS-003"]},
     {"glob": "scripts/tests/test_table7_cross_*.py", "requirements": ["VAL-004"]},
+    {"glob": "verification/random_events.py", "requirements": ["VAL-005"]},
+    {"glob": "tb/integration/arm7tdmis_random_event_matrix_tb.sv", "requirements": ["VAL-005"]},
+    {"glob": "scripts/tests/test_random_event_contract.py", "requirements": ["VAL-005"]},
     {"glob": "verification/compiler/*", "requirements": ["VAL-009"]},
     {"glob": "verification/intel_cyclonev_postfit_primitives.sv", "requirements": ["FPGA-006"]},
     {"glob": "tb/postfit/*.sv", "requirements": ["FPGA-006"]},

@@ -214,6 +214,7 @@ class RandomEventContractTest(unittest.TestCase):
         regression = _read("scripts/regression_harness.py")
         release = _read("scripts/release_evidence.py")
         traceability = _read("verification/traceability.json")
+        workflow = _read(".github/workflows/verification.yml")
         tasks = _read("TASKS.md")
         verification = _read("docs/VERIFICATION.md")
 
@@ -229,6 +230,8 @@ class RandomEventContractTest(unittest.TestCase):
         self.assertIn("if not quick", regression)
         self.assertIn("random-events-report.json", release)
         self.assertIn("validate_random_event_evidence", release)
+        self.assertIn("make -C scripts random-events", workflow)
+        self.assertIn("random-events-report.json", workflow)
         self.assertIn("VAL-005", traceability)
         self.assertIn("- [x] **VAL-005:**", tasks)
         block = tasks[tasks.index("**VAL-005:**"):tasks.index("**VAL-006:**")]

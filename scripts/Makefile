@@ -65,6 +65,11 @@ RANDOM_OBJ_DIR := $(OBJ_DIR)/constrained_random
 RANDOM_DIFF_BIN := $(RANDOM_OBJ_DIR)/diff/Varm7tdmis_random_diff_tb
 RANDOM_POLICY_BIN := $(RANDOM_OBJ_DIR)/policy/Varm7tdmis_random_policy_tb
 RANDOM_REPORT := ../reports/generated/constrained-random-report.json
+RANDOM_EVENT_SEEDS ?= 32
+RANDOM_EVENT_OBJ_DIR := $(OBJ_DIR)/random_events
+RANDOM_EVENT_BIN := \
+	$(RANDOM_EVENT_OBJ_DIR)/Varm7tdmis_random_event_matrix_tb
+RANDOM_EVENT_REPORT := ../reports/generated/random-events-report.json
 PUBLIC_SUITE_OBJ_DIR := $(OBJ_DIR)/public_suite
 PUBLIC_SUITE_BIN := $(PUBLIC_SUITE_OBJ_DIR)/Varm7tdmis_public_suite_tb
 PUBLIC_SUITE_REPORT := ../reports/generated/public-suite-report.json
@@ -130,7 +135,8 @@ INTEG_RUN_ARGS_compiler = \
         sim run wave clean help regress regress-quick regress-ci \
         coverage release-evidence \
         traceability random-validation-build random-validation \
-        random-validation-quick public-suite-build public-suite \
+        random-validation-quick random-events-build random-events \
+        public-suite-build public-suite \
         table7-cross \
         soak-build soak \
         harness-unit harness-self-test raw-checker-self-test mutation-self-test \
@@ -361,6 +367,26 @@ random-validation-quick: random-validation-build
 	    --clang $(CLANG) --objcopy $(LLVM_OBJCOPY) --nm $(LLVM_NM) \
 	    --qemu $(QEMU_SYSTEM_ARM)
 
+# VAL-005 closes every normalized instruction-class CLKEN-stall bin and
+# every legal external-event bin independently in each deterministic seed.
+$(RANDOM_EVENT_BIN): Makefile $(SIM_F) $(RTL_SRCS) \
+                     ../tb/integration/arm7tdmis_memory.sv \
+                     ../tb/integration/arm7tdmis_random_event_matrix_tb.sv
+	mkdir -p $(RANDOM_EVENT_OBJ_DIR)
+	$(VERILATOR) $(VFLAGS_BUILD) -Wno-SYNCASYNCNET \
+	    --top-module arm7tdmis_random_event_matrix_tb \
+	    --Mdir $(RANDOM_EVENT_OBJ_DIR) -f $(SIM_F) \
+	    ../tb/integration/arm7tdmis_memory.sv \
+	    ../tb/integration/arm7tdmis_random_event_matrix_tb.sv
+
+random-events-build: $(RANDOM_EVENT_BIN)
+
+random-events: random-events-build
+	PYTHONPATH=../verification $(PYTHON) ../verification/random_events.py \
+	    --binary $(abspath $(RANDOM_EVENT_BIN)) \
+	    --seeds $(RANDOM_EVENT_SEEDS) \
+	    --output $(RANDOM_EVENT_REPORT)
+
 # The release soak uses a separate, sanitizer-instrumented binary so ordinary
 # developer simulations do not silently inherit host-specific sanitizer
 # runtime requirements. Unique X initialization is controlled by Verilator's
@@ -537,6 +563,7 @@ help:
 	@echo "  public-suite run pinned MIT ARM and Thumb instruction exercisers"
 	@echo "  table7-cross validate all required Chapter 7 cross evidence in a full regression"
 	@echo "  random-validation run 32 x 256-instruction constrained-random seeds"
+	@echo "  random-events run 32 all-class external-event seeds"
 	@echo "  soak         run 256 deterministic sanitizer/X-propagation seeds"
 	@echo "  regress      clean full run with JSON metadata/results under reports/"
 	@echo "  regress-quick lint/harness plus one unit/integration test and smoke"

@@ -162,6 +162,7 @@ def collect_metadata(
             "public_suite": ["pinned-gba-suite-arm-thumb"],
             "cycle_cross": [],
             "constrained_random": [],
+            "random_events": [],
             "soak": [],
             "examples": ["generic-soc"],
             "smoke": ["arm7tdmis_tb_top"],
@@ -308,6 +309,7 @@ def _phases(
         )
     else:
         yield _make_phase("random-validation", "random-validation")
+        yield _make_phase("random-events", "random-events")
     if not quick:
         yield _make_phase("soak", "soak")
     yield _make_phase("smoke", "run")
@@ -372,6 +374,9 @@ def main() -> int:
     report["manifest"]["constrained_random"] = [
         "2-seed-quick" if args.quick else "32-seed-release"
     ]
+    report["manifest"]["random_events"] = (
+        [] if args.quick else ["32-seed-all-class-all-event"]
+    )
     report["manifest"]["cycle_cross"] = (
         [] if args.quick else ["chapter7-required-crosses"]
     )

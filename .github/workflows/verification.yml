@@ -73,6 +73,28 @@ jobs:
       - name: Kill architectural-control mutants
         run: make -C scripts mutation-self-test
 
+  randomized-events:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install randomized-event verification tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential make python3 verilator
+      - name: Run all-class randomized external-event campaign
+        run: make -C scripts random-events
+      - name: Preserve event report and per-seed logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm7tdmis-random-events-${{ github.sha }}
+          path: |
+            reports/generated/random-events-report.json
+            reports/generated/random_events/
+          if-no-files-found: error
+          retention-days: 90
+
   sanitizer-soak:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04

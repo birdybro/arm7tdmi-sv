@@ -34,6 +34,9 @@ sign-off gate in `TASKS.md` §31.13.
 - Close deterministic Chapter 7 cycle-cross coverage with exact endian/stall
   waveforms, nine manifest-defined legal-equivalence crosses, full-regression
   log/source hashing, and mutation-tested release validation.
+- Add a 32-seed constrained-random external-event gate that stalls every
+  normalized instruction class and closes legal ABORT, IRQ, FIQ, reset,
+  DBGRQ, and coprocessor-response bins independently per seed.
 - Complete the remaining independent validation, formal, toolchain,
   MiSTer-framework, PocketStation, and hardware requirements in `TASKS.md`.
 - Freeze v1.0 only after every release-gate statement has durable evidence.
