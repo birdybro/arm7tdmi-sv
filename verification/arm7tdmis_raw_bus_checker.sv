@@ -137,6 +137,11 @@ module arm7tdmis_raw_bus_checker
 
             if (CLKEN) begin
                 if (TRANS == 2'(TRANS_S)) begin
+                    // Byte transfers can only be isolated N cycles.  Check
+                    // this before validating history because byte phases
+                    // deliberately have no legal burst increment.
+                    assert (SIZE != 2'(SIZE_BYTE))
+                        else $fatal(1, "raw bus: byte burst is forbidden");
                     assert (active_continuation || merged_is
                             || coprocessor_stream_start)
                         else $fatal(1,
@@ -145,8 +150,6 @@ module arm7tdmis_raw_bus_checker
                             phase_trans_q, phase_addr_q, phase_write_q,
                             phase_size_q, phase_prot_q, phase_lock_q,
                             phase_cpni_q);
-                    assert (SIZE != 2'(SIZE_BYTE))
-                        else $fatal(1, "raw bus: byte burst is forbidden");
                 end
 
                 if (phase_valid_q && phase_dmore_q) begin
