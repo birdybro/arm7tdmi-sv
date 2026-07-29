@@ -2438,7 +2438,18 @@ module arm7tdmis_core_pipelined
                 PROT  = {is_priv, 1'b1};
             end
             S_BLOCK_WB: begin
-                if (block_pc_internal_phase) begin
+                if (block_abort_pc_refill_q != 2'd0) begin
+                    // An Abort suppresses the PC write but a PC-inclusive
+                    // LDM still occupies its complete n+4 timing path.
+                    // These are discarded refill slots, not successor
+                    // prefetches: keep the raw memory interface inactive
+                    // until Data Abort exception entry replaces it.
+                    ADDR  = fetch_pc_q;
+                    TRANS = 2'(TRANS_I);
+                    WRITE = WRITE_READ;
+                    SIZE  = fetch_size_w;
+                    PROT  = {is_priv, 1'b1};
+                end else if (block_pc_internal_phase) begin
                     // Table 7-13 PC destination, n+2: the preceding last
                     // data-response cycle advertised source pc+3i/I.
                     // This writeback cycle starts the refill at target/N.
