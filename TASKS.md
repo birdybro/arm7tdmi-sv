@@ -2681,8 +2681,10 @@ number of cycles spent in an internal FSM state.
   `tb/integration/arm7tdmis_debug_watchpoint_priority_tb.sv`. That regression
   also scans r15 after independent Data Abort, IRQ, and FIQ collisions and
   requires the three-address exception-entry correction to recover the fetched
-  vector. The system-speed PC formula and documented PC-modify erratum policy
-  remain open.
+  vector. `tb/integration/arm7tdmis_debug_system_speed_tb.sv` compares public
+  r15 scans across ordinary debug-speed execution and a stalled at-speed LDR,
+  requiring one address per `N` instruction and exactly three per `S`
+  instruction. The documented PC-modify erratum policy remains open.
 - [x] **JTAG-001:** Exhaustively verify all 16 TAP states and transitions, async
   `DBGnTRST`, Capture/Shift/Update-IR, fixed `0001` capture, all five public
   instructions, and BYPASS for every other IR encoding. Fail-hard evidence:

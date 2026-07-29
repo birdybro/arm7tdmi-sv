@@ -80,6 +80,8 @@ module ice_rt_tb
         .chain1_capture_break(tb_chain1_capture_break),
         .entry_breakpoint   (tb_entry_breakpoint),
         .entry_exception    (tb_entry_exception),
+        .debug_session_active(tb_debug_session_active),
+        .system_speed_active(tb_system_speed_active),
         .monitor_mode       (tb_monitor_mode),
         .monitor_data_abort (tb_monitor_data_abort),
         .core_halt          (core_halt),
@@ -127,6 +129,8 @@ module ice_rt_tb
     logic        tb_chain1_capture_break;
     logic        tb_entry_breakpoint;
     logic        tb_entry_exception;
+    logic        tb_debug_session_active;
+    logic        tb_system_speed_active;
     logic        tb_monitor_mode;
     logic        tb_monitor_data_abort;
     logic        tb_halt_watchpoint_event;
@@ -254,6 +258,7 @@ module ice_rt_tb
                      tb_dcc_rx_full, tb_inject_we, tb_inject_instr,
                      tb_inject_active, tb_chain1_capture_break,
                      tb_entry_breakpoint, tb_entry_exception,
+                     tb_debug_session_active, tb_system_speed_active,
                      tb_monitor_mode, tb_monitor_data_abort,
                      tb_halt_watchpoint_event,
                      scan_raddr};

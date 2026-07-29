@@ -38,6 +38,8 @@ module arm7tdmis_ice_rt
     output logic        chain1_capture_break,
     output logic        entry_breakpoint,  // retained for r15 scan formula
     output logic        entry_exception,   // retained for r15 scan formula
+    output logic        debug_session_active,
+    output logic        system_speed_active,
     output logic        monitor_mode,       // Debug Control[4], DBGEN-gated
     output logic        monitor_data_abort, // aligned enabled data WP hit
 
@@ -692,6 +694,8 @@ module arm7tdmis_ice_rt
     assign chain1_capture_break = entry_watchpoint_q;
     assign entry_breakpoint = breakpoint_halt_q;
     assign entry_exception = entry_exception_q;
+    assign debug_session_active = in_debug_halt;
+    assign system_speed_active = system_speed_active_q;
 
     // This is asserted for the final running DBGRQI cycle, before
     // dbg_state_q enters HALTED. Only a debug request has the special

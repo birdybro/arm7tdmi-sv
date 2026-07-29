@@ -411,6 +411,14 @@ accepted/retired handshake completes. The first chain-1 capture after that
 return reports bit 33 high. A stalled LDR exercises the complete sequence in
 `tb/integration/arm7tdmis_debug_system_speed_tb.sv`.
 
+The scan adapter retains a session-local PC advance alongside that execution.
+Every retired debug-speed instruction contributes one ARM address, every
+retired system-speed instruction contributes three, and an internally consumed
+LDM/STM or STR scan sequence contributes its instruction plus two pipeline
+NOPs. Loading r15 rebases this count. Public r15 scans before and after both
+ordinary and system-speed execution enforce the complete `N + 3S` term in the
+same regression.
+
 Only ARM single-, block-, and extra-load/store encodings are admitted to this
 at-speed path. A non-memory word following a bit-33-marked scan is the final
 debug-exit PC-control marker; it is consumed while halted and does not arm

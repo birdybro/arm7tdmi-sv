@@ -103,6 +103,8 @@ module ice_watchpoint_tb;
         .chain1_capture_break(tb_chain1_capture_break),
         .entry_breakpoint   (tb_entry_breakpoint),
         .entry_exception    (tb_entry_exception),
+        .debug_session_active(tb_debug_session_active),
+        .system_speed_active(tb_system_speed_active),
         .monitor_mode       (tb_monitor_mode),
         .monitor_data_abort (tb_monitor_data_abort),
         .core_dcc_we        (1'b0),
@@ -142,6 +144,8 @@ module ice_watchpoint_tb;
     logic tb_chain1_capture_break;
     logic tb_entry_breakpoint;
     logic tb_entry_exception;
+    logic tb_debug_session_active;
+    logic tb_system_speed_active;
     logic tb_monitor_mode;
     logic tb_monitor_data_abort;
     logic tb_halt_watchpoint_event;
@@ -512,7 +516,7 @@ module ice_watchpoint_tb;
         core_dcc_control, core_dcc_rdata, core_dbgabt_rdata,
         dcc_tx_empty, dcc_rx_full, dbg_inject_we, dbg_inject_instr,
         dbg_inject_active, tb_chain1_capture_break, tb_entry_breakpoint,
-        tb_entry_exception,
+        tb_entry_exception, tb_debug_session_active, tb_system_speed_active,
         tb_monitor_mode, tb_monitor_data_abort,
         tb_halt_watchpoint_event,
         WP0_ADDR_MASK, WP0_DATA_VAL, WP0_DATA_MASK, WP0_CTRL_MASK,

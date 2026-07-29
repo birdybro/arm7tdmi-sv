@@ -198,6 +198,8 @@ module arm7tdmis_top
     logic        ice_chain1_capture_break;
     logic        ice_entry_breakpoint;
     logic        ice_entry_exception;
+    logic        ice_debug_session_active;
+    logic        ice_system_speed_active;
     logic        ice_data_write_q;
     logic [31:0] ice_watch_data;
 
@@ -242,6 +244,8 @@ module arm7tdmis_top
         .chain1_capture_break(ice_chain1_capture_break),
         .entry_breakpoint   (ice_entry_breakpoint),
         .entry_exception    (ice_entry_exception),
+        .debug_session_active(ice_debug_session_active),
+        .system_speed_active(ice_system_speed_active),
         .monitor_mode       (ice_monitor_mode),
         .monitor_data_abort (ice_monitor_data_abort),
         .dbg_break_internal (ice_dbg_break),
@@ -450,15 +454,51 @@ module arm7tdmis_top
     assign dbg_reg_force_user = !dbg_store_active_q
                               && dbg_block_force_user_q;
 
+    // A physical ARM7TDMI advances its PC while executing scanned
+    // instructions even though this FPGA implementation consumes the
+    // scan-data transfers in a direct adapter. Retain that logical
+    // advancement for the whole debug session so the TRM §5.18.6
+    // -(entry + N + 3S) return formulas remain observable through r15.
+    logic        dbg_session_seen_q;
+    logic [31:0] dbg_pc_advance_q;
+    wire dbg_pc_rebase = dbg_reg_we && (dbg_reg_addr == 4'd15);
+    wire dbg_block_pipeline_complete = tap_inject_we
+                                     && dbg_block_setup_q
+                                     && (dbg_block_setup_left_q == 2'd1);
+    wire dbg_store_pipeline_complete = tap_inject_we
+                                     && dbg_store_setup_q
+                                     && (dbg_store_setup_left_q == 2'd1);
+
+    always_ff @(posedge CLK or negedge DBGnTRST) begin
+        if (!DBGnTRST) begin
+            dbg_session_seen_q <= 1'b0;
+            dbg_pc_advance_q   <= 32'h0000_0000;
+        end else begin
+            dbg_session_seen_q <= ice_debug_session_active;
+            if (!DBGEN
+                || (ice_debug_session_active && !dbg_session_seen_q)
+                || dbg_pc_rebase) begin
+                dbg_pc_advance_q <= 32'h0000_0000;
+            end else if (dbg_block_pipeline_complete
+                         || dbg_store_pipeline_complete) begin
+                dbg_pc_advance_q <= dbg_pc_advance_q + 32'd12;
+            end else if (dbg_inject_retire) begin
+                dbg_pc_advance_q <= dbg_pc_advance_q
+                                  + (ice_system_speed_active
+                                     ? 32'd12 : 32'd4);
+            end
+        end
+    end
+
     // The direct stream adapter consumes the STM plus its two pipeline
     // NOPs without executing them in the core. A physical ARM7TDMI has
-    // advanced r15 by three ARM words when the first register reaches
-    // the scan data bus, so restore that visible bias for r15 only.
+    // advanced r15 by three ARM words when the first register reaches the
+    // scan data bus; dbg_pc_advance_q above records that persistent bias.
     wire [31:0] dbg_entry_r15 =
         ice_entry_exception ? (ice_core_exception_vector_pc + 32'd8)
                             : dbg_reg_rdata;
     wire [31:0] dbg_block_capture_data =
-        (dbg_block_reg_q == 4'd15) ? (dbg_entry_r15 + 32'd12
+        (dbg_block_reg_q == 4'd15) ? (dbg_entry_r15 + dbg_pc_advance_q
                                      + (ice_entry_breakpoint ? 32'd4 : 32'd0))
                                    : dbg_reg_rdata;
     wire [31:0] tap_chain1_capture_data = dbg_block_active_q
