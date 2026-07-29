@@ -50,6 +50,7 @@ module arm7tdmis_ice_rt
     // injected instruction's lifetime.
     input  logic        tap_inject_we,
     input  logic [31:0] tap_inject_instr,
+    input  logic        tap_inject_break,
     input  logic        core_inject_accept,
     input  logic        core_inject_retire,
     output logic        dbg_inject_we,
@@ -226,6 +227,10 @@ module arm7tdmis_ice_rt
     logic         breakpoint_halt_q;
     logic         breakpoint_resume_q;
     logic         entry_watchpoint_q;
+    logic         system_speed_armed_q;
+    logic         system_speed_pending_q;
+    logic         system_speed_active_q;
+    logic [31:0]  system_speed_instr_q;
 
     wire ice_dbgrq_force = regs[5'h00][1];
     wire dbgrqi          = (ice_dbgrq_force || dbg_rq_synced) && DBGEN;
@@ -445,6 +450,8 @@ module arm7tdmis_ice_rt
             // be hidden behind the core clock-enable gate.
             if (tap_chain1_capture)
                 entry_watchpoint_q <= 1'b0;
+            if (core_inject_retire && system_speed_active_q)
+                entry_watchpoint_q <= 1'b1;
 
             if (CLKEN) begin
                 unique case (dbg_state_q)
@@ -498,7 +505,8 @@ module arm7tdmis_ice_rt
                     DBG_HALTED: begin
                         halt_pending_q    <= 1'b0;
                         halt_watchpoint_q <= 1'b0;
-                        if (tap_restart_req) begin
+                        if (tap_restart_req && !system_speed_pending_q
+                                            && !system_speed_active_q) begin
                             dbg_state_q <= DBG_RUNNING;
                             breakpoint_resume_q <= breakpoint_halt_q;
                         end
@@ -547,18 +555,45 @@ module arm7tdmis_ice_rt
             inject_active_q   <= 1'b0;
             inject_accepted_q <= 1'b0;
             inject_instr_q    <= 32'h0;
+            system_speed_armed_q   <= 1'b0;
+            system_speed_pending_q <= 1'b0;
+            system_speed_active_q  <= 1'b0;
+            system_speed_instr_q   <= 32'h0;
         end else if (tap_inject_we && in_debug_halt
-                     && !inject_active_q) begin
-            inject_instr_q    <= tap_inject_instr;
-            inject_active_q   <= 1'b1;
-            inject_accepted_q <= 1'b0;
+                     && !inject_active_q && !system_speed_pending_q) begin
+            if (system_speed_armed_q) begin
+                // DBGBREAK HIGH on the preceding scan marks this word as
+                // the system-speed instruction. It is loaded into the
+                // debug pipeline only when RESTART reaches Run-Test/Idle.
+                system_speed_instr_q   <= tap_inject_instr;
+                system_speed_pending_q <= 1'b1;
+                system_speed_armed_q   <= 1'b0;
+            end else begin
+                inject_instr_q    <= tap_inject_instr;
+                inject_active_q   <= 1'b1;
+                inject_accepted_q <= 1'b0;
+                system_speed_armed_q <= tap_inject_break;
+            end
+        end else if (tap_restart_req && in_debug_halt
+                     && system_speed_pending_q && !inject_active_q) begin
+            inject_instr_q          <= system_speed_instr_q;
+            inject_active_q         <= 1'b1;
+            inject_accepted_q       <= 1'b0;
+            system_speed_pending_q  <= 1'b0;
+            system_speed_active_q   <= 1'b1;
         end else if (CLKEN && inject_active_q) begin
             if (core_inject_retire) begin
                 inject_active_q   <= 1'b0;
                 inject_accepted_q <= 1'b0;
+                system_speed_active_q <= 1'b0;
             end else if (core_inject_accept) begin
                 inject_accepted_q <= 1'b1;
             end
+        end else if (tap_restart_req && in_debug_halt
+                     && !system_speed_pending_q) begin
+            // Ordinary debug exit discards an unmatched synchronization
+            // marker rather than leaking it into a later halt session.
+            system_speed_armed_q <= 1'b0;
         end
     end
 
@@ -582,16 +617,16 @@ module arm7tdmis_ice_rt
     // while the debug-state FSM is in HALTED. Index 0x00 is the Debug
     // Control register.
     wire ice_dbg_ack_forced = regs[5'h00][0];
-    wire dbgacki            = in_debug_halt;
+    wire dbgacki            = in_debug_halt && !system_speed_active_q;
     assign dbg_ack = DBGEN && (ice_dbg_ack_forced || dbgacki);
 
     // §30.22.6: IFEN_to_core = !(INTDIS | DBGACKI). Per TRM §5.19.2 on
     // debug-state entry IRQ/FIQ are forced disabled regardless of
-    // CPSR.I/F — that's the DBGACKI term doing it here. Pending
-    // interrupts at entry are remembered by virtue of the core being
-    // frozen and nIRQ/nFIQ being captured-but-suppressed.
+    // CPSR.I/F. The debug context remains active during a system-speed
+    // access even though DBGACKI temporarily drops, so pending interrupts
+    // stay suppressed until a real debug exit.
     wire ice_intdis = regs[5'h00][2];
-    assign ifen = !(DBGEN && (ice_intdis || dbgacki));
+    assign ifen = !(DBGEN && (ice_intdis || in_debug_halt));
 
     // Scan chain 2 upper bits are decoded by the TAP-facing wrapper.
     /* verilator lint_off UNUSEDSIGNAL */

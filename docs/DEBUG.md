@@ -248,6 +248,16 @@ The accepted/retired handshake is covered with a 12-register LDM plus a
 mid-transfer CLKEN stall in
 `tb/integration/arm7tdmis_debug_inject_handshake_tb.sv`.
 
+For a system-speed access, bit 33 arms the *following* scan-chain word rather
+than changing the speed of the word shifted beside it. The debugger scans
+`NOP/0`, `NOP/1`, then the load or store with bit 33 low. That final
+instruction remains staged until RESTART enters Run-Test/Idle. It then runs
+under `CLKEN`, temporarily deasserts `DBGACK` unless Debug Control bit 0 forces
+it, keeps interrupts masked, and automatically returns to debug halt when its
+accepted/retired handshake completes. The first chain-1 capture after that
+return reports bit 33 high. A stalled LDR exercises the complete sequence in
+`tb/integration/arm7tdmis_debug_system_speed_tb.sv`.
+
 ## CP14 DCC data path
 
 The Debug Communications Channel is an internal coprocessor (CP14 c0) per TRM §5.18. Code-side and debugger-side both read/write a single shared 32-bit register, which is ICE-RT register 0x04.

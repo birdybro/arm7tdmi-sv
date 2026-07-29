@@ -98,6 +98,7 @@ module ice_rt_tb
         .dcc_rx_full        (tb_dcc_rx_full),
         .tap_inject_we      (1'b0),
         .tap_inject_instr   (32'h0),
+        .tap_inject_break   (1'b0),
         .core_inject_accept (1'b0),
         .core_inject_retire (1'b0),
         .dbg_inject_we      (tb_inject_we),

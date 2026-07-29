@@ -2569,7 +2569,11 @@ number of cycles spent in an internal FSM state.
   support wait states and every allowed multicycle instruction, including 16-register
   LDM/STM, without fetching or retiring an extra normal instruction. Halt only at a
   legal boundary; do not freeze and repeatedly present an unfinished external bus
-  transfer.
+  transfer. The explicit handshake is fail-hard covered at debug speed by a stalled
+  12-register LDM in `tb/integration/arm7tdmis_debug_inject_handshake_tb.sv` and at
+  system speed by a stalled LDR with temporary `DBGACK`, interrupt masking, and
+  automatic re-entry checks in `tb/integration/arm7tdmis_debug_system_speed_tb.sv`;
+  the full allowed-instruction and 16-register matrix remains open.
 - [ ] **DBG-007:** Implement debug entry/exit PC formulas, temporary DBGACK behavior,
   pending interrupt preservation, interrupt masking during at-speed execution, and
   the DBGRQ/PC-modify errata policy.
@@ -2586,8 +2590,10 @@ number of cycles spent in an internal FSM state.
   Selection, widths, reserved-chain behavior, physical order, update atomicity,
   and one-shot breakpoint/watchpoint entry cause are fail-hard verified by
   `tb/unit/jtag_tap_tb.sv` and
-  `tb/integration/arm7tdmis_debug_entry_cause_tb.sv`; system-speed execution
-  remains open.
+  `tb/integration/arm7tdmis_debug_entry_cause_tb.sv`. The staged bit-33/RESTART
+  system-speed sequence, CLKEN stall, temporary `DBGACK`, IRQ masking, automatic
+  re-entry, and high re-entry cause are verified by
+  `tb/integration/arm7tdmis_debug_system_speed_tb.sv`.
 - [ ] **JTAG-004:** Gate TMS/TDI/TCKEN/TDO/TDOEN as specified by DBGEN. Implement the
   required TCK synchronization/RTCK convention or publish a proven synchronous-only
   FPGA debug-port wrapper with a different, explicit interface name. DBGEN gating is

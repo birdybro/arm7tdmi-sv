@@ -230,6 +230,7 @@ module arm7tdmis_top
         .dcc_rx_full        (dcc_rx_full),
         .tap_inject_we      (tap_inject_we),
         .tap_inject_instr   (tap_inject_instr),
+        .tap_inject_break   (tap_inject_break),
         .core_inject_accept (dbg_inject_accept),
         .core_inject_retire (dbg_inject_retire),
         .dbg_inject_we      (dbg_inject_we),
@@ -281,10 +282,6 @@ module arm7tdmis_top
     assign DBGTDO    = DBGEN ? tap_tdo : 1'b0;
     assign DBGnTDOEN = !DBGEN || tap_ntdoen;
 
-    // tap_inject_break (DBGBREAK control cell from chain 1) consumed by
-    // the debug-state FSM later; the actual instruction routing happens
-    // through ice_rt → core via dbg_inject_we/instr.
-
     arm7tdmis_jtag_tap u_tap (
         .CLK              (CLK),
         .DBGTCKEN         (tap_tcken),
@@ -311,13 +308,6 @@ module arm7tdmis_top
         .ice_inject_we    (tap_inject_we),
         .tap_restart_req  (tap_restart_req)
     );
-
-    // tap_inject_break (DBGBREAK control cell from chain 1) is still a
-    // placeholder consumed only by the future "system-speed vs debug-speed"
-    // distinction in the debug-state FSM.
-    /* verilator lint_off UNUSEDSIGNAL */
-    wire _unused_inject = &{1'b0, tap_inject_break};
-    /* verilator lint_on UNUSEDSIGNAL */
 
     // TAP observers used by §22 debug FSM later — silence lint for now.
     /* verilator lint_off UNUSEDSIGNAL */
