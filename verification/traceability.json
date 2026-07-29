@@ -1,0 +1,139 @@
+{
+  "schema": "arm7tdmis-traceability-map-v1",
+  "prefix_defaults": {
+    "BUS": {
+      "rtl": ["rtl/core/", "rtl/top/arm7tdmis_top.sv"],
+      "source_sections": ["ARM DDI 0234B Chapters 3 and 7"],
+      "tests": ["tb/integration/arm7tdmis_*bus*", "verification/arm7tdmis_raw_bus_checker.sv"]
+    },
+    "CP": {
+      "rtl": ["rtl/core/", "rtl/top/arm7tdmis_top.sv"],
+      "source_sections": ["ARM DDI 0234B coprocessor interface and Chapter 7 timing tables"],
+      "tests": ["tb/integration/arm7tdmis_cp*"]
+    },
+    "DBG": {
+      "rtl": ["rtl/debug/", "rtl/core/", "rtl/top/arm7tdmis_top.sv"],
+      "source_sections": ["ARM DDI 0234B EmbeddedICE-RT chapter"],
+      "tests": ["tb/integration/arm7tdmis_debug*", "tb/unit/ice_*"]
+    },
+    "DFT": {
+      "rtl": ["rtl/top/arm7tdmis_no_dft.sv"],
+      "source_sections": ["FPGA profile exclusion policy in TASKS.md section 31.7"],
+      "tests": ["scripts/tests/test_fpga_package.py"]
+    },
+    "DOC": {
+      "rtl": ["N/A - documentation and release-tooling requirement"],
+      "source_sections": ["TASKS.md section 31.12"],
+      "tests": ["scripts/tests/test_documentation_contract.py", "scripts/tests/test_release_hygiene.py"]
+    },
+    "ERR": {
+      "rtl": ["rtl/core/", "rtl/debug/"],
+      "source_sections": ["FR002-PRDC-002719 7.0 and TASKS.md section 31.8"],
+      "tests": ["make -C scripts errata"]
+    },
+    "ETM": {
+      "rtl": ["rtl/trace/", "rtl/core/", "rtl/top/arm7tdmis_top.sv"],
+      "source_sections": ["ARM DDI 0234B Chapter 6"],
+      "tests": ["tb/integration/arm7tdmis_etm*", "tb/unit/etm7_adapter_tb.sv"]
+    },
+    "EXC": {
+      "rtl": ["rtl/core/", "rtl/datapath/arm7tdmis_psr.sv"],
+      "source_sections": ["ARMv4T exception model and ARM DDI 0234B Chapter 7"],
+      "tests": ["tb/integration/arm7tdmis_*exception*", "tb/integration/arm7tdmis_*abort*"]
+    },
+    "FPGA": {
+      "rtl": ["rtl/", "fpga/"],
+      "source_sections": ["TASKS.md section 31.11 and selected Cyclone V tool reports"],
+      "tests": ["make -C scripts quartus-compile", "make -C scripts quartus-conformance-compile"]
+    },
+    "ISA": {
+      "rtl": ["rtl/core/", "rtl/decode/", "rtl/datapath/"],
+      "source_sections": ["ARMv4T architecture requirements in TASKS.md section 31.3"],
+      "tests": ["tb/unit/", "tb/integration/arm7tdmis_*"]
+    },
+    "JTAG": {
+      "rtl": ["rtl/jtag/", "rtl/top/arm7tdmis_top.sv"],
+      "source_sections": ["ARM DDI 0234B JTAG and scan-chain chapters"],
+      "tests": ["tb/unit/jtag*", "tb/integration/arm7tdmis_debug*"]
+    },
+    "MIST": {
+      "rtl": ["rtl/top/arm7tdmi_mister.sv", "rtl/top/arm7tdmi_*adapter.sv"],
+      "source_sections": ["TASKS.md section 31.9 and public integration API v1"],
+      "tests": ["tb/integration/arm7tdmis_mister*", "examples/generic_soc/"]
+    },
+    "VAL": {
+      "rtl": ["rtl/"],
+      "source_sections": ["TASKS.md section 31.10 verification-closure criteria"],
+      "tests": ["verification/", "tb/", "scripts/"]
+    },
+    "VER": {
+      "rtl": ["rtl/top/arm7tdmis_top.sv"],
+      "source_sections": ["TASKS.md section 31.2 fail-hard evidence contract"],
+      "tests": ["scripts/tests/", "tb/harness/", "make -C scripts regress"]
+    }
+  },
+  "requirement_overrides": {
+    "DOC-003": {
+      "rtl": ["N/A - bidirectional traceability tooling"],
+      "tests": ["scripts/tests/test_traceability_contract.py"],
+      "source_sections": ["TASKS.md section 31.12 DOC-003"]
+    },
+    "JTAG-006": {
+      "rtl": ["rtl/jtag/arm7tdmis_sync_debug_port.sv"],
+      "tests": ["tb/unit/sync_debug_port_tb.sv"],
+      "source_sections": ["TASKS.md section 31.7 JTAG-006"]
+    },
+    "MIST-007": {
+      "rtl": ["rtl/top/arm7tdmi_mister.sv", "fpga/"],
+      "tests": ["OPEN - real MiSTer framework build evidence required"],
+      "source_sections": ["TASKS.md section 31.9 MIST-007"]
+    },
+    "MIST-008": {
+      "rtl": ["OPEN - PocketStation system integration is not present"],
+      "tests": ["OPEN - legally supplied PocketStation software evidence required"],
+      "source_sections": ["TASKS.md section 31.9 MIST-008"]
+    },
+    "MIST-009": {
+      "rtl": ["OPEN - PocketStation system integration is not present"],
+      "tests": ["OPEN - PocketStation reference soak evidence required"],
+      "source_sections": ["TASKS.md section 31.9 MIST-009"]
+    },
+    "VAL-001": {
+      "rtl": ["rtl/core/", "rtl/top/arm7tdmis_top.sv"],
+      "tests": ["verification/qemu_armv4t_reference.py", "tb/integration/arm7tdmis_qemu_diff_tb.sv"],
+      "source_sections": ["TASKS.md section 31.10 VAL-001 shared-subset policy"]
+    },
+    "VAL-009": {
+      "rtl": ["rtl/core/", "rtl/top/arm7tdmis_top.sv"],
+      "tests": ["verification/compiler/", "tb/integration/arm7tdmis_compiler_tb.sv"],
+      "source_sections": ["TASKS.md section 31.10 VAL-009 compiler-program contract"]
+    },
+    "VAL-011": {
+      "rtl": ["rtl/"],
+      "tests": ["OPEN - independent reviewer approval required"],
+      "source_sections": ["TASKS.md section 31.10 VAL-011"]
+    }
+  },
+  "rtl_rules": [
+    {"glob": "rtl/*.sv", "requirements": ["ISA-017", "BUS-012"]},
+    {"glob": "rtl/core/*.sv", "requirements": ["ISA-017", "EXC-011", "BUS-012", "CP-011", "DBG-007"]},
+    {"glob": "rtl/decode/*.sv", "requirements": ["ISA-005", "ISA-017"]},
+    {"glob": "rtl/datapath/*.sv", "requirements": ["ISA-001", "ISA-002", "ISA-003", "ISA-004", "ISA-017"]},
+    {"glob": "rtl/debug/*.sv", "requirements": ["CP-011", "DBG-001", "DBG-007"]},
+    {"glob": "rtl/jtag/*.sv", "requirements": ["JTAG-001", "JTAG-002", "JTAG-003", "JTAG-004", "JTAG-005"]},
+    {"glob": "rtl/trace/*.sv", "requirements": ["ETM-001", "ETM-002"]},
+    {"glob": "rtl/top/*.sv", "requirements": ["VER-009", "DFT-001", "MIST-001", "MIST-004"]}
+  ],
+  "verification_rules": [
+    {"glob": "tb/unit/*.sv", "requirements": ["VER-003", "ISA-017"]},
+    {"glob": "tb/integration/*.sv", "requirements": ["VER-003", "VER-009", "BUS-012"]},
+    {"glob": "tb/harness/*.sv", "requirements": ["VER-005"]},
+    {"glob": "tb/programs/*", "requirements": ["VER-003", "ISA-017"]},
+    {"glob": "tb/formal/*", "requirements": ["VAL-007", "VAL-008"]},
+    {"glob": "verification/*.sv", "requirements": ["VER-004", "BUS-012"]},
+    {"glob": "verification/*.py", "requirements": ["VAL-001"]},
+    {"glob": "verification/programs/*", "requirements": ["VAL-001"]},
+    {"glob": "verification/compiler/*", "requirements": ["VAL-009"]},
+    {"glob": "scripts/tests/test_*.py", "requirements": ["VER-002", "VER-005"]}
+  ]
+}

@@ -3416,10 +3416,23 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   documentation contract requires each fact in `EXCEPTIONS.md`, `PSR.md`,
   `PIPELINE.md`, `COPROCESSOR.md`, `RAW_BUS.md`, `DEBUG.md`, `TRACE.md`, and
   `INTEGRATION.md`.
-- [ ] **DOC-003:** Create a bidirectional traceability table:
+- [x] **DOC-003:** Create a bidirectional traceability table:
   requirement ID → source section → RTL → directed/random/formal tests → coverage bin
   → latest result. Also prove every RTL feature and every test maps back to a
   requirement.
+  `verification/traceability.json` is the reviewed ownership map and
+  `scripts/traceability_report.py` expands the canonical §31 ledger into
+  schema `arm7tdmis-traceability-v1`: all 118 requirement rows carry source,
+  RTL/disposition, tests/disposition, acceptance bin, ledger status, and the
+  latest available regression result. Its reverse tables map every tracked RTL
+  file and every tracked SystemVerilog/Python/program verification source back
+  to owning requirement IDs. `make -C scripts traceability` fails on any
+  empty row, unknown ID, or unmapped source. It is the final mandatory
+  regression phase; `release_evidence.py` verifies its schema, commit, and
+  empty-unmapped lists before archiving it. `docs/TRACEABILITY.md` defines the
+  bidirectional scope and result semantics, and
+  `test_traceability_contract.py` prevents any side of the contract from
+  silently shrinking.
 - [x] **DOC-004:** Publish the two integration APIs with timing diagrams, reset and
   clock rules, parameter/tie-off tables, error behavior, synthesis examples, and
   compatibility/version policy.

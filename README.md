@@ -32,7 +32,7 @@ The status words used here have the §31 meanings:
 | External coprocessor and CP14 | **VERIFIED** for §31.6: absent/ready/busy/abandonment, MCR/MRC/CDP/LDC/STC timing, CP14 DCC and Debug Abort Status, corrected errata 14/15 policy, and absence of internal CP15 are tested. |
 | EmbeddedICE-RT, JTAG, and trace boundary | **VERIFIED** for the checked §31.7/§31.8 requirements. The project provides the ARM-side ETM7 boundary, not an ETM macrocell. JTAG-006 real-debugger interoperability remains **PARTIAL**. |
 | FPGA/MiSTer package | **PARTIAL**. The canonical valid/ready wrapper, versioned save states, two public bus adapters, option profiles, CDC/reset contract, DMA arbitration, portable QIP/file lists, and two checked Quartus 17.0.2 flows exist. A real framework build, PocketStation integration, and hardware evidence remain open. |
-| Release evidence | **PARTIAL**. Regressions fail hard; an independent 77-retirement QEMU differential, pinned GCC ARM/Thumb/interworking execution, machine-readable regression and structural-coverage reports, mutation tests, and a hashed evidence archive exist. Broader random/formal/suite/soak validation and FPGA release gates remain open. |
+| Release evidence | **PARTIAL**. Regressions fail hard; an independent 77-retirement QEMU differential, pinned GCC ARM/Thumb/interworking execution, bidirectional requirement/source traceability, machine-readable regression and structural-coverage reports, mutation tests, and a hashed evidence archive exist. Broader random/formal/suite/soak validation and FPGA release gates remain open. |
 
 No unchecked §31 requirement is implied by a checked neighboring row. In
 particular, this repository is not yet advertised as a drop-in, issue-free
@@ -92,6 +92,8 @@ evidence. The §31 ledger remains authoritative if a summary conflicts with it.
   project policy for architecturally UNPREDICTABLE or UNKNOWN inputs.
 - [`docs/VERIFICATION.md`](docs/VERIFICATION.md): fail-hard regression,
   coverage-report, mutation, and evidence-archive contracts.
+- [`docs/TRACEABILITY.md`](docs/TRACEABILITY.md): bidirectional per-requirement
+  evidence and complete RTL/test ownership mapping.
 - [`docs/WARNING_POLICY.md`](docs/WARNING_POLICY.md): the small audited set of
   lint exceptions and their expiry conditions.
 - [`docs/ERRATA.md`](docs/ERRATA.md): all 15 published r4p3 errata and their

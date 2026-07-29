@@ -137,7 +137,12 @@ def collect_metadata(
                 "generic-soc-slang",
                 "testbench",
             ],
-            "harness": ["unit", "expected-failure", "raw-bus-checker"],
+            "harness": [
+                "unit",
+                "expected-failure",
+                "raw-bus-checker",
+                "traceability",
+            ],
             "fpga": (
                 [
                     "quartus-analysis",
@@ -285,6 +290,7 @@ def _phases(
     for test in selected_integration:
         yield _make_phase(f"integration-{test}", f"integ-{test}")
     yield _make_phase("smoke", "run")
+    yield _make_phase("traceability", "traceability")
 
 
 def _parse_args() -> argparse.Namespace:

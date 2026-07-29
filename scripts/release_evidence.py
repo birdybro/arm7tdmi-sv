@@ -148,6 +148,37 @@ def _validated_files(
         if path.is_file()
     )
     phase_names = {str(result.get("name")) for result in results}
+    traceability_report = REPORT_ROOT / "traceability-report.json"
+    if "traceability" not in phase_names:
+        raise ValueError("regression did not run mandatory traceability")
+    if not traceability_report.is_file():
+        raise ValueError("traceability report is missing")
+    traceability = json.loads(
+        traceability_report.read_text(encoding="utf-8")
+    )
+    if traceability.get("schema") != "arm7tdmis-traceability-v1":
+        raise ValueError("traceability report has wrong schema")
+    if traceability.get("git", {}).get("dirty"):
+        raise ValueError("traceability report describes a dirty source tree")
+    if traceability.get("git", {}).get("commit") != regression.get(
+        "git", {}
+    ).get("commit"):
+        raise ValueError("traceability report commit does not match regression")
+    if (
+        traceability.get("unmapped_rtl")
+        or traceability.get("unmapped_verification")
+        or traceability.get("unknown_requirement_references")
+    ):
+        raise ValueError("traceability report contains unmapped evidence")
+    for input_entry in traceability.get("inputs", {}).values():
+        if not isinstance(input_entry, dict):
+            continue
+        input_path = _repo_path(str(input_entry.get("path", "")))
+        if _sha256(input_path) != input_entry.get("sha256"):
+            raise ValueError(
+                f"traceability input hash mismatch: {input_entry.get('path')}"
+            )
+    candidates.append(traceability_report.resolve())
     option_report = REPORT_ROOT / "quartus-options.json"
     if "quartus-option-characterization" in phase_names:
         if not option_report.is_file():

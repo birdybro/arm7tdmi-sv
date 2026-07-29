@@ -51,6 +51,7 @@ COVERAGE_OBJ_DIR := $(OBJ_DIR)/coverage
 COVERAGE_REPORT_DIR := ../reports/generated/coverage
 QEMU_DIFF_DIR := ../reports/generated/qemu_diff
 COMPILER_DIR := ../reports/generated/compiler
+TRACEABILITY_REPORT := ../reports/generated/traceability-report.json
 ARM_TOOLCHAIN_ROOT := ../.tools
 ARM_TOOLCHAIN := \
 	$(ARM_TOOLCHAIN_ROOT)/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi
@@ -106,6 +107,7 @@ INTEG_RUN_ARGS_compiler = \
         quartus-option-characterization \
         sim run wave clean help regress regress-quick regress-ci \
         coverage release-evidence \
+        traceability \
         harness-unit harness-self-test raw-checker-self-test mutation-self-test \
         $(addprefix unit-, $(UNIT_TESTS)) unit \
         $(addprefix integ-, $(INTEG_TESTS)) integ errata
@@ -281,6 +283,10 @@ coverage:
 	    --lcov $(COVERAGE_REPORT_DIR)/coverage.info \
 	    --output $(COVERAGE_REPORT_DIR)/coverage.json \
 	    --tests "$(COVERAGE_TESTS)"
+
+traceability:
+	PYTHONPATH=. $(PYTHON) traceability_report.py --check \
+	    --output $(TRACEABILITY_REPORT)
 
 # Release-facing entry point. The runner always starts clean, records the
 # complete source/tool/variant/seed manifest, executes every phase separately,

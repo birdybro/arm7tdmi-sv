@@ -37,6 +37,9 @@ because they agree with each other.
 - **[VERIFICATION.md](VERIFICATION.md)** — fail-hard regression ordering,
   intentional-failure sentinel, reproducibility metadata, and the
   `arm7tdmis-regression-v1` machine-readable result schema.
+- **[TRACEABILITY.md](TRACEABILITY.md)** — bidirectional requirement-to-
+  evidence and source/test-to-requirement mapping, generated-result schema,
+  and fail-hard completeness rules.
 - **[SUPPORT.md](SUPPORT.md)** — supported API, simulator, synthesis-tool,
   MiSTer, and PocketStation profiles.
 - **[PERFORMANCE.md](PERFORMANCE.md)** — checked Cyclone V clock/CE,

@@ -16,9 +16,6 @@ and may be stricter than this summary.
 - Independent synthesis plus CDC/RDC analysis, post-synthesis architectural
   simulation or equivalence, and a fully pinned clean-checkout release
   toolchain remain open (FPGA-004, FPGA-006, and FPGA-008).
-- Bidirectional requirement-to-RTL/test/coverage/result traceability remains
-  open (DOC-003).
-
 The core has no MMU, MPU, cache, Thumb-2, ARMv5 instruction extensions, or
 ETM trace macrocell. Those are architectural or profile exclusions, not
 unfinished ARM7TDMI-S features. See the public API documents for deterministic

@@ -51,6 +51,9 @@ Per-phase logs live beside the report under `reports/generated/logs/`. Generated
 reports are ignored because an ordinary developer run is not immutable release
 evidence. A release workflow must copy the selected report and logs to its
 versioned artifact archive together with the corresponding clean source commit.
+The final `traceability` phase writes
+`reports/generated/traceability-report.json`; its bidirectional completeness
+and result semantics are defined in [TRACEABILITY.md](TRACEABILITY.md).
 
 `make -C scripts regress-quick` exercises the same metadata, clean-build, lint,
 harness, and smoke path with one unit plus the mandatory QEMU differential and
@@ -84,7 +87,8 @@ After regression and coverage have both run on the same clean commit,
 clean-tree markers, and exact commit identity. It emits:
 
 - `reports/generated/release-manifest.json`, with size and SHA-256 for every
-  included report, phase log, and coverage database, plus the semantic
+  included regression, traceability, and coverage report, phase log, and
+  coverage database, plus the semantic
   project version, Git tree hash, regression source hash, canonical tool
   version hash, available tool-executable hashes, and specification/license
   hashes;

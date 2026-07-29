@@ -18,8 +18,8 @@ hard and publish evidence; and both FPGA characterization profiles pass checked
 Quartus flows. Current open categories are the unchecked §31 items:
 real-debugger interoperability, framework/PocketStation integration,
 random/suite/formal/soak validation, remaining FPGA/reproducibility/hardware
-work, and release documentation. Consult each checkbox and its attached
-evidence before making a narrower claim.
+work, and final release review/freezing. Consult each checkbox and its
+attached evidence before making a narrower claim.
 
 Do not mark a feature complete because its module/decoder exists or because `make`
 returns zero. Use the VERIFIED definition and evidence gates in `TASKS.md` §31.
