@@ -183,6 +183,11 @@ module arm7tdmis_core_formal
             cp_data_wait_q <= cp_data_wait_q + 3'd1;
         assume (cp_data_wait_q < 3'd4);
         assume ({CPA, CPB} != 2'b10);
+        // TRM section 4.3 requires the attached coprocessor's pipeline
+        // follower (and therefore its decoded response state) to change
+        // only on enabled rising edges.
+        if (f_past_valid && $past(nRESET) && !CLKEN)
+            assume ({CPA, CPB} == $past({CPA, CPB}));
         assume (!ABORT
                 || (TRANS == 2'(TRANS_N))
                 || (TRANS == 2'(TRANS_S)));

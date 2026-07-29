@@ -60,6 +60,10 @@ advance its follower on a stalled clock.
 
 The reserved `CPA=1`, `CPB=0` combination is not an acceptance state.
 Condition-failed and flushed coprocessor instructions are not offered.
+The attached coprocessor must update its response state only on rising
+`CLK` edges for which `CLKEN=1`, matching the TRM §4.3 pipeline-follower
+rule. A low `CLKEN` stretches the already selected busy, ready, or data
+phase; it does not change that phase merely because the clock is stopped.
 
 CDP completes after acceptance with the specified N/C/I sequence. MCR drives
 the ARM register value on `WDATA` during its data phase; MRC samples the

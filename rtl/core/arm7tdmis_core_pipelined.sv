@@ -1239,9 +1239,13 @@ module arm7tdmis_core_pipelined
                           || cp14_mcr_data || cp14_mrc_dbgabt
                           || cp14_mcr_dbgabt;
     wire external_cp_request = passes_cond && instr_is_cp && !instr_is_cp14;
-    // CPA/CPB are synchronous response inputs.  Treat them as meaningful
-    // only on an enabled edge so changing a coprocessor response while the
-    // raw bus is stopped cannot alter address-class outputs mid-wait-state.
+    // CPA/CPB are synchronous response inputs.  The *_ready/final terms
+    // qualify architectural state changes to enabled edges.  Keep separate
+    // live presentation terms for the Table 7 address class: CLKEN stretches
+    // the selected cycle and must not itself turn a ready N/C cycle into I.
+    // An attached coprocessor changes its response state only on an enabled
+    // edge, as required for its pipeline follower by TRM section 4.3.
+    wire external_cp_ready_level = external_cp_request && !CPA && !CPB;
     wire external_cp_ready   = external_cp_request && CLKEN && !CPA && !CPB;
     wire external_cp_busy    = external_cp_request && CLKEN && !CPA &&  CPB;
     wire external_cp_is_mcr  = external_cp_request && instr_is_mcr;
@@ -1254,7 +1258,9 @@ module arm7tdmis_core_pipelined
                              && !de_q.instr[20];
     wire cp_wait_ready       = (state_q == S_CP_WAIT)
                              && CLKEN && !CPA && !CPB;
+    wire cp_wait_ready_level = (state_q == S_CP_WAIT) && !CPA && !CPB;
     wire cp_ls_final         = cp_ls_data_state && CLKEN && CPA && CPB;
+    wire cp_ls_final_level   = cp_ls_data_state && CPA && CPB;
     wire cp_undef_trap = CLKEN && executing && condition_pass && instr_is_cp
                       && (instr_is_cp14 ? !cp14_supported : CPA);
 
@@ -2586,7 +2592,7 @@ module arm7tdmis_core_pipelined
                     ADDR = de_q.pc + 32'd8;
                     SIZE = 2'(SIZE_WORD);
                     PROT = {is_priv, 1'b0};
-                    if (external_cp_ready) begin
+                    if (external_cp_ready_level) begin
                         TRANS = (external_cp_is_mcr || external_cp_is_mrc)
                               ? 2'(TRANS_C) : 2'(TRANS_N);
                     end else begin
@@ -2782,7 +2788,7 @@ module arm7tdmis_core_pipelined
                 ADDR = cp_instr_pc_q + 32'd8;
                 SIZE = 2'(SIZE_WORD);
                 PROT = {is_priv, 1'b1};
-                if (cp_wait_ready) begin
+                if (cp_wait_ready_level) begin
                     TRANS = (cp_wait_is_mcr_q || cp_wait_is_mrc_q)
                           ? 2'(TRANS_C) : 2'(TRANS_N);
                 end
@@ -2796,7 +2802,7 @@ module arm7tdmis_core_pipelined
                     WRITE = WRITE_WRITE;
                     SIZE  = 2'(SIZE_WORD);
                     PROT  = {is_priv, 1'b1};
-                    TRANS = cp_ls_final ? 2'(TRANS_N) : 2'(TRANS_S);
+                    TRANS = cp_ls_final_level ? 2'(TRANS_N) : 2'(TRANS_S);
                 end else begin
                     // Register-transfer data is routed to the coprocessor
                     // while the address class begins the next opcode fetch.
@@ -2816,7 +2822,7 @@ module arm7tdmis_core_pipelined
                     WRITE = WRITE_READ;
                     SIZE  = 2'(SIZE_WORD);
                     PROT  = {is_priv, 1'b1};
-                    TRANS = cp_ls_final ? 2'(TRANS_N) : 2'(TRANS_S);
+                    TRANS = cp_ls_final_level ? 2'(TRANS_N) : 2'(TRANS_S);
                 end else begin
                     // Coprocessor drives RDATA during this internal data
                     // phase of an MRC.
