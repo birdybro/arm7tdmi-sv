@@ -158,6 +158,25 @@ Both cases check the selected source, handler, mode, LR, SPSR, and absence of
 a false Undefined exception. The project deliberately implements this
 architecturally corrected behavior only; it has no defect-emulation mode.
 
+## Exception-return evidence
+
+`arm7tdmis_exception_return_matrix_tb` executes 60 reset-per-row cases: all
+five modes that own an SPSR, both ARM and Thumb destinations, and six return
+forms spanning direct `MOVS`, immediate `SUBS #4/#8`, the separate
+register-controlled-shifter path for both operations, and
+`LDMIA sp!,{r4,pc}^`.
+
+Each row writes a distinct complete SPSR and independently checks its physical
+bank plus the source mode's banked LR/SP. Deliberately misaligned loaded PC
+values prove destination-state alignment. The first redirected opcode address,
+SIZE, N-cycle classification, and restored User privilege are exact; the
+target then reaches Execute with the expected opcode, PC/state, and full CPSR.
+Snapshots prove all SPSRs, memory, and every non-destination physical GPR are
+unchanged. LDM rows additionally require the exact two data beats, loaded
+register, and writeback to the source exception-mode SP after CPSR restoration.
+The focused `arm7tdmis_ldm_pc_tb` and
+`arm7tdmis_pc_write_alignment_tb` provide independent neighboring coverage.
+
 Functional/line/toggle coverage reporting, mutation testing of architectural
 controls, differential testing, and formal evidence remain separate open
 requirements in `TASKS.md` §31.

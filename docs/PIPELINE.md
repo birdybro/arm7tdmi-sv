@@ -182,10 +182,16 @@ Every raw target is aligned before that priority mux: ARM destinations clear
 bits `[1:0]`, while Thumb destinations clear bit `[0]`. BX obtains the destination
 state from its source bit 0. `MOVS/SUBS pc` and `LDM ... pc^` obtain it from SPSR.T,
 so the same restored state controls target masking, the first refill's SIZE, and the
-subsequent fetch increment. Register-controlled DP writes carry their latched ALU
-result and restore intent into `S_DP_SHIFT`; they never consult the next instruction's
-live datapath. The 11-family pin-level proof is
-`tb/integration/arm7tdmis_pc_write_alignment_tb.sv`.
+subsequent fetch increment. A fast data-processing exception return also derives
+the first refill's privilege from SPSR.M, even though the handler CPSR remains live
+until the edge capturing that address. Register-controlled DP writes carry their
+latched ALU result and restore intent into `S_DP_SHIFT`; they never consult the next
+instruction's live datapath. For `LDM ... pc^`, `block_mode_q` retains the handler
+mode across the CPSR-restore edge so a following base-writeback cycle still targets
+the handler's banked r13/r14. The general 11-family alignment proof is
+`tb/integration/arm7tdmis_pc_write_alignment_tb.sv`; the five-mode, two-state,
+six-form exception-return proof is
+`tb/integration/arm7tdmis_exception_return_matrix_tb.sv`.
 
 ## Stall mechanism
 

@@ -2572,8 +2572,24 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   proves a condition-failed UDF raises no exception and the immediately
   following SWI or aborted fetch independently selects SWI or PABT, with the
   correct vector, LR, and SPSR rather than a false Undefined exception.
-- [ ] **ISA-014:** Verify all exception-return idioms (`MOVS/SUBS PC`, LDM with
+- [x] **ISA-014:** Verify all exception-return idioms (`MOVS/SUBS PC`, LDM with
   `S+PC`) from every exception mode and return to ARM and Thumb.
+  `arm7tdmis_exception_return_matrix_tb` executes 60 reset-per-row cases:
+  FIQ/IRQ/Supervisor/Abort/Undefined × ARM/Thumb destinations × direct
+  `MOVS pc,lr`, register-controlled-shift `MOVS pc`, `SUBS pc,lr,#4`,
+  `SUBS pc,lr,#8`, register-controlled-shift `SUBS pc`, and
+  `LDMIA sp!,{r4,pc}^`. Every row writes and independently checks the selected
+  physical SPSR/LR/SP bank, restores a distinct complete CPSR into User mode,
+  sets discarded target-address bits, and verifies the first redirected
+  address/SIZE/TRANS/PROT tuple, exact Execute PC/state/opcode, full CPSR,
+  unchanged SPSRs/memory/other physical GPRs, successor suppression, and the
+  LDM data beats plus source-bank SP writeback. The matrix found and fixed two
+  implementation defects: fast data-processing returns now classify the first
+  target fetch with restored SPSR.M privilege, and LDM-return writeback retains
+  the exception mode so a banked r13/r14 base cannot be written into the
+  restored destination bank. The older `arm7tdmis_ldm_pc_tb`,
+  `arm7tdmis_pc_write_alignment_tb`, block-transfer matrices, and PSR tests
+  remain independent neighboring evidence.
 - [ ] **ISA-015:** Test instruction sequences, not only isolated opcodes: forwarding/
   dependency pairs, self-modifying stores under the documented memory contract,
   back-to-back PC changes, back-to-back MRC, and mode/bank transitions. Include an

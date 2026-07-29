@@ -23,25 +23,31 @@ The vector slots typically hold `B <handler>` branches.
 
 ## Priority ordering
 
-Higher priority wins when multiple exceptions are simultaneously raised. Implemented in the `exc_mode_target` always_comb chain in `arm7tdmis_core_pipelined.sv`:
+Higher priority wins when multiple exceptions are simultaneously raised:
 
 ```
-1. UNDEF  → mode=UND, vec=0x04, spsr_idx=4
-2. PABT   → mode=ABT, vec=0x0C, spsr_idx=3
-3. DABT   → mode=ABT, vec=0x10, spsr_idx=3
-4. FIQ    → mode=FIQ, vec=0x1C, spsr_idx=0
-5. IRQ    → mode=IRQ, vec=0x18, spsr_idx=1
-6. SWI    → mode=SVC, vec=0x08, spsr_idx=2 (default)
+1. Reset
+2. DABT   → mode=ABT, vec=0x10, spsr_idx=3
+3. FIQ    → mode=FIQ, vec=0x1C, spsr_idx=0
+4. IRQ    → mode=IRQ, vec=0x18, spsr_idx=1
+5. PABT   → mode=ABT, vec=0x0C, spsr_idx=3
+6. UNDEF  → mode=UND, vec=0x04, spsr_idx=4
+7. SWI    → mode=SVC, vec=0x08, spsr_idx=2
 ```
 
-Reset is special — it's the implicit "exception" when nRESET deasserts, and goes through the reset_sync module rather than this path.
+Reset dominates through the reset path rather than the ordinary event selector.
+DABT is selected at a memory-completion boundary; the dedicated DABT+FIQ
+interlock enters Abort first and retains a coincident FIQ for the immediately
+following boundary. At an ordinary Execute boundary, the one-hot selectors
+enforce FIQ > IRQ > PABT > UNDEF > SWI before `exc_mode_target` maps the
+selected event to its mode, SPSR bank, and vector.
 
 ## Entry sequence
 
 For any exception E (gated by `any_exc_fires`):
 
 ```
-1. r14_<E-mode> := de_q.pc + 4        (return address)
+1. r14_<E-mode> := exception_lr_value (class/source-state-specific return address)
 2. SPSR_<E-mode> := current CPSR      (saved program status)
 3. CPSR.M := exc_mode_target          (switch banks)
 4. CPSR.I := 1                        (mask IRQs in handler)
@@ -51,6 +57,12 @@ For any exception E (gated by `any_exc_fires`):
 ```
 
 All steps commit at the same posedge. The pipeline flush invalidates F/D state; the next cycle's fetch is from the new PC.
+
+The saved link is not one universal `PC+4` value. ARM SWI/Undefined save the
+source instruction address plus 4, while their Thumb forms save plus 2.
+PABT/IRQ/FIQ save plus 4, and DABT saves the faulting transfer instruction
+address plus 8. The retained FIQ entry after a coincident DABT links back to
+the untouched Abort vector so the standard `SUBS pc,lr,#4` return resumes it.
 
 ### r14 banked-write
 
@@ -202,19 +214,30 @@ debug exits.
 
 ## Return from exception
 
-Two common patterns:
+ARMv4T provides two mechanisms here: any data-processing instruction with
+S=1 and Rd=PC restores CPSR from the current mode's SPSR, while an LDM with
+S=1 and PC in the list performs the same restore on the PC beat. The TRM's
+recommended data-processing idioms are `MOVS` and `SUBS`.
 
-### MOVS PC, LR
+### MOVS/SUBS PC
 
 ```
 MOVS r15, r14
+SUBS r15, r14, #4
+SUBS r15, r14, #8
 ```
 
-A DP instruction with Rd=15 and S=1. The `dp_writes_pc && dec.s_bit` path triggers `cpsr_restore_now`, which atomically:
-- Writes PC := r14 (the saved return address).
+A DP instruction with Rd=15 and S=1. The direct
+`dp_writes_pc && dec.s_bit` path, or its latched `S_DP_SHIFT` counterpart,
+triggers `cpsr_restore_now`, which atomically:
+- Writes PC := the data-processing result (r14 for `MOVS`, or r14 minus
+  the encoded return adjustment for `SUBS`).
 - Restores CPSR := SPSR_of_current_mode.
 
-Used by SWI handlers and similar exception returns.
+SWI and Undefined normally use `MOVS`; PABT, IRQ, and FIQ subtract 4; DABT
+subtracts 8. SPSR.T controls target alignment and fetch width. SPSR.M controls
+the first target fetch's privilege even on the fast refill, where the old
+handler CPSR is still live until the capturing edge.
 
 ### LDM ^ with PC in list
 
@@ -234,7 +257,18 @@ block_ldm_pc_restore = (state_q == S_BLOCK_DATA)
 
 Force-user-bank routing is gated off for this variant (`block_has_pc_q` set, `force_user_bank_eff` zero) because the ARM ARM specifies the *current* bank for r0-r14 when PC is in the list — only the SPSR restore is the "S=1" effect.
 
-Validated by `tb/integration/arm7tdmis_ldm_pc_tb.sv`: handler clears cpsr.F before LDM ^ PC, then asserts cpsr.F = 1 (restored from SPSR) after return.
+If writeback is requested, `block_mode_q` retains the source exception mode
+through the final PC/CPSR-restore beat and the following `S_BLOCK_WB` cycle.
+This ensures a banked SP/LR base is written in the handler bank rather than
+the newly restored destination bank.
+
+`arm7tdmis_exception_return_matrix_tb` validates 60 reset-per-row cases:
+all five SPSR-owning exception modes, ARM and Thumb destinations, and six
+direct/deferred DP or LDM return forms. It checks complete CPSR restoration,
+physical SPSR/LR/SP banks, alignment, first-refill bus controls and privilege,
+LDM beats/writeback, successor flushing, and otherwise-unchanged state.
+`arm7tdmis_ldm_pc_tb` and `arm7tdmis_pc_write_alignment_tb` remain independent
+focused regressions.
 
 ## Tests
 
@@ -252,6 +286,7 @@ Validated by `tb/integration/arm7tdmis_ldm_pc_tb.sv`: handler clears cpsr.F befo
 | `arm7tdmis_swp_read_abort_tb` | SWP/SWPB read abort → no write address, memory/Rd preserved |
 | `arm7tdmis_swp_bus_matrix_tb` | SWP/SWPB read/write abort and LOCK exit matrix |
 | `arm7tdmis_ldm_pc_tb` | LDM ^ PC exception return → CPSR restore |
+| `arm7tdmis_exception_return_matrix_tb` | Five modes × ARM/Thumb × six DP/LDM return forms |
 | `arm7tdmis_tb_top` | SWI (in smoke flow) |
 
 `arm7tdmis_undef_tb`, `arm7tdmis_reserved_execute_tb`, and the exhaustive

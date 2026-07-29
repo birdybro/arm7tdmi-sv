@@ -26,7 +26,7 @@ because they agree with each other.
 
 - **[MULTIPLY.md](MULTIPLY.md)** — Multiply forms (MUL/MLA/UMULL/SMULL/UMLAL/SMLAL), m-parameter cycle shaping, the UMLAL/SMLAL 2-cycle accumulator read across S_EXEC + S_MULL_ACC and the latches that make it work.
 
-- **[EXCEPTIONS.md](EXCEPTIONS.md)** — All seven exception types (Reset/UNDEF/SWI/PABT/DABT/IRQ/FIQ), priority ordering, the per-exception detection signals, banked r14 writeback, SPSR save mechanism, the `data_abort_now` vs `data_abort_q` trick for single-vs-multi-beat memory ops, LDM DABT restart-safety, and the two exception-return patterns (`MOVS PC, LR` and `LDM ^ with PC`).
+- **[EXCEPTIONS.md](EXCEPTIONS.md)** — All seven exception types (Reset/UNDEF/SWI/PABT/DABT/IRQ/FIQ), priority ordering, class/state-specific links, banked r14 writeback, SPSR save, the `data_abort_now` vs `data_abort_q` memory-completion logic, LDM DABT restart-safety, and the fully cross-product-tested DP/LDM exception-return mechanisms.
 
 ## Reading order
 

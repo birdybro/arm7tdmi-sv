@@ -92,8 +92,12 @@ but the complete exception/abort release gate remains open in `TASKS.md` §31.4.
 - **IRQ** (0x18): nIRQ pin, gated by CPSR.I
 - **FIQ** (0x1C): nFIQ pin, gated by CPSR.F; banks r8–r14
 
-Paths for `MOVS PC, LR` and `LDM ^` with PC are present; return-to-Thumb, alignment,
-saved-LR, mode, and refill edge cases still require verification and fixes.
+Exception-return paths are cross-product verified from FIQ, IRQ, Supervisor,
+Abort, and Undefined modes to both ARM and Thumb. The matrix covers direct and
+register-controlled `MOVS/SUBS PC` paths plus `LDMIA sp!,{...,pc}^`, including
+complete CPSR restore, target alignment/width/privilege, physical SPSR/LR/SP
+bank selection, source-bank LDM writeback, and sequential-successor flushing.
+The broader exception/abort release gate remains open in `TASKS.md` §31.4.
 
 ### Pipeline structure and current cycle harness
 
@@ -284,6 +288,7 @@ evidence.
 | `ldm_abort` / `ldm_abort_base_list` | Every abort beat, later-load suppression, Base Updated writeback, and r15 protection |
 | `stm_abort` / `stm_base_list` | Every abort beat plus base writeback/store reachability and all-mode base-lowest rules |
 | `ldm_pc` | LDM with PC in list + `^` — CPSR restored from SPSR |
+| `exception_return_matrix` | 60 rows: five exception modes × ARM/Thumb × six DP/LDM return paths, with exact state/bank/refill checks |
 | `irq` / `fiq` | nIRQ / nFIQ pin → exception entry, banked r14 |
 | `swi` | SWI #imm → Supervisor mode, r14_svc, vector 0x08 |
 | `undef` | CDP p7 (unaccepted CP) → UNDEF, r14_und, vector 0x04 |
@@ -298,7 +303,7 @@ evidence.
 - [`docs/COPROCESSOR.md`](docs/COPROCESSOR.md) — bare-core ownership, exact CP14 decode, external CPA/CPB and pipeline-following contract, transfers, abandonment, and corrected r4p3 errata 14/15 policy.
 - [`docs/INTEGRATION.md`](docs/INTEGRATION.md) — canonical FPGA request/response wrapper, CPU-CE bridge, byte lanes, CDC/reset ownership, and optional interfaces.
 - [`docs/MULTIPLY.md`](docs/MULTIPLY.md) — MUL/MLA/UMULL/UMLAL/SMULL/SMLAL, m-parameter cycle shaping, UMLAL/SMLAL 2-cycle accumulator read across S_EXEC + S_MULL_ACC.
-- [`docs/EXCEPTIONS.md`](docs/EXCEPTIONS.md) — all 7 exception types, priority encoder, banked r14, SPSR save, `data_abort_now` vs `data_abort_q` for single-vs-multi-beat memory ops, LDM DABT restart, the two exception-return patterns.
+- [`docs/EXCEPTIONS.md`](docs/EXCEPTIONS.md) — all 7 exception types, priority encoder, class/state-specific links, banked r14, SPSR save, memory-abort completion, LDM DABT restart, and DP/LDM exception returns.
 
 The authoritative spec is **`ARM_DDI_0234B_ARM7TDMI-S_r4p3_TRM.pdf`** at the repo root.
 The implementation and release ledger is **[`TASKS.md`](TASKS.md)**. Section 31 is the
