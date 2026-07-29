@@ -17,6 +17,9 @@ because they agree with each other.
 - **[INTEGRATION.md](INTEGRATION.md)** — versioned canonical FPGA wrapper,
   valid/ready memory timing, CPU clock-enable bridge, byte lanes, reset/CDC
   ownership, and optional debug/coprocessor parameters.
+- **[RAW_BUS.md](RAW_BUS.md)** — raw `arm7tdmis_top` address/response edge
+  convention, N/S/I/C history, CLKEN/ABORT sampling, endian lanes,
+  LOCK/DMORE promises, Chapter 7 interpretation, and reusable checker.
 - **[VERIFICATION.md](VERIFICATION.md)** — fail-hard regression ordering,
   intentional-failure sentinel, reproducibility metadata, and the
   `arm7tdmis-regression-v1` machine-readable result schema.

@@ -983,10 +983,10 @@ module arm7tdmis_core_pipelined
                                                              : S_EXEC;
             S_DDATA:      state_next = ls_load_q ? S_LOAD_WB : S_EXEC;
             S_LOAD_WB:    state_next = S_EXEC;
-            // STM (block_load_q=0) skips the S_BLOCK_WB cycle: TRM has no
-            // I cycle for STM (Table 7-15: 1S+(n-1)S+1N = n+1 cycles).
-            // LDM still goes through S_BLOCK_WB for the Rd writeback I
-            // cycle (and Rn writeback when W=1).
+            // STM (block_load_q=0) skips S_BLOCK_WB: Table 7-14 exposes
+            // n+1 raw phases and does not add a separate TRANS=I row for
+            // Table 7-2's overlapped internal bookkeeping. LDM still uses
+            // S_BLOCK_WB for the Rd writeback I cycle (and Rn writeback).
             S_BLOCK_DATA: state_next = block_has_more ? S_BLOCK_DATA
                                      : (block_load_q  ? S_BLOCK_WB : S_EXEC);
             // A PC-inclusive LDM occupies the complete n+4 Table 7-13

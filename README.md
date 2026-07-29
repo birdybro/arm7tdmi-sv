@@ -315,6 +315,7 @@ evidence.
 - [`docs/DEBUG.md`](docs/DEBUG.md) — EmbeddedICE-RT (r4p3 register map, WP comparators, CHAIN/RANGE, debug-state FSM), JTAG TAP (16 states, IDCODE, scan chains 1+2), scan-chain-1 instruction-injection runtime, CP14 DCC data flow.
 - [`docs/COPROCESSOR.md`](docs/COPROCESSOR.md) — bare-core ownership, exact CP14 decode, external CPA/CPB and pipeline-following contract, transfers, abandonment, and corrected r4p3 errata 14/15 policy.
 - [`docs/INTEGRATION.md`](docs/INTEGRATION.md) — canonical FPGA request/response wrapper, CPU-CE bridge, byte lanes, CDC/reset ownership, and optional interfaces.
+- [`docs/RAW_BUS.md`](docs/RAW_BUS.md) — raw pin-level memory timing, phase history, CLKEN/ABORT rules, LOCK/DMORE promises, and reusable protocol checker.
 - [`docs/MULTIPLY.md`](docs/MULTIPLY.md) — MUL/MLA/UMULL/UMLAL/SMULL/SMLAL, m-parameter cycle shaping, UMLAL/SMLAL 2-cycle accumulator read across S_EXEC + S_MULL_ACC.
 - [`docs/EXCEPTIONS.md`](docs/EXCEPTIONS.md) — all 7 exception types, priority encoder, class/state-specific links, banked r14, SPSR save, memory-abort completion, LDM DABT restart, and DP/LDM exception returns.
 

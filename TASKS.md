@@ -2746,30 +2746,46 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
 Cycle conformance means matching pins on every enabled clock, not matching only the
 number of cycles spent in an internal FSM state.
 
-- [ ] **BUS-001:** `CFGBIGEND` data/fetch mapping is implemented and the endian,
+- [x] **BUS-001:** `CFGBIGEND` data/fetch mapping is implemented and the endian,
   MiSTer-profile, debug-lane, and ISA-009 matrices verify instruction-halfword
   selection, byte/halfword extraction, sign extension, stores, SWP/SWPB, and every
   byte lane in both configurations. The canonical FPGA wrapper makes endianness a
-  synthesis parameter. Remaining work is a reusable raw-pin protocol assertion that
-  rejects a `CFGBIGEND` change outside reset and an explicit raw-integrator violation
-  policy; do not describe the signal as unused.
+  synthesis parameter. `arm7tdmis_raw_bus_checker` rejects a change outside reset,
+  its mutation matrix proves the assertion, and `docs/RAW_BUS.md` defines the
+  raw-integrator violation policy.
 - [ ] **BUS-002:** Add a phase-aware scoreboard for every clock:
   `ADDR/WRITE/SIZE/PROT/LOCK/TRANS/WDATA/RDATA/ABORT/DMORE`, CP signals, CLKEN, PC,
   CPSR, instruction state, and exception/debug events.
 - [ ] **BUS-003:** Re-derive and implement N/S/I/C sequences for every Table 7-2
   category and detailed Table 7-3–7-23 row. Include DP-to-PC, LDR/LDM-to-PC, BX,
   condition fail, exceptions, all multiply m values, and coprocessor busy cases.
-- [ ] **BUS-004:** Reconcile Table 7-2's STM `+I` with Table 7-14's visible bus rows in
+- [x] **BUS-004:** Reconcile Table 7-2's STM `+I` with Table 7-14's visible bus rows in
   a checked design note; do the same for every apparent summary/detail discrepancy.
-- [ ] **BUS-005:** Generate N versus S from actual burst history. Reset/redirect/first
+  `docs/RAW_BUS.md` gives detailed pin rows precedence over summary occupancy tokens
+  and records why STM has no additional raw I phase. The Table 7 base, multiply,
+  redirect, exception, coprocessor, and condition-fail matrices enforce that rule.
+- [x] **BUS-005:** Generate N versus S from actual burst history. Reset/redirect/first
   accesses cannot be labeled S merely because they are fetches.
-- [ ] **BUS-006:** Verify pipelined address/data phase alignment for reads and writes.
+  The phase-history generator and reusable checker recognize active increments,
+  merged I/S, and the specified LDC/STC stream start. `bus_burst`,
+  `fetch_sequence`, redirect/exception matrices, and all bound integration tests
+  enforce the contract.
+- [x] **BUS-006:** Verify pipelined address/data phase alignment for reads and writes.
   A stalled cycle must keep every address-class and write-data signal stable and cause
   exactly one architectural completion when CLKEN resumes.
-- [ ] **BUS-007:** Sample ABORT only at the specified enabled S/N data or opcode
+  The raw memory is an executable one-phase pipeline model. Load/store, block,
+  SWP, coprocessor-memory, debug system-speed, DMORE, and MiSTer-wrapper matrices
+  check address/data association, held pins, and single completion across stalls.
+- [x] **BUS-007:** Sample ABORT only at the specified enabled S/N data or opcode
   phase, ignore it in I/C, and retain the sample across later stalls/phases.
-- [ ] **BUS-008:** Verify `PROT[0]` code/data and `PROT[1]` User/privileged for every
+  `abort_inactive` and `abort_clken` prove ignored assertions; the fetch, single,
+  block, SWP, coprocessor, priority, and debug abort matrices cover accepted
+  response phases and retained causes.
+- [x] **BUS-008:** Verify `PROT[0]` code/data and `PROT[1]` User/privileged for every
   fetch, data access, translated access, exception mode, and debug system-speed access.
+  The Table 7, translated-transfer, exception-bus, CPnTRANS, SWP, condition-fail,
+  and debug system-speed matrices cover those classes, with the raw checker bound
+  to every integration top.
 - [x] **BUS-009:** Hold `LOCK` across both SWP data transfers and release it on all
   normal, abort, reset, debug, and stall exits.
   `arm7tdmis_swp_bus_matrix_tb` covers every listed exit independently for
@@ -2786,11 +2802,17 @@ number of cycles spent in an internal FSM state.
   and accepted first/middle response aborts. `arm7tdmis_address_wrap_policy_tb`
   independently checks the two-word prediction across 32-bit address rollover
   in ARM and Thumb block-transfer forms.
-- [ ] **BUS-011:** Verify burst address increments, control stability, byte
+- [x] **BUS-011:** Verify burst address increments, control stability, byte
   non-bursting, alignment, reset I cycles, and branch/exception/refill waveforms.
-- [ ] **BUS-012:** Publish a precise raw-bus integration contract, including when an
+  The reusable checker verifies increment/control/byte rules on every integration
+  test; `bus_burst`, unaligned, reset, redirect, exception, and refill matrices
+  provide directed coverage. Its legal-plus-eleven-mutation self-test proves every
+  checker rule and its fatal propagation.
+- [x] **BUS-012:** Publish a precise raw-bus integration contract, including when an
   attached memory samples address, data, ABORT, and CLKEN. Provide a protocol checker
   that downstream cores can instantiate.
+  `docs/RAW_BUS.md` is the contract and
+  `verification/arm7tdmis_raw_bus_checker.sv` is the reusable checker.
 
 ## 31.6 P0 — coprocessor and CP14 behavior
 
