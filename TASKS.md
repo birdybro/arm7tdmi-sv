@@ -2542,23 +2542,45 @@ number of cycles spent in an internal FSM state.
 
 ## 31.6 P0 — coprocessor and CP14 behavior
 
-- [ ] **CP-001:** Remove the fabricated internal CP15 Main ID and its integration
+- [x] **CP-001:** Remove the fabricated internal CP15 Main ID and its integration
   test. Bare ARM7TDMI/ARM7TDMI-S has no CP15 (ARM DAI 0099C). With `CPA=CPB=1`, p15
   traps Undefined; a system wrapper may attach its own privileged CP15.
-- [ ] **CP-002:** Decode all coprocessor classes and opcode fields exactly. CP14
+  `tb/integration/arm7tdmis_cp15_undef_tb.sv` proves that an unclaimed p15 MRC
+  enters Undefined and does not return a fabricated identification value.
+- [x] **CP-002:** Decode all coprocessor classes and opcode fields exactly. CP14
   internal operations must match exact `MRC/MCR p14,0,...` encodings; unsupported CP14
   and CP15 operations trap rather than aliasing a broad `CRn` match.
-- [ ] **CP-003:** Drive `CPnTRANS=0` in User mode and 1 in privileged modes. It is
+  Decoder class coverage is in `tb/unit/decoder_tb.sv`; exact supported CP14
+  encodings and eight representative aliases are checked by
+  `tb/integration/arm7tdmis_cp14_decode_tb.sv`, with r15 transfer semantics in
+  `tb/integration/arm7tdmis_cp14_r15_tb.sv` and
+  `tb/integration/arm7tdmis_cp_reg_r15_tb.sv`.
+- [x] **CP-003:** Drive `CPnTRANS=0` in User mode and 1 in privileged modes. It is
   not an inverse code/data signal.
-- [ ] **CP-004:** Register CP pipeline-follow signals according to previous/current
+  `tb/integration/arm7tdmis_cpntrans_tb.sv` checks User, System, Supervisor,
+  IRQ, and FIQ opcode/data phases.
+- [x] **CP-004:** Register CP pipeline-follow signals according to previous/current
   `CPnOPC/CPnMREQ/CPTBIT` rules and CLKEN. Verify ARM fetch, Thumb, stalls, flushes,
   condition fail, and back-to-back CP instructions.
-- [ ] **CP-005:** Implement CPA/CPB absent, accepted-ready, accepted-busy, completion,
+  `tb/integration/arm7tdmis_cp_pipeline_follow_tb.sv` implements an independent
+  previous/current-cycle follower and covers every listed case.
+- [x] **CP-005:** Implement CPA/CPB absent, accepted-ready, accepted-busy, completion,
   and late-abandonment protocols for CDP/MCR/MRC/LDC/STC. Accepted instructions cannot
   silently become no-ops.
-- [ ] **CP-006:** Implement C cycles and MRC/MCR data timing; implement variable-length
+  `tb/integration/arm7tdmis_cp_cdp_protocol_tb.sv`,
+  `tb/integration/arm7tdmis_cp_reg_transfer_tb.sv`, and
+  `tb/integration/arm7tdmis_cp_ldc_stc_tb.sv` cover all instruction classes and
+  absent/ready/busy/completion behavior.
+- [x] **CP-006:** Implement C cycles and MRC/MCR data timing; implement variable-length
   LDC/STC transfers, writeback, `CPSEQ`, aborts, and interrupt/DBGRQ abandonment with
   idempotent busy waits.
+  Data timing and C cycles are covered by
+  `tb/integration/arm7tdmis_cp_reg_transfer_tb.sv`; variable transfer length,
+  N/S termination, `CPSEQ`, direction, and writeback by
+  `tb/integration/arm7tdmis_cp_ldc_stc_tb.sv`; every-word LDC/STC abort injection
+  by `tb/integration/arm7tdmis_cp_ldc_stc_abort_tb.sv`; and late IRQ, FIQ, and
+  DBGRQ abandonment by `tb/integration/arm7tdmis_cp_busy_interrupt_tb.sv` and
+  `tb/integration/arm7tdmis_cp_busy_dbgrq_tb.sv`.
 - [x] **CP-007:** Implement separate DCC RX and TX buffers. Exact behavior:
   c0 control read; c1 data read/write; W/R ownership transitions; no unintended
   round-trip through a shared storage word.
@@ -2584,8 +2606,15 @@ number of cycles spent in an internal FSM state.
   `tb/unit/dcc_tb.sv` covers reset, CLKEN, and both ownership races;
   `tb/integration/arm7tdmis_cp14_dcc_tb.sv` covers the public pins through both
   directions and gates/restores each pending-data state with DBGEN.
-- [ ] **CP-011:** Decide and test the release policy for r4p3 errata [14]
+- [x] **CP-011:** Decide and test the release policy for r4p3 errata [14]
   (non-indexed LDC/STC decode) and [15] (sequential MRC timing).
+  The frozen release policy is corrected behavior with no defect-emulation
+  parameter: unindexed LDC/STC forms execute architecturally, and every
+  consecutive MRC executes independently. The exact affected encodings and
+  early-CPA/CPB timing are covered by
+  `tb/integration/arm7tdmis_cp_erratum14_tb.sv` and
+  `tb/integration/arm7tdmis_cp_erratum15_tb.sv`. See
+  `docs/COPROCESSOR.md`.
 
 ## 31.7 P0/P1 — EmbeddedICE-RT, JTAG, and ETM-facing behavior
 
@@ -2792,8 +2821,8 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
 | [11] SWI/PABT after condition-failed Undef | Present in r4p3 | Decide corrected-default vs compatibility parameter |
 | [12] Thumb DABT LR low-bit error | Corrected in r4p3 | Regression |
 | [13] async DBGRQ during PC modification | Present in r4p3 | Corrected default: synchronous `DBGRQ` contract, atomic PC commit, retained redirect regression; synchronize asynchronous sources externally |
-| [14] non-indexed LDC/STC decode | Present in r4p3 | Decide corrected-default vs compatibility parameter |
-| [15] sequential MRC timing | Present in r4p3 | Decide corrected-default vs compatibility parameter |
+| [14] non-indexed LDC/STC decode | Present in r4p3 | Corrected only: execute P=0,U=1,W=0 LDC/LDCL/STC/STCL architecturally; no defect-emulation parameter; `arm7tdmis_cp_erratum14_tb.sv` |
+| [15] sequential MRC timing | Present in r4p3 | Corrected only: execute each consecutive opcode1=x1x MRC independently, including early CPA/CPB; no defect-emulation parameter; `arm7tdmis_cp_erratum15_tb.sv` |
 
 - [ ] **ERR-001:** Vendor/hash the errata list, review every entry's full conditions,
   freeze the policy column, and link each applicable test/result.

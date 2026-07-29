@@ -10,6 +10,10 @@ because they agree with each other.
 - **[PIPELINE.md](PIPELINE.md)** — 3-stage F/D/E pipeline structure, stage registers, bus-cycle overlap in the E substate FSM, the `issue_fetch` `state_next` gate (one of the load-bearing decisions of the whole design), `de_q` staleness traps and the latch protocol.
 
 - **[DEBUG.md](DEBUG.md)** — EmbeddedICE-RT macrocell (r4p3 register map, WP comparators with TRM-correct XNOR+mask shape, CHAIN/RANGE coupling, debug-state FSM), JTAG TAP (16-state controller, IDCODE, scan chains 1+2), scan-chain-1 instruction-injection runtime path, CP14 DCC data flow.
+- **[COPROCESSOR.md](COPROCESSOR.md)** — bare-core ownership and exact CP14
+  decode, raw pipeline-following pins, CPA/CPB claim/busy/completion behavior,
+  register and variable-length memory transfers, abandonment, and the frozen
+  corrected policy for r4p3 errata 14 and 15.
 - **[VERIFICATION.md](VERIFICATION.md)** — fail-hard regression ordering,
   intentional-failure sentinel, reproducibility metadata, and the
   `arm7tdmis-regression-v1` machine-readable result schema.
@@ -20,7 +24,8 @@ because they agree with each other.
 
 ## Reading order
 
-If you've never seen this codebase: PIPELINE → EXCEPTIONS → MULTIPLY → DEBUG. Each builds on the previous one's vocabulary.
+If you've never seen this codebase: PIPELINE → EXCEPTIONS → MULTIPLY →
+COPROCESSOR → DEBUG. Each builds on the previous one's vocabulary.
 
 If you're debugging a specific area: jump to the relevant doc; they're independent.
 

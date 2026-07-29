@@ -279,6 +279,7 @@ evidence.
 
 - [`docs/PIPELINE.md`](docs/PIPELINE.md) — 3-stage F/D/E pipeline, 12-state E substate FSM, bus-cycle overlap, `issue_fetch` gate, `de_q` staleness latch protocol, branch fast-path flush.
 - [`docs/DEBUG.md`](docs/DEBUG.md) — EmbeddedICE-RT (r4p3 register map, WP comparators, CHAIN/RANGE, debug-state FSM), JTAG TAP (16 states, IDCODE, scan chains 1+2), scan-chain-1 instruction-injection runtime, CP14 DCC data flow.
+- [`docs/COPROCESSOR.md`](docs/COPROCESSOR.md) — bare-core ownership, exact CP14 decode, external CPA/CPB and pipeline-following contract, transfers, abandonment, and corrected r4p3 errata 14/15 policy.
 - [`docs/MULTIPLY.md`](docs/MULTIPLY.md) — MUL/MLA/UMULL/UMLAL/SMULL/SMLAL, m-parameter cycle shaping, UMLAL/SMLAL 2-cycle accumulator read across S_EXEC + S_MULL_ACC.
 - [`docs/EXCEPTIONS.md`](docs/EXCEPTIONS.md) — all 7 exception types, priority encoder, banked r14, SPSR save, `data_abort_now` vs `data_abort_q` for single-vs-multi-beat memory ops, LDM DABT restart, the two exception-return patterns.
 
