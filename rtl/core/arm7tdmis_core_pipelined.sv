@@ -789,9 +789,11 @@ module arm7tdmis_core_pipelined
     wire instr_is_ls_any = (dec.instr_class == INSTR_LDR_STR)
                         || (dec.instr_class == INSTR_LDRH_STRH);
     wire ls_take_data_cycle = passes_cond && instr_is_ls_any;
-    // ARM single-transfer P=0,W=1 is the translated T form. It performs
-    // the access with User permissions while execution remains in the
-    // current (typically privileged) processor mode.
+    // ARM Addressing Mode 2 single-transfer P=0,W=1 is the translated T
+    // form. It performs the access with User permissions while execution
+    // remains in the current (typically privileged) processor mode.
+    // Addressing Mode 3 extra transfers have no translated form:
+    // P=0,W=1 is architecturally UNPREDICTABLE there.
     wire ls_is_translated = (dec.instr_class == INSTR_LDR_STR)
                           && !dec.ls_pre_index && dec.ls_writeback;
 

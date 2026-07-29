@@ -2487,9 +2487,17 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   executes 12 reset-per-case representatives and checks exact ARM/Thumb LR and
   SPSR values, ARM-state handler entry, successor flush, memory preservation,
   and absence of external `CPnI`.
-- [ ] **ISA-008:** Implement translated post-indexed loads/stores (`LDRT/STRT`,
-  `LDRBT/STRBT`, and applicable extra-transfer encodings) with User-mode `PROT` while
-  retaining the current processor mode.
+- [x] **ISA-008:** Implement translated post-indexed loads/stores (`LDRT/STRT`,
+  `LDRBT/STRBT`) with User-mode `PROT` while retaining the current processor
+  mode. The original “applicable extra-transfer encodings” clause was inaccurate:
+  ARM Addressing Mode 3 requires `P=0,W=0`; `P=0,W=1` is UNPREDICTABLE and
+  does not encode an ARMv4T translated halfword/signed transfer. The existing
+  directed program covers the four immediate-offset mnemonics.
+  `tb/integration/arm7tdmis_translated_ls_matrix_tb.sv` adds 16 reset-per-case
+  rows covering word/byte, load/store, add/subtract, and immediate/scaled-register
+  post-index forms. Every row checks the original base as the transfer address,
+  post-index writeback, load/store data and width, User `PROT`, continued
+  privileged opcode fetches, and unchanged Supervisor mode.
 - [ ] **ISA-009:** Freeze exact ARM7TDMI unaligned-access behavior for word,
   halfword, signed-halfword, signed-byte, SWP, and instruction fetches; verify all
   address low bits in both endian modes.

@@ -31,7 +31,7 @@ The wrapper permits one outstanding request. These signals form one payload:
 | `MEM_WDATA[31:0]` | Lane-aligned write data. |
 | `MEM_BYTE_ENABLE[3:0]` | Active byte lanes for reads and writes. |
 | `MEM_CODE` | High for an opcode fetch, low for data. |
-| `MEM_PRIVILEGED` | High outside User mode. |
+| `MEM_PRIVILEGED` | High for privileged-mode accesses. A translated `LDRT/STRT/LDRBT/STRBT` data access is low while the processor remains privileged. |
 | `MEM_LOCK` | High for both transfers of SWP/SWPB. |
 | `MEM_SEQUENTIAL` | High when the raw transfer is an S continuation. |
 | `MEM_MORE` | High only when another block-transfer beat is guaranteed. |
@@ -44,6 +44,12 @@ write data, byte enables, and all metadata remain stable. On the accepting
 edge a write commits selected lanes; a read returns `MEM_RDATA`. When
 `MEM_ERROR` is high, the access instead supplies the raw ARM `ABORT` response
 and the target must not commit a write side effect.
+
+Translated T-form accesses exist only in ARM Addressing Mode 2: post-indexed
+word or unsigned-byte transfers with `P=0,W=1`. They use User memory
+permission (`MEM_PRIVILEGED=0`) without changing CPSR mode. ARMv4T
+halfword/signed Addressing Mode 3 has no translated form; its `P=0,W=1`
+combination is UNPREDICTABLE.
 
 `MEM_READY` is independent of `CPU_CE`. If a target completes while CPU CE is
 low, the wrapper removes `MEM_VALID`, stores `MEM_RDATA/MEM_ERROR`, and waits.
