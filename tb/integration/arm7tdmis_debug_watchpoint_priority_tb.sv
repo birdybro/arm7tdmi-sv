@@ -217,6 +217,7 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
 
     initial begin : run
         bit halted;
+        bit resumed;
         logic [31:0] scanned_r15;
         logic [31:0] corrected_pc;
 
@@ -338,6 +339,23 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
                 if (u_dut.u_core.cpsr.m !== 5'(MODE_SUPERVISOR))
                     fail($sformatf("simultaneous DBGRQ changed mode to %05b",
                                    u_dut.u_core.cpsr.m));
+
+                // Erratum [7], scenario 2: the watchpoint cause must survive
+                // coincident DBGRQ and RESTART must continue at the first
+                // unexecuted successor, rather than a miscorrected PC.
+                write_ice(5'h0C, 32'h0000_001C);
+                load_ir(4'(IR_RESTART));
+                resumed = 1'b0;
+                for (int i = 0; i < 140; i++) begin
+                    @(posedge CLK);
+                    if (u_dut.u_core.u_regfile.regs[9]
+                        == 32'h0000_0099) begin
+                        resumed = 1'b1;
+                        break;
+                    end
+                end
+                if (!resumed)
+                    fail("simultaneous-DBGRQ watchpoint resumed at wrong PC");
             end
         endcase
 

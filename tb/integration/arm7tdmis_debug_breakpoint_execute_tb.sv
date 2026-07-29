@@ -42,6 +42,7 @@ module arm7tdmis_debug_breakpoint_execute_tb
     logic DBGACK, DBGnEXEC, DBGINSTRVALID;
     logic [1:0] DBGRNG;
     logic DBGCOMMTX, DBGCOMMRX, DBGTDO, DBGnTDOEN, DMORE;
+    logic DBGRQ;
 
     arm7tdmis_top u_dut (
         .CLK,
@@ -56,7 +57,7 @@ module arm7tdmis_debug_breakpoint_execute_tb
         .CPA              (1'b1),
         .CPB              (1'b1),
         .DBGEN            (1'b1),
-        .DBGRQ            (1'b0),
+        .DBGRQ,
         .DBGBREAK         (1'b0),
         .DBGACK,
         .DBGnEXEC,
@@ -88,6 +89,17 @@ module arm7tdmis_debug_breakpoint_execute_tb
     );
 
     logic [37:0] ignored_scan;
+
+    // Erratum [7], scenario 1: assert a one-cycle synchronous DBGRQ on
+    // the same boundary that the first breakpoint starts debug entry.
+    logic dbgrq_sent;
+    assign DBGRQ = u_dut.u_core.dbg_breakpoint_execute && !dbgrq_sent;
+    always_ff @(posedge CLK) begin
+        if (!nRESET)
+            dbgrq_sent <= 1'b0;
+        else if (DBGRQ)
+            dbgrq_sent <= 1'b1;
+    end
 
     task automatic tck(input logic tms, input logic tdi);
         @(negedge CLK);
@@ -197,6 +209,11 @@ module arm7tdmis_debug_breakpoint_execute_tb
             fail("WP0 never matched the condition-failed opcode");
         if (!first_halt)
             fail("WP0 did not enter debug");
+        if (!dbgrq_sent)
+            fail("coincident breakpoint DBGRQ was not generated");
+        if (!u_dut.u_ice.entry_breakpoint
+            || u_dut.u_ice.entry_watchpoint_q)
+            fail("coincident DBGRQ corrupted breakpoint entry cause");
         if (u_dut.u_core.de_q.pc !== 32'h0000_0028)
             fail($sformatf("WP0 halted at pc %08x", u_dut.u_core.de_q.pc));
         if (u_dut.u_core.condition_pass !== 1'b0)
