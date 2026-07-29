@@ -135,10 +135,29 @@ module thumb_decoder_tb
         check_class("fmt7 STR register", INSTR_LDR_STR);
         check1("fmt7 store", dec.ls_load, 1'b0);
 
+        settle(16'h52C1);  // STRH r1,[r0,r3]
+        check_class("fmt8 STRH", INSTR_LDRH_STRH);
+        check1("fmt8 STRH store", dec.ls_load, 1'b0);
+        check1("fmt8 STRH halfword", dec.hs_halfword, 1'b1);
+        check1("fmt8 STRH unsigned", dec.hs_signed, 1'b0);
+
         settle(16'h5763);  // LDRSB r3,[r4,r5]
         check_class("fmt8 LDRSB", INSTR_LDRH_STRH);
-        check1("fmt8 signed", dec.hs_signed, 1'b1);
-        check1("fmt8 byte", dec.hs_halfword, 1'b0);
+        check1("fmt8 LDRSB load", dec.ls_load, 1'b1);
+        check1("fmt8 LDRSB signed", dec.hs_signed, 1'b1);
+        check1("fmt8 LDRSB byte", dec.hs_halfword, 1'b0);
+
+        settle(16'h5AC4);  // LDRH r4,[r0,r3]
+        check_class("fmt8 LDRH", INSTR_LDRH_STRH);
+        check1("fmt8 LDRH load", dec.ls_load, 1'b1);
+        check1("fmt8 LDRH halfword", dec.hs_halfword, 1'b1);
+        check1("fmt8 LDRH unsigned", dec.hs_signed, 1'b0);
+
+        settle(16'h5EC4);  // LDRSH r4,[r0,r3]
+        check_class("fmt8 LDRSH", INSTR_LDRH_STRH);
+        check1("fmt8 LDRSH load", dec.ls_load, 1'b1);
+        check1("fmt8 LDRSH halfword", dec.hs_halfword, 1'b1);
+        check1("fmt8 LDRSH signed", dec.hs_signed, 1'b1);
 
         // Formats 9 through 13: immediate/SP/PC addressing.
         settle(16'h68C8);  // LDR r0,[r1,#12]
