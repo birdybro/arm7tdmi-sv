@@ -137,6 +137,11 @@ module arm7tdmis_top
         .dbg_inject_active(dbg_inject_active),
         .dbg_inject_accept(dbg_inject_accept),
         .dbg_inject_retire(dbg_inject_retire),
+        .dbg_reg_we      (dbg_reg_we),
+        .dbg_reg_addr    (dbg_reg_addr),
+        .dbg_reg_wdata   (tap_inject_instr),
+        .dbg_reg_force_user(dbg_reg_force_user),
+        .dbg_reg_rdata   (dbg_reg_rdata),
         .dbg_halt_req     (ice_halt_request),
         .dbg_halted       (ice_core_halt),
         .dbg_breakpoint_fetch(ice_breakpoint_fetch),
@@ -234,7 +239,7 @@ module arm7tdmis_top
         .debug_abort_set    (1'b0),
         .dcc_tx_empty       (dcc_tx_empty),
         .dcc_rx_full        (dcc_rx_full),
-        .tap_inject_we      (tap_inject_we),
+        .tap_inject_we      (tap_inject_we_to_ice),
         .tap_inject_instr   (tap_inject_instr),
         .tap_inject_break   (tap_inject_break),
         .core_inject_accept (dbg_inject_accept),
@@ -276,6 +281,106 @@ module arm7tdmis_top
     logic        tap_inject_we;
     logic        tap_tdo;
     logic        tap_ntdoen;
+    logic        dbg_reg_we;
+    logic [3:0]  dbg_reg_addr;
+    logic        dbg_reg_force_user;
+    logic [31:0] dbg_reg_rdata;
+
+    // ARM7TDMI debug-speed LDM/STM uses scan chain 1 itself as the data
+    // bus. OpenOCD loads the block instruction, clocks two pipeline NOPs,
+    // then shifts one word per selected register. Keep this path entirely
+    // inside the core: no external memory cycle is issued while DBGACK is
+    // HIGH. System-speed transfers use W=1 in the published debugger
+    // sequence and continue through the normal staged/RESTART path.
+    logic        dbg_block_setup_q;
+    logic [1:0]  dbg_block_setup_left_q;
+    logic        dbg_block_active_q;
+    logic        dbg_block_load_q;
+    logic        dbg_block_force_user_q;
+    logic [15:0] dbg_block_remaining_q;
+    logic [3:0]  dbg_block_reg_q;
+
+    function automatic logic [3:0] debug_lowest_reg(
+        input logic [15:0] mask
+    );
+        for (int i = 0; i < 16; i++) begin
+            if (mask[i])
+                return 4'(i);
+        end
+        return 4'd0;
+    endfunction
+
+    wire tap_debug_block_instr = (tap_inject_instr[31:28] == 4'hE)
+                               && (tap_inject_instr[27:25] == 3'b100)
+                               && !tap_inject_instr[24]
+                               && tap_inject_instr[23]
+                               && !tap_inject_instr[21]
+                               && (tap_inject_instr[15:0] != 16'h0);
+    wire dbg_block_start = tap_inject_we && ice_dbg_ack
+                         && !tap_inject_break
+                         && !dbg_block_setup_q && !dbg_block_active_q
+                         && tap_debug_block_instr;
+    wire dbg_block_consumes_scan = dbg_block_start
+                                 || dbg_block_setup_q
+                                 || dbg_block_active_q;
+    wire [15:0] dbg_block_after_current =
+        dbg_block_remaining_q & ~(16'h1 << dbg_block_reg_q);
+
+    always_ff @(posedge CLK or negedge DBGnTRST) begin
+        if (!DBGnTRST) begin
+            dbg_block_setup_q       <= 1'b0;
+            dbg_block_setup_left_q  <= 2'd0;
+            dbg_block_active_q      <= 1'b0;
+            dbg_block_load_q        <= 1'b0;
+            dbg_block_force_user_q  <= 1'b0;
+            dbg_block_remaining_q   <= 16'h0;
+            dbg_block_reg_q         <= 4'h0;
+        end else if (!DBGEN) begin
+            dbg_block_setup_q       <= 1'b0;
+            dbg_block_setup_left_q  <= 2'd0;
+            dbg_block_active_q      <= 1'b0;
+            dbg_block_load_q        <= 1'b0;
+            dbg_block_force_user_q  <= 1'b0;
+            dbg_block_remaining_q   <= 16'h0;
+            dbg_block_reg_q         <= 4'h0;
+        end else if (dbg_block_start) begin
+            dbg_block_setup_q       <= 1'b1;
+            dbg_block_setup_left_q  <= 2'd2;
+            dbg_block_active_q      <= 1'b0;
+            dbg_block_load_q        <= tap_inject_instr[20];
+            dbg_block_force_user_q  <= tap_inject_instr[22];
+            dbg_block_remaining_q   <= tap_inject_instr[15:0];
+            dbg_block_reg_q         <=
+                debug_lowest_reg(tap_inject_instr[15:0]);
+        end else if (tap_inject_we && dbg_block_setup_q) begin
+            if (dbg_block_setup_left_q == 2'd1) begin
+                dbg_block_setup_q      <= 1'b0;
+                dbg_block_setup_left_q <= 2'd0;
+                dbg_block_active_q     <= 1'b1;
+            end else begin
+                dbg_block_setup_left_q <= dbg_block_setup_left_q - 2'd1;
+            end
+        end else if (tap_inject_we && dbg_block_active_q) begin
+            dbg_block_remaining_q <= dbg_block_after_current;
+            if (dbg_block_after_current == 16'h0) begin
+                dbg_block_active_q <= 1'b0;
+            end else begin
+                dbg_block_reg_q <=
+                    debug_lowest_reg(dbg_block_after_current);
+            end
+        end
+    end
+
+    assign dbg_reg_we = tap_inject_we && dbg_block_active_q
+                      && dbg_block_load_q;
+    assign dbg_reg_addr = dbg_block_reg_q;
+    assign dbg_reg_force_user = dbg_block_force_user_q;
+
+    wire [31:0] tap_chain1_capture_data = dbg_block_active_q
+                                       && !dbg_block_load_q
+                                       ? dbg_reg_rdata : WDATA;
+    wire tap_inject_we_to_ice = tap_inject_we
+                              && !dbg_block_consumes_scan;
 
     // Appendix A: the complete external scan transport is enabled only when
     // DBGEN is HIGH. DBGnTRST remains independent so the TAP and ICE D-types
@@ -310,7 +415,7 @@ module arm7tdmis_top
         .ice_scan_re      (ice_scan_re),
         .ice_scan_rdata   (ice_scan_rdata),
         .ice_scan_raddr   (ice_scan_raddr),
-        .ice_chain1_capture_data(WDATA),
+        .ice_chain1_capture_data(tap_chain1_capture_data),
         .ice_chain1_capture_break(ice_chain1_capture_break),
         .ice_chain1_capture(tap_chain1_capture),
         .ice_inject_instr (tap_inject_instr),

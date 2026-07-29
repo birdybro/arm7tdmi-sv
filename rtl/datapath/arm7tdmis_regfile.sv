@@ -62,6 +62,16 @@ module arm7tdmis_regfile
     // Force-User-bank read/write (LDM ^ flag in §11)
     input  logic        force_user_bank,
 
+    // Debug scan data port. Debug-speed LDM/STM uses scan chain 1 as its
+    // data bus, so these accesses occur while the normal core clock-enable
+    // is stopped. The S bit selects the User bank exactly as for an
+    // architectural LDM/STM ^ transfer.
+    input  logic        dbg_we,
+    input  logic [3:0]  dbg_addr,
+    input  logic [31:0] dbg_wdata,
+    input  logic        dbg_force_user_bank,
+    output logic [31:0] dbg_rdata,
+
     // Raised when wa_enable && wa_addr==15 — instruction wants to write PC.
     output logic        pc_written
 );
@@ -112,15 +122,25 @@ module arm7tdmis_regfile
     assign ra_data = read_with_offset(ra_addr, t_bit);
     assign rb_data = read_with_offset(rb_addr, t_bit);
     assign rc_data = read_with_offset(rc_addr, t_bit);
+    assign dbg_rdata = (dbg_addr == 4'd15)
+                     ? (pc_in + pc_offset(t_bit))
+                     : regs[bank_index(
+                         dbg_addr,
+                         dbg_force_user_bank ? 5'(MODE_USER) : mode
+                       )];
 
     // ---- Write port (suppressed for wa_addr=15 — PC lives in core) ----
     always_ff @(posedge CLK) begin
         if (!nRESET) begin
             for (int i = 0; i < 31; i = i + 1) regs[i] <= 32'h0;
+        end else if (dbg_we && dbg_addr != 4'd15) begin
+            regs[bank_index(
+                dbg_addr,
+                dbg_force_user_bank ? 5'(MODE_USER) : mode
+            )] <= dbg_wdata;
         end else if (CLKEN) begin
-            if (wa_enable && wa_addr != 4'd15) begin
+            if (wa_enable && wa_addr != 4'd15)
                 regs[bank_index(wa_addr, effective_mode)] <= wa_data;
-            end
         end
     end
 

@@ -99,6 +99,15 @@ module arm7tdmis_core_pipelined
     output logic        dbg_inject_accept,
     output logic        dbg_inject_retire,
 
+    // Debug-speed block-transfer scan data port. This is separate from
+    // instruction injection because a halted core uses scan chain 1,
+    // rather than the external memory bus, for LDM/STM register data.
+    input  logic        dbg_reg_we,
+    input  logic [3:0]  dbg_reg_addr,
+    input  logic [31:0] dbg_reg_wdata,
+    input  logic        dbg_reg_force_user,
+    output logic [31:0] dbg_reg_rdata,
+
     // §5.3 debug-state boundary. dbg_halt_req is the synchronized final
     // running request; dbg_halt_boundary is HIGH on an edge that legally
     // completes the current instruction; dbg_halted is the subsequent
@@ -603,6 +612,11 @@ module arm7tdmis_core_pipelined
         .wa_data         (rf_write_data),
         .wa_enable       (rf_write_en),
         .force_user_bank (force_user_bank_eff),
+        .dbg_we          (dbg_reg_we),
+        .dbg_addr        (dbg_reg_addr),
+        .dbg_wdata       (dbg_reg_wdata),
+        .dbg_force_user_bank(dbg_reg_force_user),
+        .dbg_rdata       (dbg_reg_rdata),
         .pc_written      (rf_pc_written)
     );
 

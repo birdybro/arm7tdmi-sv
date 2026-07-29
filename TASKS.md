@@ -2606,6 +2606,10 @@ number of cycles spent in an internal FSM state.
 - [ ] **JTAG-005:** Run end-to-end scan scripts that halt, read/write every register
   and memory through legal debug instructions, use a system-speed access with stalls,
   restart, exercise DCC both directions, set break/watchpoints, and enter monitor mode.
+  The OpenOCD-compatible debug-speed LDM/STM round trip for r1-r14, including
+  external-bus isolation, is covered by
+  `tb/integration/arm7tdmis_debug_register_scan_tb.sv`; r0/r15, PSRs, the
+  remaining end-to-end operations, and debugger-process integration remain open.
 - [ ] **JTAG-006:** Demonstrate a pinned open-source debugger/GDB flow against the
   simulated scan transport and on FPGA, or document precisely why the r4p3 scan
   protocol needs a project-specific bridge and release that bridge with protocol tests.

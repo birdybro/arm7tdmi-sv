@@ -9,6 +9,7 @@
 //   - pc_written asserts when r15 is written
 //   - System mode shares User register set (no SPSR but same r0..r14)
 //   - force_user_bank overrides current mode for read
+//   - debug scan read/write works while CLKEN is low and honors User banking
 
 module regfile_tb
     import arm7tdmis_types_pkg::*;
@@ -31,6 +32,11 @@ module regfile_tb
     logic [31:0] ra_data, rb_data, rc_data, wa_data;
     logic        wa_enable;
     logic        force_user_bank;
+    logic        dbg_we;
+    logic [3:0]  dbg_addr;
+    logic [31:0] dbg_wdata;
+    logic        dbg_force_user_bank;
+    logic [31:0] dbg_rdata;
     logic        pc_written;
 
     arm7tdmis_regfile dut (.*);
@@ -86,6 +92,10 @@ module regfile_tb
         wa_data         = 32'h0;
         wa_enable       = 1'b0;
         force_user_bank = 1'b0;
+        dbg_we = 1'b0;
+        dbg_addr = 4'h0;
+        dbg_wdata = 32'h0;
+        dbg_force_user_bank = 1'b0;
 
         // Hold reset for a few cycles
         repeat (4) @(posedge CLK);
@@ -179,6 +189,25 @@ module regfile_tb
         check32("r13 IRQ + force_user_bank", ra_data, 32'h11111111);
         @(negedge CLK);
         force_user_bank = 1'b0;
+
+        // T10: scan-chain block-transfer access is clocked by the debug
+        // transport, not normal CLKEN, and its S bit selects the User bank.
+        @(negedge CLK);
+        CLKEN = 1'b0;
+        mode = MODE_IRQ;
+        dbg_addr = 4'd13;
+        dbg_wdata = 32'h33333333;
+        dbg_force_user_bank = 1'b1;
+        dbg_we = 1'b1;
+        @(posedge CLK);
+        @(negedge CLK);
+        dbg_we = 1'b0;
+        check32("debug write/read user r13", dbg_rdata, 32'h33333333);
+        ra_addr = 4'd13;
+        force_user_bank = 1'b0;
+        @(negedge CLK);
+        check32("debug write preserved IRQ r13", ra_data, 32'h22222222);
+        CLKEN = 1'b1;
 
         // Wrap up
         if (errors == 0) begin
