@@ -102,6 +102,12 @@ class OptionCharacterizationTest(unittest.TestCase):
                 self.assertIn("QIP_FILE arm7tdmi_mister.qip", qsf)
                 self.assertIn("SDC_FILE arm7tdmi_options.sdc", qsf)
                 self.assertIn(
+                    'FITTER_EFFORT "AUTO FIT"',
+                    qsf,
+                    "option-cost builds must retry placement when a "
+                    "single standard fit misses timing",
+                )
+                self.assertIn(
                     f"set_parameter -name ENABLE_DEBUG {debug}",
                     qsf,
                 )
