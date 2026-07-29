@@ -15,11 +15,12 @@
 //     that fails its condition still consumes the same number of cycles
 //     it would have on success (TRM §7.20 Table 7-23 — "+S" at PC+2i).
 //
-// COND_NV is reserved/UNDEFINED in ARMv4T. ARMv5+ repurposed the encoding
-// for unconditional instructions (BLX-imm, PLD); on r4p3 it must trap as
-// Undefined Instruction. We expose `cond_is_nv` so the decoder can route
-// the instruction to the undef path; `condition_pass` is forced 0 so that
-// even if the trap weren't taken, no architectural state would change.
+// COND_NV is UNPREDICTABLE in ARMv4. ARMv5+ repurposed the encoding for
+// unconditional instructions (BLX-imm, PLD); this ARM7TDMI-S implementation
+// applies its stable policy of taking a precise Undefined Instruction trap.
+// We expose `cond_is_nv` as a defense-in-depth route to that trap;
+// `condition_pass` is forced 0 so no ordinary instruction side effect can
+// occur even if the classification is changed accidentally.
 
 module arm7tdmis_condition
     import arm7tdmis_instr_pkg::*;
@@ -50,7 +51,7 @@ module arm7tdmis_condition
             COND_GT: condition_pass = !z_flag && (n_flag == v_flag);
             COND_LE: condition_pass =  z_flag || (n_flag != v_flag);
             COND_AL: condition_pass = 1'b1;
-            COND_NV: condition_pass = 1'b0;               // reserved on ARMv4T
+            COND_NV: condition_pass = 1'b0;               // ARMv4 policy: trap
             default: condition_pass = 1'b0;
         endcase
     end

@@ -8,8 +8,9 @@ package arm7tdmis_instr_pkg;
     import arm7tdmis_types_pkg::*;
 
     // ---- Condition codes (instr[31:28] in ARM state) ----
-    // NV (4'hF) is reserved in ARMv4T and must trap as Undefined; it is
-    // intentionally listed so decoders can name it explicitly.
+    // NV (4'hF) is UNPREDICTABLE in ARMv4 and is assigned the stable policy
+    // of a precise Undefined trap here. It is named explicitly so no ARMv5+
+    // unconditional encoding can enter an ARM7TDMI-S execute path.
     typedef enum logic [3:0] {
         COND_EQ = 4'h0, COND_NE = 4'h1, COND_CS = 4'h2, COND_CC = 4'h3,
         COND_MI = 4'h4, COND_PL = 4'h5, COND_VS = 4'h6, COND_VC = 4'h7,

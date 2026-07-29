@@ -61,12 +61,25 @@ module arm7tdmis_decoder
                 end else if (instr[27:23] == 5'b00010 && instr[21:20] == 2'b10
                           && instr[15:12] == 4'b1111 && instr[11:4] == 8'h00) begin
                     c = INSTR_MSR;
-                end else if (instr[7] == 1'b1 && instr[4] == 1'b1
-                          && instr[6:5] != 2'b00) begin
-                    // Halfword / signed: bits[6:5] = SH != 00
+                end else if ((instr[7:4] == 4'b1011)
+                          || (instr[20]
+                           && ((instr[7:4] == 4'b1101)
+                            || (instr[7:4] == 4'b1111)))) begin
+                    // ARMv4T extra transfers: STRH/LDRH use 1011;
+                    // signed byte/halfword forms (1101/1111) are loads
+                    // only. The L=0 signed patterns were allocated as
+                    // doubleword transfers only by later architectures.
                     c = INSTR_LDRH_STRH;
+                end else if (instr[7] && instr[4]) begin
+                    // Unallocated multiply/extra-transfer decode row.
+                    c = INSTR_UNDEF;
+                end else if ((instr[24:23] == 2'b10) && !instr[20]) begin
+                    // Opcode 10xx with S=0 is control-extension space,
+                    // not ordinary DP. Exact ARMv4T MRS/MSR/BX masks
+                    // were accepted above; every other row is Undefined.
+                    c = INSTR_UNDEF;
                 end else begin
-                    // Anything left in the 000 bucket is DP register form.
+                    // Anything legal left in the 000 bucket is DP register form.
                     // The shift-by-register sub-form has bit[7]=0 && bit[4]=1;
                     // shift-by-immediate has bit[4]=0. Both → INSTR_DP.
                     c = INSTR_DP;
@@ -75,10 +88,13 @@ module arm7tdmis_decoder
 
             3'b001: begin
                 // 001 group: DP-imm or MSR-imm
-                if (instr[24:23] == 2'b10 && instr[21:20] == 2'b10
-                  && instr[15:12] == 4'b1111) begin
-                    c = INSTR_MSR;
-                end else if (instr[24:23] == 2'b10 && instr[21:20] == 2'b00) begin
+                if ((instr[27:20] == 8'h32) || (instr[27:20] == 8'h36)) begin
+                    // A malformed SBO field shares MSR decode bits and is
+                    // architecturally UNPREDICTABLE. The core's stable
+                    // policy is to trap it instead of executing it as DP.
+                    c = (instr[15:12] == 4'b1111) ? INSTR_MSR : INSTR_UNDEF;
+                end else if ((instr[27:20] == 8'h30)
+                          || (instr[27:20] == 8'h34)) begin
                     // The 001 1 0R00 ... encoding has no defined meaning
                     // in ARMv4T (the matching reg-form is MRS, which lives
                     // in the 000 group). Treat as undefined.
@@ -95,7 +111,13 @@ module arm7tdmis_decoder
 
             3'b100: c = INSTR_LDM_STM;
             3'b101: c = INSTR_BRANCH;
-            3'b110: c = INSTR_LDC_STC;
+            3'b110: begin
+                // 11000x0x is the later MCRR/MRRC coprocessor extension
+                // space. It is unconditionally Undefined in ARMv4T and
+                // must not be offered to an external coprocessor.
+                c = ((instr[27:23] == 5'b11000) && !instr[21])
+                  ? INSTR_UNDEF : INSTR_LDC_STC;
+            end
 
             3'b111: begin
                 if (instr[24] == 1'b1) begin
@@ -109,6 +131,12 @@ module arm7tdmis_decoder
 
             default: c = INSTR_UNDEF;
         endcase
+
+        // ARMv4 defines cond=1111 as UNPREDICTABLE. ARMv5+ reuses it for
+        // unconditional extensions, none of which exist on ARM7TDMI-S.
+        // The selected deterministic policy is a precise Undefined trap.
+        if (instr[31:28] == 4'hF)
+            c = INSTR_UNDEF;
     end
 
     // ---- Field extraction. Most fields just slice the instruction word;
