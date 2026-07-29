@@ -24,6 +24,8 @@ module arm7tdmis_reset_multicycle_matrix_tb
 
     logic nRESET;
     logic CLKEN;
+    logic nFIQ;
+    logic inject_abort;
     logic CPA;
     logic CPB;
     logic [31:0] ADDR;
@@ -57,7 +59,7 @@ module arm7tdmis_reset_multicycle_matrix_tb
         .nRESET,
         .CFGBIGEND        (1'b0),
         .nIRQ             (1'b1),
-        .nFIQ             (1'b1),
+        .nFIQ,
         .ABORT,
         .ADDR,
         .WRITE,
@@ -110,7 +112,7 @@ module arm7tdmis_reset_multicycle_matrix_tb
         .WDATA,
         .RDATA,
         .ABORT,
-        .inject_abort     (1'b0)
+        .inject_abort
     );
 
     int unsigned errors;
@@ -139,7 +141,8 @@ module arm7tdmis_reset_multicycle_matrix_tb
 
     function automatic logic [31:0] target_opcode(input int target);
         unique case (target)
-            1, 10:     return 32'hE590_3000; // LDR r3,[r0]
+            1:         return 32'hE580_3000; // STR r3,[r0]
+            10:        return 32'hE590_3000; // LDR r3,[r0]
             2, 8:      return 32'hE8B0_000E; // LDMIA r0!,{r1-r3}
             3, 4, 11:  return 32'hE100_3091; // SWP r3,r1,[r0]
             5:         return 32'hE0C4_3291; // UMULL r3,r4,r1,r2
@@ -398,18 +401,38 @@ module arm7tdmis_reset_multicycle_matrix_tb
             fail(target, "target multicycle state was not reached");
 
         // Stop in the selected state, then assert reset away from an edge.
+        // The S_DDATA row deliberately keeps CLKEN active long enough to
+        // present a live STR Data Abort together with FIQ. Reset must
+        // dominate both before their common sampling edge.
         @(negedge CLK);
-        CLKEN = 1'b0;
+        if (target != 1)
+            CLKEN = 1'b0;
         #1;
         if (u_dut.u_core.state_q !== 4'(target))
             fail(target, $sformatf(
                 "CLKEN freeze lost target state (got %0d)",
                 u_dut.u_core.state_q));
+        if (target == 1) begin
+            nFIQ        = 1'b0;
+            inject_abort = 1'b1;
+            #1;
+            if (!ABORT
+                || !u_dut.u_core.data_abort_now
+                || !u_dut.u_core.dabt_fires)
+                fail(target, "DABT+FIQ reset-priority collision was not live");
+        end
         nRESET = 1'b0;
         #1;
         if (u_dut.core_nreset !== 1'b0)
             fail(target, "external assertion did not clear reset synchronizer asynchronously");
+        if (u_dut.u_core.any_exc_fires
+            || u_dut.u_core.data_abort_now
+            || u_dut.u_core.dbg_exception_entry)
+            fail(target, "exception event remained asserted under reset");
         check_reset_bus(target);
+        CLKEN       = 1'b0;
+        nFIQ        = 1'b1;
+        inject_abort = 1'b0;
 
         // Architectural/control flops reset on the first clock regardless
         // of CLKEN. Keep nRESET low for three complete clocks, exceeding
@@ -431,6 +454,8 @@ module arm7tdmis_reset_multicycle_matrix_tb
         cases_run = 0;
         nRESET    = 1'b0;
         CLKEN     = 1'b0;
+        nFIQ      = 1'b1;
+        inject_abort = 1'b0;
         CPA       = 1'b1;
         CPB       = 1'b1;
 
