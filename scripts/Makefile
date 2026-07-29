@@ -32,7 +32,12 @@ RUN_ARTIFACTS  := cycle.csv waves.fst
 
 UNIT_TESTS := regfile psr reset_sync shifter alu multiplier condition decoder jtag_tap ice_rt
 
-INTEG_TESTS := umull umlal cp15_main_id cp14_dcc vector_catch abort irq fiq ldm_pc pabt ldm_abort cycles swi undef thumb
+INTEG_TESTS := umull umlal cp15_main_id cp14_dcc vector_catch abort irq fiq ldm_pc pabt ldm_abort cycles swi undef thumb bx_interwork
+
+INTEG_COMMON_SRCS := \
+	../tb/integration/arm7tdmis_memory.sv \
+	../tb/integration/arm7tdmis_assertions.sv \
+	../tb/integration/arm7tdmis_test_fixture.sv
 
 .PHONY: all lint lint-tb sim run wave clean help regress \
         $(addprefix unit-, $(UNIT_TESTS)) unit \
@@ -86,7 +91,7 @@ integ-$(1):
 	$$(VERILATOR) $$(VFLAGS_BUILD) -Wno-SYNCASYNCNET -Wno-UNOPTFLAT \
 	    --top-module arm7tdmis_$(1)_tb \
 	    --Mdir $$(OBJ_DIR)/integ_$(1) -f $$(SIM_F) \
-	    ../tb/integration/arm7tdmis_memory.sv \
+	    $$(INTEG_COMMON_SRCS) \
 	    ../tb/integration/arm7tdmis_$(1)_tb.sv
 	./$$(OBJ_DIR)/integ_$(1)/Varm7tdmis_$(1)_tb
 endef
