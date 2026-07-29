@@ -121,7 +121,7 @@ regress-quick:
 	    --integration-tests "$(INTEG_TESTS)"
 
 harness-unit:
-	PYTHONPATH=. $(PYTHON) -m unittest -v tests/test_regression_harness.py
+	PYTHONPATH=. $(PYTHON) -m unittest discover -s tests -p 'test_*.py' -v
 
 harness-self-test:
 	mkdir -p $(OBJ_DIR)
