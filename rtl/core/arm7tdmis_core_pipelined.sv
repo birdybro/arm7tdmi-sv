@@ -1174,7 +1174,9 @@ module arm7tdmis_core_pipelined
         end else if (state_q == S_CP_MRC_WB) begin
             rf_write_addr = cp_mrc_rd_q;
             rf_write_data = cp_mrc_data_q;
-            rf_write_en   = 1'b1;
+            // Rd=r15 is the MRC flags form. It updates CPSR.NZCV below
+            // and must not request a PC write through the register file.
+            rf_write_en   = (cp_mrc_rd_q != 4'd15);
         end else if (any_exc_fires) begin
             rf_write_addr = 4'd14;
             rf_write_data = exception_lr_value;
@@ -1257,12 +1259,16 @@ module arm7tdmis_core_pipelined
 
     wire        flags_from_mul       = mul_writes_flags;
     wire        flags_from_dp_shift  = (state_q == S_DP_SHIFT) && dp_shift_flags_we_q;
+    wire        flags_from_cp_mrc    = (state_q == S_CP_MRC_WB)
+                                     && (cp_mrc_rd_q == 4'd15);
     wire [3:0]  flags_value          = flags_from_mul
                                        ? {mul_n_out, mul_z_out, cpsr.c, cpsr.v}
                                        : alu_flags_merged;
-    assign cpsr_write_en   = writes_flags || msr_to_cpsr || flags_from_dp_shift;
+    assign cpsr_write_en   = writes_flags || msr_to_cpsr
+                           || flags_from_dp_shift || flags_from_cp_mrc;
     assign cpsr_write_data = msr_to_cpsr      ? sh_result
                            : flags_from_dp_shift ? {dp_shift_flags_q, 28'h0}
+                           : flags_from_cp_mrc   ? {cp_mrc_data_q[31:28], 28'h0}
                                                  : {flags_value, 28'h0};
     assign cpsr_write_mask = msr_to_cpsr ? dec.msr_field_mask : 4'b1000;
 
@@ -1368,7 +1374,12 @@ module arm7tdmis_core_pipelined
                 if (state_q == S_EXEC
                     && (external_cp_busy || external_cp_ready)) begin
                     cp_instr_pc_q    <= de_q.pc;
-                    cp_mcr_data_q    <= rf_rc_data;
+                    // MCR names r15 as a source, unlike an ordinary
+                    // register read: the transferred value is this
+                    // instruction's address plus 12.
+                    cp_mcr_data_q    <= (dec.rd == 4'd15)
+                                      ? (de_q.pc + 32'd12)
+                                      : rf_rc_data;
                     cp_mrc_rd_q      <= dec.rd;
                     cp_wait_is_mcr_q <= external_cp_is_mcr;
                     cp_wait_is_mrc_q <= external_cp_is_mrc;
