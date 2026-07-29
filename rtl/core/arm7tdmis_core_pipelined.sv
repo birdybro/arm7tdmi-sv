@@ -1233,9 +1233,9 @@ module arm7tdmis_core_pipelined
                               || (cp_ls_response_q
                                   && (cp_ls_data_state
                                       || cp_ls_cleanup_state));
-    wire external_data_abort_now = CLKEN && ABORT
+    wire external_data_abort_now = nRESET && CLKEN && ABORT
                                  && active_data_response;
-    wire debug_data_abort_now = CLKEN && dbg_watchpoint_abort
+    wire debug_data_abort_now = nRESET && CLKEN && dbg_watchpoint_abort
                               && active_data_response;
     wire data_abort_now = external_data_abort_now || debug_data_abort_now;
 
@@ -1304,8 +1304,9 @@ module arm7tdmis_core_pipelined
         end
     end
 
-    wire any_exc_fires    = swi_fires || undef_fires || irq_fires || fiq_fires
-                         || pabt_fires || dabt_fires;
+    wire any_exc_fires    = nRESET
+                         && (swi_fires || undef_fires || irq_fires || fiq_fires
+                             || pabt_fires || dabt_fires);
     wire cp_wait_interrupt_fires = (state_q == S_CP_WAIT)
                                  && (irq_fires || fiq_fires);
 
