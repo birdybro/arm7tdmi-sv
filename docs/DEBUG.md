@@ -62,9 +62,12 @@ Read of addr 0x01 returns a synthesized value, not the RAM slot:
 [4] TBIT          = watch_tbit (= CPSR.T)
 [3] TRANS[1]      = live core bus TRANS[1]
 [2] IFEN          = ifen output (computed locally)
-[1] DBGRQ synced  = dbg_rq_synced (2-flop sync chain)
-[0] DBGACK        = dbg_ack output
+[1] DBGRQ         = synchronous external DBGRQ input
+[0] DBGACKI       = internal debug-state acknowledge
 ```
+
+Debug Control bit 0 can force the external `DBGACK` pin, but does not alter
+Debug Status bit 0.
 
 ## Watchpoint comparators
 
@@ -148,7 +151,8 @@ Trap fires when `!watch_nopc` (opcode fetch) AND `watch_addr` matches one of the
 
 `halt_entry_req` = any of (gated by DBGEN):
 - an aligned data watchpoint from WP0/WP1 or external `DBGBREAK`
-- `DBGRQI` = force-DBGRQ (ctrl[1]) OR synced external `DBGRQ`
+- `DBGRQI` = Run-Test/Idle-latched force-DBGRQ (ctrl[1]) OR synchronous
+  external `DBGRQ`
 
 WP0/WP1 or external opcode breakpoints do not use the generic request path:
 they are carried as tags with the fetched instruction and stop only if that
@@ -194,7 +198,7 @@ nFIQ_eff = nFIQ | ~ifen
 
 Per §5.19.2 IRQ/FIQ are forced disabled internally during debug-state regardless of CPSR.I/F — that's the `DBGACKI` term doing it.
 
-## Current debug-input synchronization
+## Debug-input sampling
 
 `DBGBREAK` is sampled on the rising edge with the address/control phase and
 carried with that transaction. Opcode pulses become flushable pipeline tags;
@@ -202,11 +206,13 @@ data pulses remain pending through the marked instruction's completion boundary.
 `tb/integration/arm7tdmis_debug_external_break_tb.sv` covers one-cycle opcode
 and final-LDM-beat pulses, restart, completion ordering, and entry cause.
 
-The current implementation still passes DBGRQ through a CLKEN-qualified two-flop
-chain with asynchronous DBGnTRST clear. That describes the RTL; Appendix B says
-the ARM7TDMI-S soft-core DBGRQ input must instead be synchronized externally.
-The remaining DBGRQ/control-register sampling work and the published synchronous
-FPGA transport remain open under `DBG-001` and `JTAG-004`.
+Appendix B defines the ARM7TDMI-S soft-core `DBGRQ` input as synchronous to
+`CLK`; an integrator must synchronize an asynchronous board-level source before
+driving it. Debug Control bit 1 passes through a latch that opens only in TAP
+Run-Test/Idle, matching Figure 5-17 and §5.24.2. Debug Status bit 1 reports the
+external synchronous input, while bit 0 reports internal `DBGACKI` rather than
+the force-modified external pin. These distinctions are covered by
+`tb/integration/arm7tdmis_debug_control_sync_tb.sv`.
 
 ## JTAG TAP
 

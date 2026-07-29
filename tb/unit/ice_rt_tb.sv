@@ -69,6 +69,7 @@ module ice_rt_tb
         .core_breakpoint_execute(1'b0),
         .dbg_rq_in          (dbg_rq_in),
         .dbg_break_in       (dbg_break_in),
+        .tap_run_idle       (1'b0),
         .tap_restart_req    (tap_restart_req),
         .tap_chain1_capture (1'b0),
         .chain1_capture_break(tb_chain1_capture_break),

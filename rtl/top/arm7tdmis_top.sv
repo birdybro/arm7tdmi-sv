@@ -219,6 +219,7 @@ module arm7tdmis_top
         .core_breakpoint_execute(ice_breakpoint_execute),
         .dbg_rq_in          (DBGRQ),
         .dbg_break_in       (DBGBREAK),    // synchronous, bus-phase aligned
+        .tap_run_idle       (tap_run_idle),
         .tap_restart_req    (tap_restart_req),
         .tap_chain1_capture (tap_chain1_capture),
         .chain1_capture_break(ice_chain1_capture_break),
@@ -278,6 +279,7 @@ module arm7tdmis_top
     ir_e          tap_current_ir;
     logic         tap_in_shift_dr;
     logic         tap_in_update_dr;
+    logic         tap_run_idle;
     logic         tap_in_capture_dr;
     logic [4:0]   ice_scan_addr;
     logic [37:0]  ice_scan_wdata;
@@ -472,6 +474,7 @@ module arm7tdmis_top
         .in_shift_dr      (tap_in_shift_dr),
         .in_update_dr     (tap_in_update_dr),
         .in_capture_dr    (tap_in_capture_dr),
+        .tap_run_idle     (tap_run_idle),
         .ice_scan_addr    (ice_scan_addr),
         .ice_scan_wdata   (ice_scan_wdata),
         .ice_scan_we      (ice_scan_we),

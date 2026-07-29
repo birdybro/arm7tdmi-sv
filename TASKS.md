@@ -2575,9 +2575,11 @@ number of cycles spent in an internal FSM state.
   two-flop policy.
   Same-edge external DBGBREAK sampling, opcode pipeline tagging/restart, and a
   final-beat LDM data watchpoint are covered by
-  `tb/integration/arm7tdmis_debug_external_break_tb.sv`. The soft-core DBGRQ path,
-  control-bit-1 Run-Test/Idle synchronization, status semantics, and remaining
-  simultaneous-priority cases keep this item open.
+  `tb/integration/arm7tdmis_debug_external_break_tb.sv`. Synchronous external
+  DBGRQ sampling, control-bit-1 Run-Test/Idle synchronization, internal-DBGACKI
+  status semantics, INTDIS, register width, and RAZ behavior are covered by
+  `tb/integration/arm7tdmis_debug_control_sync_tb.sv`. Remaining simultaneous-
+  priority cases keep this item open.
 - [ ] **DBG-002:** Feed Debug Status TRANS from the actual `TRANS[1]`, not PROT.
   Align address/control and read/write data before data-dependent watchpoint comparison.
 - [ ] **DBG-003:** Implement exact WP0/WP1 value/mask, XNOR, size, read/write,

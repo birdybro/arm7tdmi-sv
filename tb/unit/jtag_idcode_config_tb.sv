@@ -31,6 +31,7 @@ module jtag_idcode_config_tb
     logic in_shift_dr;
     logic in_update_dr;
     logic in_capture_dr;
+    logic tap_run_idle;
     logic [4:0] ice_scan_addr;
     logic [37:0] ice_scan_wdata;
     logic ice_scan_we;
@@ -57,6 +58,7 @@ module jtag_idcode_config_tb
         .in_shift_dr,
         .in_update_dr,
         .in_capture_dr,
+        .tap_run_idle,
         .ice_scan_addr,
         .ice_scan_wdata,
         .ice_scan_we,
@@ -71,6 +73,10 @@ module jtag_idcode_config_tb
         .ice_inject_we,
         .tap_restart_req
     );
+
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire _unused_tap_run_idle = tap_run_idle;
+    /* verilator lint_on UNUSEDSIGNAL */
 
     task automatic tck(input logic tms, input logic tdi);
         DBGTMS = tms;

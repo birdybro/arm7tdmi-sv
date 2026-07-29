@@ -41,6 +41,7 @@ module arm7tdmis_jtag_tap
     output logic        in_shift_dr,
     output logic        in_update_dr,
     output logic        in_capture_dr,
+    output logic        tap_run_idle,
 
     // ---- Scan chain 2 (38-bit) — EmbeddedICE-RT register access.
     // Active when held IR == INTEST AND scan_n_q == 2. The 38-bit data
@@ -269,6 +270,7 @@ module arm7tdmis_jtag_tap
     assign in_shift_dr   = (tap_q == SDR);
     assign in_update_dr  = (tap_q == UDR);
     assign in_capture_dr = (tap_q == CDR);
+    assign tap_run_idle  = (tap_q == RTI);
 
     // ---- Chain 2 outputs to the ICE-RT module.
     assign ice_scan_addr  = {dr_shift_q[1], dr_shift_q[2],

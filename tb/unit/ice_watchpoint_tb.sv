@@ -90,6 +90,7 @@ module ice_watchpoint_tb;
         .core_breakpoint_execute(1'b0),
         .dbg_rq_in          (1'b0),
         .dbg_break_in       (1'b0),
+        .tap_run_idle       (1'b0),
         .tap_restart_req    (1'b0),
         .tap_chain1_capture (1'b0),
         .chain1_capture_break(tb_chain1_capture_break),

@@ -20,9 +20,10 @@ module arm7tdmis_ice_rt
     input  logic        core_trans1,       // live core TRANS[1] for Debug Status[3]
     input  logic        core_halt_boundary,// current instruction commits this edge
     input  logic        core_breakpoint_execute,
-    input  logic        dbg_rq_in,         // §22: external DBGRQ pin synced
-                                            //      (used for Debug Status[1])
+    input  logic        dbg_rq_in,         // Appendix B: synchronous soft-
+                                            //      macrocell DBGRQ input
     input  logic        dbg_break_in,      // §22: external DBGBREAK pin
+    input  logic        tap_run_idle,      // TAP is in Run-Test/Idle
     input  logic        tap_restart_req,   // §22: TAP RESTART instruction
                                             //      pulse (Update-IR with
                                             //      IR_RESTART loaded)
@@ -212,18 +213,18 @@ module arm7tdmis_ice_rt
     assign dcc_tx_empty = !dcc_tx_full_q;
     assign dcc_rx_full  = dcc_rx_full_q;
 
-    // The current DBGRQ path is sampled separately below. DBGBREAK is not
-    // passed through this path: on ARM7TDMI-S it is synchronous to CLK and
-    // must remain aligned with the memory access it marks (TRM §8.1.4).
-    logic [1:0] dbg_rq_sync_q;
+    // Debug Control bit 1 does not drive DBGRQI directly. Figure 5-17 puts
+    // it behind a latch that opens only while the TAP is in Run-Test/Idle.
+    // This is debug-side state and therefore is intentionally independent
+    // of the core CLKEN. The external soft-macrocell DBGRQ input is already
+    // synchronous to CLK and must be synchronized by its integrator.
+    logic ice_dbgrq_force_q;
     always_ff @(posedge CLK or negedge DBGnTRST) begin
-        if (!DBGnTRST) begin
-            dbg_rq_sync_q <= 2'b00;
-        end else if (CLKEN) begin
-            dbg_rq_sync_q <= {dbg_rq_sync_q[0], dbg_rq_in};
-        end
+        if (!DBGnTRST)
+            ice_dbgrq_force_q <= 1'b0;
+        else if (tap_run_idle)
+            ice_dbgrq_force_q <= regs[DEBUG_CTRL_ADDR][1];
     end
-    wire dbg_rq_synced = dbg_rq_sync_q[1];
 
     // §22 / §30.22.4: Debug-state FSM. Monitor mode is a comparator-output
     // policy, not a halted core state: enabled breakpoint/watchpoint hits
@@ -234,7 +235,7 @@ module arm7tdmis_ice_rt
     // Entry conditions (any of):
     //   - dbg_break_internal (WP/VC hit, see above)
     //   - an aligned data watchpoint, including external DBGBREAK
-    //   - DBGRQI = Debug Control[1] OR dbg_rq_synced
+    //   - DBGRQI = RTI-latched Debug Control[1] OR synchronous dbg_rq_in
     // All gated by DBGEN.
     //
     // Exit: TAP RESTART instruction observed (tap_restart_req pulse).
@@ -248,6 +249,8 @@ module arm7tdmis_ice_rt
     logic         system_speed_pending_q;
     logic         system_speed_active_q;
     logic [31:0]  system_speed_instr_q;
+    wire          in_debug_halt = (dbg_state_q == DBG_HALTED);
+    wire          dbgacki = in_debug_halt && !system_speed_active_q;
 
     // Bit 33 on one scan arms the following pipeline word. Only memory
     // transfers are legal system-speed instructions (TRM §5.16.2).
@@ -263,8 +266,7 @@ module arm7tdmis_ice_rt
 
     assign monitor_mode = DBGEN && regs[DEBUG_CTRL_ADDR][4];
 
-    wire ice_dbgrq_force = regs[DEBUG_CTRL_ADDR][1];
-    wire dbgrqi          = (ice_dbgrq_force || dbg_rq_synced) && DBGEN;
+    wire dbgrqi          = (ice_dbgrq_force_q || dbg_rq_in) && DBGEN;
     wire halt_entry_req  = DBGEN
                          && (watchpoint_halt_pre || dbgrqi);
     wire halt_entry_watchpoint = watchpoint_halt_pre;
@@ -276,15 +278,16 @@ module arm7tdmis_ice_rt
     logic breakpoint_fetch_pre;
 
     // §30.22.5: Debug Status Register (addr 0x01) is read-only and
-    // exposes live signals — TBIT, TRANS[1], IFEN, synced DBGRQ, synced
-    // DBGACK. Override the regs[] read for this address so the debugger
-    // sees current state rather than whatever was written.
+    // exposes live signals — TBIT, TRANS[1], IFEN, synchronous external
+    // DBGRQ, and internal DBGACKI. The force-DBGACK control bit affects
+    // only the external pin. Override the regs[] read for this address so
+    // the debugger sees current state rather than whatever was written.
     wire [4:0] dbg_status = {
         watch_tbit,         // [4] TBIT
         core_trans1,        // [3] live core TRANS[1]
         ifen,               // [2] IFEN
-        dbg_rq_synced,      // [1] synced DBGRQ (2-flop CDC chain)
-        dbg_ack             // [0] DBGACK
+        dbg_rq_in,          // [1] synchronous external DBGRQ
+        dbgacki             // [0] internal DBGACKI
     };
     always_comb begin
         unique case (scan_addr)
@@ -614,8 +617,6 @@ module arm7tdmis_ice_rt
     assign chain1_capture_break = entry_watchpoint_q;
     assign entry_breakpoint = breakpoint_halt_q;
 
-    wire in_debug_halt = (dbg_state_q == DBG_HALTED);
-
     // This is asserted for the final running DBGRQI cycle, before
     // dbg_state_q enters HALTED. Only a debug request has the special
     // §5.3.3 rule that terminates a coprocessor busy-wait immediately.
@@ -703,7 +704,6 @@ module arm7tdmis_ice_rt
     // while the debug-state FSM is in HALTED. Index 0x00 is the Debug
     // Control register.
     wire ice_dbg_ack_forced = regs[DEBUG_CTRL_ADDR][0];
-    wire dbgacki            = in_debug_halt && !system_speed_active_q;
     assign dbg_ack = DBGEN && (ice_dbg_ack_forced || dbgacki);
 
     // §30.22.6: IFEN_to_core = !(INTDIS | DBGACKI). Per TRM §5.19.2 on

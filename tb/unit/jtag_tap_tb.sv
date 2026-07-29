@@ -27,6 +27,7 @@ module jtag_tap_tb
     logic in_shift_dr;
     logic in_update_dr;
     logic in_capture_dr;
+    logic tap_run_idle;
 
     logic [4:0]  ice_scan_addr;
     logic [37:0] ice_scan_wdata;
@@ -52,6 +53,7 @@ module jtag_tap_tb
         .in_shift_dr,
         .in_update_dr,
         .in_capture_dr,
+        .tap_run_idle,
         .ice_scan_addr,
         .ice_scan_wdata,
         .ice_scan_we,
@@ -132,6 +134,8 @@ module jtag_tap_tb
               "DBGnTRST did not asynchronously enter Test-Logic-Reset");
         check(current_ir == IR_IDCODE,
               "DBGnTRST did not asynchronously select IDCODE");
+        check(!tap_run_idle,
+              "Run-Test/Idle observer asserted during TAP reset");
         DBGnTRST = 1'b1;
         #1;
     endtask
@@ -192,6 +196,9 @@ module jtag_tap_tb
         endcase
         check($unsigned(dut.tap_q) == target,
               $sformatf("could not navigate to TAP state %0h", target));
+        check(tap_run_idle == (target == RTI),
+              $sformatf("Run-Test/Idle observer wrong in state %0h",
+                        target));
     endtask
 
     task automatic load_ir(
