@@ -1366,6 +1366,25 @@ module arm7tdmis_core_pipelined
                             ? (de_q.pc + (de_q.thumb ? 32'd2 : 32'd4))
                             : (de_q.pc + 32'd4);
 
+    // Table 7-16 cycle 1 retains the source state and advertises pc+2i.
+    // "pc" is the faulting instruction for synchronous/PABT entry, the
+    // first unexecuted instruction for IRQ/FIQ, and the instruction after
+    // the faulting transfer for DABT.  A busy coprocessor request retains
+    // its own PC after Decode has advanced.  The DABT->FIQ interlock starts
+    // from the unexecuted DABT vector instruction at 0x10.
+    wire [31:0] exception_cycle1_source_pc =
+        fiq_interlock_fires      ? 32'h0000_0010
+      : dabt_fires               ? memory_instr_pc_q
+      : cp_wait_interrupt_fires  ? cp_instr_pc_q
+                                  : de_q.pc;
+    wire [31:0] exception_cycle1_addr =
+        fiq_interlock_fires
+        ? 32'h0000_0018
+        : exception_cycle1_source_pc
+          + (dabt_fires
+             ? (cpsr.t ? 32'd6 : 32'd12)
+             : (cpsr.t ? 32'd4 : 32'd8));
+
     always_ff @(posedge CLK) begin
         if (!nRESET) begin
             debug_irq_pending_q <= 1'b0;
@@ -1388,10 +1407,21 @@ module arm7tdmis_core_pipelined
     // flush starts the refill; latch_into_fd marks the response edge that
     // captures that first vector instruction. ICE freezes the core after
     // this edge, before fd_q can advance into Execute.
+    logic exception_vector_first_q;
     logic debug_exception_refill_q;
     assign dbg_exception_entry = any_exc_fires;
     assign dbg_exception_vector_ready = debug_exception_refill_q
                                       && latch_into_fd;
+    always_ff @(posedge CLK) begin
+        if (!nRESET)
+            exception_vector_first_q <= 1'b0;
+        else if (CLKEN) begin
+            if (any_exc_fires)
+                exception_vector_first_q <= 1'b1;
+            else if (exception_vector_first_q && issue_fetch)
+                exception_vector_first_q <= 1'b0;
+        end
+    end
     always_ff @(posedge CLK) begin
         if (!nRESET)
             dbg_exception_vector_pc <= 32'h0000_0000;
@@ -2460,6 +2490,31 @@ module arm7tdmis_core_pipelined
             SIZE  = early_flush_t ? 2'(SIZE_HALFWORD) : 2'(SIZE_WORD);
             PROT  = {early_flush_priv, 1'b0};
             WRITE = WRITE_READ;
+        end
+
+        // TRM Table 7-16 exception entry is a special three-cycle bus
+        // sequence.  Cycle 1 remains in the old state and advertises
+        // pc+2i as N even though its returned opcode is discarded.
+        // Cycle 2 is the architecturally specified merged S fetch of Xn;
+        // recording that phase in bus history naturally makes Xn+4 S in
+        // cycle 3.  This explicit exception rule is the one allowed
+        // discontinuity from ordinary address-history burst inference.
+        if (any_exc_fires) begin
+            ADDR  = exception_cycle1_addr;
+            WRITE = WRITE_READ;
+            SIZE  = fetch_size_w;
+            PROT  = {is_priv, 1'b0};
+            LOCK  = LOCK_FREE;
+            TRANS = 2'(TRANS_N);
+            WDATA = 32'h0000_0000;
+        end else if (exception_vector_first_q && issue_fetch) begin
+            ADDR  = fetch_pc_q;
+            WRITE = WRITE_READ;
+            SIZE  = 2'(SIZE_WORD);
+            PROT  = 2'(PROT_OPC_PRIV);
+            LOCK  = LOCK_FREE;
+            TRANS = 2'(TRANS_S);
+            WDATA = 32'h0000_0000;
         end
 
         // Debug halt isolates the core from the system. TRM §5.3.4
