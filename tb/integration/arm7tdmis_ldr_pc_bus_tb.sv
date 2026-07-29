@@ -202,11 +202,15 @@ module arm7tdmis_ldr_pc_bus_tb
         check_bus(row, "first target fetch",
                   ADDR, WRITE, SIZE, PROT, LOCK, TRANS,
                   TARGET, opcode_prot(row), 2'(TRANS_S));
+        if (!u_dut.u_core.load_pc_refill_first_q)
+            fail(row, "first-target refill latch was not retained");
 
         @(negedge CLK);
         check_bus(row, "following target fetch",
                   ADDR, WRITE, SIZE, PROT, LOCK, TRANS,
                   TARGET + 32'd4, opcode_prot(row), 2'(TRANS_S));
+        if (u_dut.u_core.load_pc_refill_first_q)
+            fail(row, "first-target refill latch did not clear");
 
         repeat (12) @(negedge CLK);
         if (u_dut.u_core.u_regfile.regs[7] !== 32'h0000_0001)
@@ -215,10 +219,50 @@ module arm7tdmis_ldr_pc_bus_tb
             fail(row, "discarded successor retired");
     endtask
 
+    task automatic check_reset_during_refill;
+        int unsigned wait_cycles;
+
+        @(negedge CLK);
+        nRESET = 1'b0;
+        repeat (4) @(posedge CLK);
+        setup_row(0);
+        @(negedge CLK);
+        nRESET = 1'b1;
+
+        wait_cycles = 0;
+        while (!(u_dut.u_core.state_q == 4'd10
+                 && u_dut.u_core.flush
+                 && u_dut.u_core.flush_target_pc == TARGET)) begin
+            @(negedge CLK);
+            wait_cycles++;
+            if (wait_cycles > 100)
+                fail(0, "reset case never reached LDR-pc redirect");
+        end
+
+        @(negedge CLK);
+        if (!u_dut.u_core.load_pc_refill_first_q
+            || ADDR !== TARGET || TRANS !== 2'(TRANS_S))
+            fail(0, "reset case did not reach first target refill");
+
+        #1;
+        nRESET = 1'b0;
+        #1;
+        if (u_dut.core_nreset !== 1'b0)
+            fail(0, "reset did not assert asynchronously during refill");
+        @(posedge CLK);
+        #1;
+        if (u_dut.u_core.load_pc_refill_first_q !== 1'b0
+            || u_dut.u_core.fetch_pc_q !== 32'h0000_0000
+            || u_dut.u_core.inflight_valid_q !== 1'b0
+            || TRANS !== 2'(TRANS_I))
+            fail(0, "reset did not clear the retained refill state");
+    endtask
+
     initial begin
         for (int row = 0; row < ROW_COUNT; row++)
             run_row(row);
-        $display("[ldr_pc_bus] PASS (%0d reset-isolated mode rows)",
+        check_reset_during_refill();
+        $display("[ldr_pc_bus] PASS (%0d mode rows + refill reset)",
                  ROW_COUNT);
         $finish;
     end
