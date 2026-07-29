@@ -206,6 +206,24 @@ module arm7tdmis_cp14_dcc_tb
         // CPU writes c1: TX becomes full (DBGCOMMTX goes LOW).
         await_pin(1'b0, 1'b0, "DBGCOMMTX LOW after CPU TX write");
 
+        // DBGEN gates both externally visible status pins without consuming
+        // the pending processor word. Re-enabling debug must expose the
+        // unchanged full-TX state immediately.
+        DBGEN = 1'b0;
+        #1;
+        if (DBGCOMMTX !== 1'b0 || DBGCOMMRX !== 1'b0) begin
+            $display("[cp14_dcc] FAIL DBGEN=0 did not gate pending-TX pins: %b/%b",
+                     DBGCOMMTX, DBGCOMMRX);
+            errors = errors + 1;
+        end
+        DBGEN = 1'b1;
+        #1;
+        if (DBGCOMMTX !== 1'b0 || DBGCOMMRX !== 1'b0) begin
+            $display("[cp14_dcc] FAIL DBGEN restore lost pending-TX state: %b/%b",
+                     DBGCOMMTX, DBGCOMMRX);
+            errors = errors + 1;
+        end
+
         // Submit a host read of DCC data (0x05). The following access shifts
         // out that response and consumes the pending TX word.
         chain2_request(1'b0, 5'h05, 32'h0, captured);
@@ -232,10 +250,28 @@ module arm7tdmis_cp14_dcc_tb
             errors = errors + 1;
         end
 
-        // Deposit one debugger-to-processor word. This sets R and the core
-        // polling loop reads/consumes it.
+        // Deposit one debugger-to-processor word while the CPU is stalled so
+        // the full-RX pin state can also be checked across DBGEN gating.
+        CLKEN = 1'b0;
         chain2_request(1'b1, 5'h05, HOST_RX_DATA, captured);
         await_pin(1'b1, 1'b1, "DBGCOMMRX HIGH after host RX write");
+        DBGEN = 1'b0;
+        #1;
+        if (DBGCOMMTX !== 1'b0 || DBGCOMMRX !== 1'b0) begin
+            $display("[cp14_dcc] FAIL DBGEN=0 did not gate pending-RX pins: %b/%b",
+                     DBGCOMMTX, DBGCOMMRX);
+            errors = errors + 1;
+        end
+        DBGEN = 1'b1;
+        #1;
+        if (DBGCOMMTX !== 1'b1 || DBGCOMMRX !== 1'b1) begin
+            $display("[cp14_dcc] FAIL DBGEN restore lost pending-RX state: %b/%b",
+                     DBGCOMMTX, DBGCOMMRX);
+            errors = errors + 1;
+        end
+
+        // Releasing the processor lets its polling loop consume the RX word.
+        CLKEN = 1'b1;
         await_pin(1'b0, 1'b1, "DBGCOMMRX LOW after CPU RX read");
 
         // Read control over JTAG after both transfers. A second request
