@@ -204,28 +204,31 @@ module arm7tdmis_core_pipelined
     // their data is on the bus, so an LDM iterates 1 cycle per beat
     // and LDR/STR's data cycle prefetches the next instruction for free.
 
-    typedef enum logic [3:0] {
-        S_EXEC       = 4'd0,
-        S_DDATA      = 4'd1,    // LDR/STR data cycle
-        S_BLOCK_DATA = 4'd2,    // LDM/STM beat iteration
-        S_SWP_RDATA  = 4'd3,    // SWP read data + drive write addr
-        S_SWP_WDATA  = 4'd4,    // SWP write data + drive next fetch
-        S_MULL_HI    = 4'd5,    // §9d: 64-bit multiply RdHi writeback cycle
-        S_MUL_BUSY   = 4'd6,    // §18: multiplier I cycles (early termination m)
-        S_MULL_ACC   = 4'd7,    // UMLAL/SMLAL: read RdHi for accumulator,
+    typedef enum logic [4:0] {
+        S_EXEC       = 5'd0,
+        S_DDATA      = 5'd1,    // LDR/STR data cycle
+        S_BLOCK_DATA = 5'd2,    // LDM/STM beat iteration
+        S_SWP_RDATA  = 5'd3,    // SWP read data + drive write addr
+        S_SWP_WDATA  = 5'd4,    // SWP write data + drive next fetch
+        S_MULL_HI    = 5'd5,    // §9d: 64-bit multiply RdHi writeback cycle
+        S_MUL_BUSY   = 5'd6,    // §18: multiplier I cycles (early termination m)
+        S_MULL_ACC   = 5'd7,    // UMLAL/SMLAL: read RdHi for accumulator,
                                  //              commit RdLo result
-        S_BLOCK_WB   = 4'd8,    // LDM/STM Rn-writeback cycle (deferred from
+        S_BLOCK_WB   = 5'd8,    // LDM/STM Rn-writeback cycle (deferred from
                                  // S_EXEC so abort restart preserves Rn)
-        S_DP_SHIFT   = 4'd9,    // §18: DP shift-by-reg I cycle (TRM 1S+1I)
-        S_LOAD_WB    = 4'd10,   // §18: LDR/LDRB writeback I cycle (TRM 1S+1N+1I)
-        S_SWP_WB     = 4'd11,   // §18: SWP Rd writeback I cycle (TRM 1S+2N+1I)
-        S_CP_WAIT    = 4'd12,   // external CP accepted but busy
-        S_CP_MCR_DATA = 4'd13,  // ARM register -> CP data phase
-        S_CP_MRC_DATA = 4'd14,  // CP -> ARM register data phase
-        S_CP_MRC_WB   = 4'd15   // MRC register writeback/fetch phase
+        S_DP_SHIFT   = 5'd9,    // §18: DP shift-by-reg I cycle (TRM 1S+1I)
+        S_LOAD_WB    = 5'd10,   // §18: LDR/LDRB writeback I cycle (TRM 1S+1N+1I)
+        S_SWP_WB     = 5'd11,   // §18: SWP Rd writeback I cycle (TRM 1S+2N+1I)
+        S_CP_WAIT    = 5'd12,   // external CP accepted but busy
+        S_CP_MCR_DATA = 5'd13,  // ARM register -> CP data phase
+        S_CP_MRC_DATA = 5'd14,  // CP -> ARM register data phase
+        S_CP_MRC_WB   = 5'd15,  // MRC register writeback/fetch phase
+        S_UNDEF_WAIT  = 5'd16   // Table 7-22 Undefined recognition I cycle
     } state_e;
 
     state_e state_q;
+    logic [31:0] undef_instr_pc_q;
+    logic        undef_instr_thumb_q;
 
     // External coprocessor register-transfer state survives the initial
     // S_EXEC edge, where Decode advances to the following instruction.
@@ -948,6 +951,8 @@ module arm7tdmis_core_pipelined
     always_comb begin
         unique case (state_q)
             S_EXEC:       state_next = ls_take_data_cycle    ? S_DDATA
+                                     : undef_recognition_starts
+                                                            ? S_UNDEF_WAIT
                                      : block_take_cycle      ? S_BLOCK_DATA
                                      : swp_take_cycle        ? S_SWP_RDATA
                                      : mull_accum_take_cycle ? S_MULL_ACC
@@ -1011,6 +1016,7 @@ module arm7tdmis_core_pipelined
                                                      : S_CP_MRC_DATA)
                                       : S_CP_MRC_WB;
             S_CP_MRC_WB:   state_next = S_EXEC;
+            S_UNDEF_WAIT:   state_next = S_EXEC;
             default:      state_next = S_EXEC;
         endcase
     end
@@ -1176,6 +1182,27 @@ module arm7tdmis_core_pipelined
                           || swp_policy_undef))
                            || cond_is_nv
                            || cp_undef_trap);
+    // Table 7-22 recognizes Undefined over an extra I cycle before
+    // entering the vector sequence. Resolve higher-priority events from
+    // raw boundary inputs here, independently of state_next, so this FSM
+    // decision cannot form a combinational loop through interrupt_pending.
+    wire undef_recognition_starts = undef_pending
+                                  && !pabt_pending
+                                  && !fiq_interlock_fires
+                                  && !debug_fiq_pending_q
+                                  && !debug_irq_pending_q
+                                  && (nFIQ || cpsr.f)
+                                  && (nIRQ || cpsr.i);
+
+    always_ff @(posedge CLK) begin
+        if (!nRESET) begin
+            undef_instr_pc_q    <= 32'h0000_0000;
+            undef_instr_thumb_q <= 1'b0;
+        end else if (CLKEN && undef_recognition_starts) begin
+            undef_instr_pc_q    <= de_q.pc;
+            undef_instr_thumb_q <= de_q.thumb;
+        end
+    end
     // A halt-mode watchpoint or DBGRQ has priority over an interrupt, but
     // §5.19.2 requires the core to remember the interrupt and enter debug
     // in that exception's mode. Retain a one-cycle request sampled during
@@ -1299,7 +1326,7 @@ module arm7tdmis_core_pipelined
     wire irq_fires   = irq_pending && !dabt_fires && !fiq_pending;
     wire pabt_fires  = pabt_pending && !dabt_fires
                     && !fiq_pending && !irq_pending;
-    wire undef_fires = undef_pending && !dabt_fires
+    wire undef_fires = (state_q == S_UNDEF_WAIT) && !dabt_fires
                     && !fiq_pending && !irq_pending && !pabt_pending;
     wire swi_fires   = swi_pending && !dabt_fires
                     && !fiq_pending && !irq_pending
@@ -1365,7 +1392,9 @@ module arm7tdmis_core_pipelined
       : dabt_fires          ? (memory_instr_pc_q + 32'd8)
       : cp_wait_interrupt_fires
                             ? (cp_instr_pc_q + 32'd4)
-      : (swi_fires || undef_fires)
+      : undef_fires         ? (undef_instr_pc_q
+                               + (undef_instr_thumb_q ? 32'd2 : 32'd4))
+      : swi_fires
                             ? (de_q.pc + (de_q.thumb ? 32'd2 : 32'd4))
                             : (de_q.pc + 32'd4);
 
@@ -2523,6 +2552,19 @@ module arm7tdmis_core_pipelined
             end
             default: ;
         endcase
+
+        // Table 7-22 cycle 1: retain the old instruction-stream controls,
+        // advertise pc+2i as an internal phase, and deassert CPnI on a
+        // refused coprocessor instruction. The following cycle enters the
+        // ordinary vector/N, vector+4/S, vector+8/S exception sequence.
+        if (undef_recognition_starts) begin
+            ADDR  = de_q.pc + (de_q.thumb ? 32'd4 : 32'd8);
+            WRITE = WRITE_READ;
+            SIZE  = de_q.thumb ? 2'(SIZE_HALFWORD) : 2'(SIZE_WORD);
+            PROT  = {is_priv, 1'b0};
+            LOCK  = LOCK_FREE;
+            TRANS = 2'(TRANS_I);
+        end
 
         // Direct redirects advertise target/N in their commit cycle. The
         // following target+i and target+2i phases are ordinary S burst
