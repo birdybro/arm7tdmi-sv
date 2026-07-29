@@ -32,7 +32,7 @@ RUN_ARTIFACTS  := cycle.csv waves.fst
 
 UNIT_TESTS := regfile psr reset_sync shifter alu multiplier condition decoder thumb_decoder jtag_tap ice_rt dcc
 
-INTEG_TESTS := umull umlal cp15_undef cp14_decode cp14_dcc cp_reg_transfer cpntrans abort_inactive abort_clken endian_data endian_thumb translated_ls cond_suppress reset_clken fetch_sequence bus_burst vector_catch abort irq fiq exception_priority dabt_fiq thumb_exception_lr ldm_pc pabt pabt_pipeline ldm_abort ldm_abort_base_list stm_abort stm_base_list ls_abort_modes swp_read_abort cycles swi undef thumb bx_interwork swpb_data flags_preserve mull_flags
+INTEG_TESTS := umull umlal cp15_undef cp14_decode cp14_dcc cp_reg_transfer cp_reg_r15 cpntrans abort_inactive abort_clken endian_data endian_thumb translated_ls cond_suppress reset_clken fetch_sequence bus_burst vector_catch abort irq fiq exception_priority dabt_fiq thumb_exception_lr ldm_pc pabt pabt_pipeline ldm_abort ldm_abort_base_list stm_abort stm_base_list ls_abort_modes swp_read_abort cycles swi undef thumb bx_interwork swpb_data flags_preserve mull_flags
 
 INTEG_COMMON_SRCS := \
 	../tb/integration/arm7tdmis_memory.sv \
