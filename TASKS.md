@@ -2543,8 +2543,20 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   the defined STM base-lowest rule in all four addressing modes, while
   `arm7tdmis_ldm_pc_tb`, `arm7tdmis_pc_write_alignment_tb`, and the per-beat
   abort/base-list regressions preserve the neighboring return and abort rules.
-- [ ] **ISA-012:** Verify SWP/SWPB data, alignment, endian lanes, register aliasing,
-  atomicity, and abort behavior.
+- [x] **ISA-012:** Verify SWP/SWPB data, alignment, endian lanes, register aliasing,
+  atomicity, and abort behavior. The SWP/SWPB subset of
+  `arm7tdmis_unaligned_access_matrix_tb` covers both widths at all four
+  address suffixes in both endian configurations, including word-read
+  rotation, aligned word-store behavior, byte lanes, data, and both locked
+  transfers. `arm7tdmis_swp_policy_tb` adds 18 reset-per-case rows: distinct
+  operands and the defined Rd=Rm exchange in Supervisor/User modes, plus
+  precise pre-transfer Undefined traps for Rn=Rd, Rn=Rm, and each r15 operand
+  position for both widths. `arm7tdmis_swp_bus_matrix_tb` adds 16 pin-level
+  rows for normal completion, independent read/write stalls, read/write
+  aborts, reset cancellation in either response phase, and DBGRQ between the
+  read and write. Every accepted pair is uninterrupted, same-address,
+  correctly sized, privileged, and locked; cancellation paths prove memory,
+  Rd, handler state, and LOCK release.
 - [ ] **ISA-013:** Prove condition-failed ARM instructions have exactly the documented
   bus cycle and no register, CPSR/SPSR, memory, lock, coprocessor, or exception side
   effect. Include a condition-failed undefined instruction before SWI and PABT.
@@ -2581,9 +2593,13 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
 - [ ] **EXC-006:** Verify single LDR/STR abort behavior for every pre/post-index and
   writeback form: requested base modification still occurs, a load destination is not
   overwritten, and no later side effect leaks from the aborted instruction.
-- [ ] **EXC-007:** Reconcile SWP's read-only abort requirement with the external bus
+- [x] **EXC-007:** Reconcile SWP's read-only abort requirement with the external bus
   contract. Once a read abort occurs, do not issue/commit the write and do not change
-  the destination.
+  the destination. `arm7tdmis_swp_read_abort_tb` independently covers SWP and
+  SWPB read aborts. `arm7tdmis_swp_bus_matrix_tb` repeats those cases and
+  covers write-response aborts: a read abort issues no write address, neither
+  abort commits memory or Rd, the successor is flushed, LR_abt is PC+8, and
+  LOCK is released.
 - [ ] **EXC-008:** Prove PABT metadata follows the fetched instruction and disappears
   when that instruction is flushed by a branch, exception, condition path, or debug
   event.
@@ -2627,8 +2643,13 @@ number of cycles spent in an internal FSM state.
   phase, ignore it in I/C, and retain the sample across later stalls/phases.
 - [ ] **BUS-008:** Verify `PROT[0]` code/data and `PROT[1]` User/privileged for every
   fetch, data access, translated access, exception mode, and debug system-speed access.
-- [ ] **BUS-009:** Hold `LOCK` across both SWP data transfers and release it on all
+- [x] **BUS-009:** Hold `LOCK` across both SWP data transfers and release it on all
   normal, abort, reset, debug, and stall exits.
+  `arm7tdmis_swp_bus_matrix_tb` covers every listed exit independently for
+  SWP and SWPB, stalls each response phase for four clocks while requiring
+  stable pins/state, and proves a mid-pair DBGRQ waits for atomic completion
+  before DBGACK. `arm7tdmis_unaligned_access_matrix_tb` additionally requires
+  exactly two locked accepted transfers for every endian/address suffix.
 - [ ] **BUS-010:** Drive `DMORE` from the current transfer's guaranteed continuation,
   not a loose "block active" flag. Verify first/middle/last/single-beat/stalled/aborted
   LDM and STM.

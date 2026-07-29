@@ -41,7 +41,7 @@ the evidence required to promote a path to VERIFIED are listed in `TASKS.md` §3
 | Load/Store | LDR/STR byte/word Addressing Mode 2 is verified across all P/U/B/W/L and immediate/register rows; alias/r15 policy is directed-tested |
 | Halfword / signed L/S | LDRH/STRH/LDRSH/LDRSB Addressing Mode 3 is verified across every P/U/W and immediate/register row |
 | Block transfer | ARM LDM/STM addressing, list bits, banking, PC restore, base/list, and operand policies are directed-verified; pin-level cycle closure remains |
-| Swap | SWP/SWPB paths and LOCK output exist; atomic/abort/endian closure is missing |
+| Swap | SWP/SWPB data, endian/alignment, alias policy, atomic LOCK, stalls, aborts, reset, and debug interaction are directed-verified |
 | PSR transfer | MRS/MSR register/immediate and field-mask paths exist; privilege/reserved-bit handling is incomplete |
 | Software interrupt | An SWI entry path exists |
 | Coprocessor | Decode classes and pins exist; accepted-operation and busy/data protocols do not |
@@ -110,7 +110,7 @@ The table records current harness expectations:
 | STR / STRB / STRH | 2 | 7-9: 1S+1N |
 | LDM, n regs | n+2 | 7-12: 1S+(n-1)S+1N+1I |
 | STM, n regs | n+1 | 7-15: 1S+(n-1)S+1N |
-| SWP / SWPB | 4 | 7-17: 1S+2N+1I |
+| SWP / SWPB | 4 | 7-15: 1S+2N+1I |
 | MUL | 1+m | 7-19: 1S+mI |
 | MLA | 2+m | 7-19: 1S+(m+1)I |
 | UMULL / SMULL | 2+m | 7-21: 1S+(m+1)I |
@@ -273,6 +273,8 @@ evidence.
 | `single_ls_policy` | Defined load/store aliases and precise-Undefined policy for 14 unsafe operand combinations |
 | `block_ls_matrix` | 256 one-hot P/U/W/L/list-bit rows plus 16 multibeat IA/IB/DA/DB rows |
 | `block_ls_policy` | User-bank/PC/base-list behavior and precise-Undefined policy across 21 rows |
+| `swp_policy` | Defined aliases/modes and precise-Undefined policy for every unsafe SWP/SWPB operand class |
+| `swp_bus_matrix` | Both widths across normal, stall, read/write abort, reset, and mid-pair DBGRQ exits |
 | `abort` | DABT during LDR — Rd preserved, vector entry |
 | `pabt` | PABT propagation via `fd_q.pabort` |
 | `ldm_abort` / `ldm_abort_base_list` | Every abort beat, later-load suppression, Base Updated writeback, and r15 protection |

@@ -108,6 +108,31 @@ the list retains the r4p3-compatible Base Updated result. The independent
 `arm7tdmis_ldm_pc_tb`, and `arm7tdmis_pc_write_alignment_tb` regressions cover
 the adjacent all-addressing-mode, abort, CPSR-restore, and refill rules.
 
+## ARM swap evidence
+
+The SWP/SWPB rows in `arm7tdmis_unaligned_access_matrix_tb` cover both swap
+widths at address low bits 0 through 3 in little- and big-endian
+configurations. They check the ARMv4T word-read rotation and aligned
+word-write rules, all byte lanes, exact address/size/direction, loaded and
+stored data, and exactly two locked accepted transfers.
+
+`arm7tdmis_swp_policy_tb` adds 18 reset-per-case rows. Distinct operands and
+the architecturally defined Rd=Rm exchange execute in both Supervisor and
+User modes. Rn=Rd, Rn=Rm, and r15 in each operand position take the project's
+precise Undefined policy before a data cycle or LOCK assertion. These are
+implementation outcomes for ARMv4T UNPREDICTABLE operands, not architectural
+guarantees.
+
+`arm7tdmis_swp_bus_matrix_tb` runs 16 word/byte rows across normal completion,
+independent read- and write-response CLKEN stalls, read and write Data
+Aborts, reset in either response phase, and DBGRQ between the locked
+transfers. It requires an uninterrupted same-address read/write pair, stable
+pins and state through stalls, correct cancellation/writeback behavior, and
+LOCK release on every exit. A read abort must cancel the write address;
+either abort suppresses Rd and memory modification. The independent
+`arm7tdmis_swp_read_abort_tb`, `arm7tdmis_swpb_data_tb`, cycle, and
+debug-injection tests preserve neighboring behavior.
+
 Functional/line/toggle coverage reporting, mutation testing of architectural
 controls, differential testing, and formal evidence remain separate open
 requirements in `TASKS.md` §31.

@@ -172,6 +172,20 @@ Data Abort and leave the requested modified base visible. Implementation:
 all four transfers, register/store reachability, modified-base writeback,
 r15 protection, exception state, and successor suppression.
 
+## SWP/SWPB Data Abort
+
+A precise abort on the locked read cancels the write address immediately;
+the operation behaves as though it had not executed. An abort reported for
+the write response also suppresses the loaded-value writeback. In either
+case Rd is unchanged, the failed memory operation does not commit, the
+successor is flushed, LR_abt receives the swap instruction address plus
+eight, and LOCK is released before exception handling.
+
+`arm7tdmis_swp_read_abort_tb` covers the architecture-required read-abort
+contract independently for both widths. `arm7tdmis_swp_bus_matrix_tb` covers
+both read- and write-response aborts alongside normal, stalled, reset, and
+debug exits.
+
 ## Return from exception
 
 Two common patterns:
@@ -219,6 +233,8 @@ Validated by `tb/integration/arm7tdmis_ldm_pc_tb.sv`: handler clears cpsr.F befo
 | `arm7tdmis_ldm_abort_tb` | DABT on every LDM beat → later destinations suppressed, Base Updated, r15 protected |
 | `arm7tdmis_ldm_abort_base_list_tb` | DABT on every LDM beat with Rn in list → modified base restored |
 | `arm7tdmis_stm_abort_tb` | DABT on every STM beat → sequence completes and requested writeback remains |
+| `arm7tdmis_swp_read_abort_tb` | SWP/SWPB read abort → no write address, memory/Rd preserved |
+| `arm7tdmis_swp_bus_matrix_tb` | SWP/SWPB read/write abort and LOCK exit matrix |
 | `arm7tdmis_ldm_pc_tb` | LDM ^ PC exception return → CPSR restore |
 | `arm7tdmis_tb_top` | SWI (in smoke flow) |
 
