@@ -1,32 +1,25 @@
-// CP14 DCC integration test: validates the §9d 2-cycle commit path
-// end-to-end inside the pipelined core. Program at tb/programs/cp14_dcc_test.hex:
+// CP-007/008/010 integration regression for the ARM7TDMI-S r4p3 Debug
+// Communications Channel.
 //
-//   0x00: B 0x20
-//   ...
-//   0x20: MOV r0, #0x10000000   ; 2^28
-//   0x24: MOV r1, #0x10         ; 16
-//   0x28: CP14 DCC r2, r3, r0, r1  ; r2:r3 = r0 * r1 = 2^32
-//   0x2C: MOV r15, #0x2C        ; self-loop
-//
-// Expected:
-//   r0 = 0x10000000
-//   r1 = 0x00000010
-//   r2 = 0x00000000  (low half of 2^32)
-//   r3 = 0x00000001  (high half of 2^32)
-//
-// The high half being non-zero specifically exercises the S_MULL_HI
-// substate cycle and the latched RdHi/result_hi writeback.
+// The processor checks c0 control, sends one word through the c1 TX register,
+// waits for the debugger to consume it through JTAG chain 2, waits for a host
+// RX word, then consumes that through c1.  The test observes the documented
+// W/R ownership transitions at both CP14 and the external DBGCOMM pins.
 
 `timescale 1ns/1ps
 
 module arm7tdmis_cp14_dcc_tb
     import arm7tdmis_bus_pkg::*;
+    import arm7tdmis_debug_pkg::*;
 ;
 
     localparam int    CLK_HALF_PERIOD = 5;
     localparam int    RESET_CYCLES    = 4;
-    localparam int    CYCLE_LIMIT     = 256;
+    localparam int    CYCLE_LIMIT     = 1200;
     localparam string INIT_HEX        = "../tb/programs/cp14_dcc_test.hex";
+    localparam logic [31:0] CPU_TX_DATA  = 32'hA5000000;
+    localparam logic [31:0] HOST_RX_DATA = 32'h5AA55AA5;
+    localparam logic [31:0] DCC_IDLE_CTRL = 32'h70000000;
 
     logic CLK;
     initial begin
@@ -41,36 +34,20 @@ module arm7tdmis_cp14_dcc_tb
         nRESET = 1'b1;
     end
 
-    logic CFGBIGEND, CLKEN;
-    initial begin
-        CFGBIGEND = 1'b0;
-        CLKEN     = 1'b1;
-    end
+    logic CFGBIGEND = 1'b0;
+    logic CLKEN     = 1'b0;
+    logic nIRQ      = 1'b1;
+    logic nFIQ      = 1'b1;
+    logic ABORT;
 
-    logic nIRQ, nFIQ, ABORT;
-    initial begin
-        nIRQ  = 1'b1;
-        nFIQ  = 1'b1;
-        ABORT = 1'b0;
-    end
-
-    logic       DBGEN, DBGRQ, DBGBREAK;
-    logic [1:0] DBGEXT;
-    logic       DBGTCKEN, DBGTMS, DBGTDI, DBGnTRST;
-    initial begin
-        DBGEN    = 1'b0;
-        DBGRQ    = 1'b0;
-        DBGBREAK = 1'b0;
-        DBGEXT   = 2'b00;
-        DBGTCKEN = 1'b0;
-        DBGTMS   = 1'b0;
-        DBGTDI   = 1'b0;
-        // Deassert DBGnTRST so the ICE-RT macrocell's register bank
-        // (specifically the DCC Data register at 0x04) can actually
-        // commit writes. Holding it low keeps the bank cleared every
-        // posedge via the async reset path.
-        DBGnTRST = 1'b1;
-    end
+    logic       DBGEN    = 1'b1;
+    logic       DBGRQ    = 1'b0;
+    logic       DBGBREAK = 1'b0;
+    logic [1:0] DBGEXT   = 2'b00;
+    logic       DBGTCKEN = 1'b0;
+    logic       DBGTMS   = 1'b1;
+    logic       DBGTDI   = 1'b0;
+    logic       DBGnTRST = 1'b0;
 
     logic [31:0] ADDR;
     logic        WRITE;
@@ -78,130 +55,189 @@ module arm7tdmis_cp14_dcc_tb
     logic [1:0]  PROT;
     logic        LOCK;
     logic [1:0]  TRANS;
-    logic [31:0] WDATA, RDATA;
+    logic [31:0] WDATA;
+    logic [31:0] RDATA;
 
     logic CPnMREQ, CPSEQ, CPnTRANS, CPnOPC, CPTBIT, CPnI;
-    logic CPA, CPB;
-    assign CPA = 1'b1;
-    assign CPB = 1'b1;
-
-    logic       DBGACK, DBGnEXEC, DBGINSTRVALID;
+    logic DBGACK, DBGnEXEC, DBGINSTRVALID;
     logic [1:0] DBGRNG;
-    logic       DBGCOMMTX, DBGCOMMRX;
-    logic       DBGTDO, DBGnTDOEN;
-    logic       DMORE;
+    logic DBGCOMMTX, DBGCOMMRX;
+    logic DBGTDO, DBGnTDOEN, DMORE;
+    logic [37:0] scan_ignored;
+    logic [37:0] captured;
+    logic [37:0] tx_response;
+    logic [37:0] control_response;
 
     arm7tdmis_top u_dut (
-        .CLK            (CLK),
-        .CLKEN          (CLKEN),
-        .nRESET         (nRESET),
-        .CFGBIGEND      (CFGBIGEND),
-        .nIRQ           (nIRQ),
-        .nFIQ           (nFIQ),
-        .ABORT          (ABORT),
-        .ADDR           (ADDR),
-        .WRITE          (WRITE),
-        .SIZE           (SIZE),
-        .PROT           (PROT),
-        .LOCK           (LOCK),
-        .TRANS          (TRANS),
-        .WDATA          (WDATA),
-        .RDATA          (RDATA),
-        .CPnMREQ        (CPnMREQ),
-        .CPSEQ          (CPSEQ),
-        .CPnTRANS       (CPnTRANS),
-        .CPnOPC         (CPnOPC),
-        .CPTBIT         (CPTBIT),
-        .CPnI           (CPnI),
-        .CPA            (CPA),
-        .CPB            (CPB),
-        .DBGEN          (DBGEN),
-        .DBGRQ          (DBGRQ),
-        .DBGBREAK       (DBGBREAK),
-        .DBGACK         (DBGACK),
-        .DBGnEXEC       (DBGnEXEC),
-        .DBGINSTRVALID  (DBGINSTRVALID),
-        .DBGEXT         (DBGEXT),
-        .DBGRNG         (DBGRNG),
-        .DBGCOMMTX      (DBGCOMMTX),
-        .DBGCOMMRX      (DBGCOMMRX),
-        .DBGTCKEN       (DBGTCKEN),
-        .DBGTMS         (DBGTMS),
-        .DBGTDI         (DBGTDI),
-        .DBGTDO         (DBGTDO),
-        .DBGnTRST       (DBGnTRST),
-        .DBGnTDOEN      (DBGnTDOEN),
-        .DMORE          (DMORE)
+        .CLK, .CLKEN, .nRESET, .CFGBIGEND, .nIRQ, .nFIQ, .ABORT,
+        .ADDR, .WRITE, .SIZE, .PROT, .LOCK, .TRANS, .WDATA, .RDATA,
+        .CPnMREQ, .CPSEQ, .CPnTRANS, .CPnOPC, .CPTBIT, .CPnI,
+        .CPA(1'b1), .CPB(1'b1),
+        .DBGEN, .DBGRQ, .DBGBREAK, .DBGACK, .DBGnEXEC, .DBGINSTRVALID,
+        .DBGEXT, .DBGRNG, .DBGCOMMTX, .DBGCOMMRX,
+        .DBGTCKEN, .DBGTMS, .DBGTDI, .DBGTDO, .DBGnTRST, .DBGnTDOEN,
+        .DMORE
     );
 
-    logic mem_inject_abort;
-    initial mem_inject_abort = 1'b0;
-
-    /* verilator lint_off SYNCASYNCNET */
+    logic mem_inject_abort = 1'b0;
     arm7tdmis_memory #(
         .WORDS    (4096),
         .INIT_HEX (INIT_HEX)
     ) u_mem (
-        .CLK          (CLK),
-        .CLKEN        (CLKEN),
-        .nRESET       (nRESET),
-        .CFGBIGEND    (CFGBIGEND),
-        .ADDR         (ADDR),
-        .WRITE        (WRITE),
-        .SIZE         (SIZE),
-        .PROT         (PROT),
-        .LOCK         (LOCK),
-        .TRANS        (TRANS),
-        .WDATA        (WDATA),
-        .RDATA        (RDATA),
-        .ABORT        (ABORT),
-        .inject_abort (mem_inject_abort)
+        .CLK, .CLKEN, .nRESET, .CFGBIGEND,
+        .ADDR, .WRITE, .SIZE, .PROT, .LOCK, .TRANS, .WDATA, .RDATA,
+        .ABORT, .inject_abort(mem_inject_abort)
     );
-    /* verilator lint_on SYNCASYNCNET */
-
-    /* verilator lint_off UNUSEDSIGNAL */
-    wire _unused = &{1'b0,
-        CPnMREQ, CPSEQ, CPnTRANS, CPnOPC, CPTBIT, CPnI,
-        DBGACK, DBGnEXEC, DBGINSTRVALID, DBGRNG,
-        DBGCOMMTX, DBGCOMMRX, DBGTDO, DBGnTDOEN, DMORE
-    };
-    /* verilator lint_on UNUSEDSIGNAL */
 
     int unsigned errors = 0;
 
-    task automatic check_reg(input int idx, input logic [31:0] expected,
-                             input string name);
-        if (u_dut.u_core.u_regfile.regs[idx] !== expected) begin
-            $display("[cp14_dcc] FAIL %s (r%0d): expected %08x got %08x",
-                     name, idx, expected, u_dut.u_core.u_regfile.regs[idx]);
+    task automatic tck(input logic tms, input logic tdi);
+        @(negedge CLK);
+        DBGTMS   = tms;
+        DBGTDI   = tdi;
+        DBGTCKEN = 1'b1;
+        @(posedge CLK);
+        #1;
+        DBGTCKEN = 1'b0;
+    endtask
+
+    // All public TAP transfers start and finish in Run-Test/Idle.
+    task automatic load_ir(input logic [3:0] instruction);
+        tck(1'b1, 1'b0); // RTI -> Select-DR
+        tck(1'b1, 1'b0); // Select-DR -> Select-IR
+        tck(1'b0, 1'b0); // Select-IR -> Capture-IR
+        tck(1'b0, 1'b0); // Capture-IR -> Shift-IR
+        for (int i = 0; i < 4; i++) begin
+            tck(i == 3, instruction[i]);
+        end
+        tck(1'b1, 1'b0); // Exit1-IR -> Update-IR
+        tck(1'b0, 1'b0); // Update-IR -> RTI, commit
+    endtask
+
+    task automatic shift_dr(
+        input  int unsigned width,
+        input  logic [37:0] scan_in,
+        output logic [37:0] scan_out
+    );
+        scan_out = '0;
+        tck(1'b1, 1'b0); // RTI -> Select-DR
+        tck(1'b0, 1'b0); // Select-DR -> Capture-DR
+        tck(1'b0, 1'b0); // Capture-DR -> Shift-DR
+        for (int i = 0; i < width; i++) begin
+            scan_out[i] = DBGTDO;
+            tck(i == (width - 1), scan_in[i]);
+        end
+        tck(1'b1, 1'b0); // Exit1-DR -> Update-DR
+        tck(1'b0, 1'b0); // Update-DR -> RTI, commit
+    endtask
+
+    task automatic select_chain2;
+        load_ir(4'(IR_SCAN_N));
+        shift_dr(4, 38'd2, scan_ignored);
+        load_ir(4'(IR_INTEST));
+    endtask
+
+    task automatic chain2_request(
+        input  logic        write,
+        input  logic [4:0]  addr,
+        input  logic [31:0] data,
+        output logic [37:0] scan_result
+    );
+        shift_dr(38, {write, addr, data}, scan_result);
+    endtask
+
+    task automatic await_pin(
+        input logic expected,
+        input bit select_rx,
+        input string description
+    );
+        bit matched;
+        matched = 1'b0;
+        for (int i = 0; i < 160; i++) begin
+            @(posedge CLK);
+            if ((select_rx ? DBGCOMMRX : DBGCOMMTX) === expected) begin
+                matched = 1'b1;
+                break;
+            end
+        end
+        if (!matched) begin
+            $display("[cp14_dcc] FAIL timeout waiting for %s", description);
             errors = errors + 1;
         end
     endtask
 
-    initial begin
+    task automatic check_reg(
+        input int unsigned idx,
+        input logic [31:0] expected,
+        input string description
+    );
+        if (u_dut.u_core.u_regfile.regs[idx] !== expected) begin
+            $display("[cp14_dcc] FAIL %s: r%0d expected %08x got %08x",
+                     description, idx, expected,
+                     u_dut.u_core.u_regfile.regs[idx]);
+            errors = errors + 1;
+        end
+    endtask
+
+    initial begin : run_test
         $dumpfile("cp14_dcc.fst");
-        $display("[cp14_dcc] starting; CYCLE_LIMIT=%0d", CYCLE_LIMIT);
-        wait (nRESET);
-        repeat (CYCLE_LIMIT) @(posedge CLK);
+        $dumpvars(0, arm7tdmis_cp14_dcc_tb);
 
-        // CP14 DCC round-trip:
-        //   r0 := 0xFF000000           (some value to ship)
-        //   MCR p14, 0, r0, c0, c0, 0  (write r0 → ICE-RT regs[0x04])
-        //   r0 := 0                    (clobber to verify the read brings it back)
-        //   MRC p14, 0, r0, c0, c0, 0  (read ICE-RT regs[0x04] → r0)
-        // Final: r0 should be 0xFF000000 (the value round-tripped through DCC).
-        check_reg(0, 32'hFF000000, "r0 = DCC value after MCR/MRC p14 round-trip");
+        // Reset the TAP, enter RTI, and configure scan chain 2 while the CPU
+        // is held by CLKEN. DBGnTRST resets only debug/JTAG state.
+        repeat (2) @(posedge CLK);
+        DBGnTRST = 1'b1;
+        tck(1'b0, 1'b0); // TLR -> RTI
+        select_chain2();
 
-        // Also verify the ICE-RT DCC register itself holds the value.
-        if (u_dut.u_ice.regs[5'h04] !== 32'hFF000000) begin
-            $display("[cp14_dcc] FAIL ICE-RT regs[0x04]: expected FF000000, got %08x",
-                     u_dut.u_ice.regs[5'h04]);
+        if (DBGCOMMTX !== 1'b1 || DBGCOMMRX !== 1'b0) begin
+            $display("[cp14_dcc] FAIL reset pins expected TX-empty=1 RX-full=0, got %b/%b",
+                     DBGCOMMTX, DBGCOMMRX);
             errors = errors + 1;
         end
 
-        if (u_dut.u_core.pc_q !== 32'h00000030) begin
-            $display("[cp14_dcc] FAIL pc_q: expected 0x30 self-loop, got %08x",
-                     u_dut.u_core.pc_q);
+        CLKEN = 1'b1;
+
+        // CPU writes c1: TX becomes full (DBGCOMMTX goes LOW).
+        await_pin(1'b0, 1'b0, "DBGCOMMTX LOW after CPU TX write");
+
+        // Submit a host read of DCC data (0x05). The following access shifts
+        // out that response and consumes the pending TX word.
+        chain2_request(1'b0, 5'h05, 32'h0, captured);
+        chain2_request(1'b0, 5'h04, 32'h0, tx_response);
+        if (tx_response[31:0] !== CPU_TX_DATA) begin
+            $display("[cp14_dcc] FAIL JTAG TX expected %08x got %08x",
+                     CPU_TX_DATA, tx_response[31:0]);
+            errors = errors + 1;
+        end
+        await_pin(1'b1, 1'b0, "DBGCOMMTX HIGH after host TX read");
+
+        // Deposit one debugger-to-processor word. This sets R and the core
+        // polling loop reads/consumes it.
+        chain2_request(1'b1, 5'h05, HOST_RX_DATA, captured);
+        await_pin(1'b1, 1'b1, "DBGCOMMRX HIGH after host RX write");
+        await_pin(1'b0, 1'b1, "DBGCOMMRX LOW after CPU RX read");
+
+        // Read control over JTAG after both transfers. A second request
+        // clocks the response out, as required by chain 2 pipelining.
+        chain2_request(1'b0, 5'h04, 32'h0, captured);
+        chain2_request(1'b0, 5'h04, 32'h0, control_response);
+
+        repeat (80) @(posedge CLK);
+
+        check_reg(0, DCC_IDLE_CTRL,       "initial c0 control");
+        check_reg(1, CPU_TX_DATA,         "CPU TX source");
+        check_reg(2, DCC_IDLE_CTRL | 2,   "W set after CPU write");
+        check_reg(3, DCC_IDLE_CTRL,       "W clear after host read");
+        check_reg(4, DCC_IDLE_CTRL | 1,   "R set after host write");
+        check_reg(5, HOST_RX_DATA,        "CPU received host data");
+        check_reg(6, DCC_IDLE_CTRL,       "R clear after CPU read");
+        check_reg(7, 32'h00000077,        "program completion");
+        check_reg(10, 32'h00000000,       "no Undefined exception");
+
+        if (control_response[31:0] !== DCC_IDLE_CTRL) begin
+            $display("[cp14_dcc] FAIL JTAG control expected %08x got %08x",
+                     DCC_IDLE_CTRL, control_response[31:0]);
             errors = errors + 1;
         end
 
@@ -212,8 +248,14 @@ module arm7tdmis_cp14_dcc_tb
     end
 
     initial begin
-        repeat (CYCLE_LIMIT + 32) @(posedge CLK);
-        $fatal(1, "[cp14_dcc] TIMEOUT after %0d cycles", CYCLE_LIMIT + 32);
+        repeat (CYCLE_LIMIT) @(posedge CLK);
+        $fatal(1, "[cp14_dcc] TIMEOUT after %0d cycles", CYCLE_LIMIT);
     end
+
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire _unused = &{1'b0, CPnMREQ, CPSEQ, CPnTRANS, CPnOPC, CPTBIT, CPnI,
+        DBGACK, DBGnEXEC, DBGINSTRVALID, DBGRNG, DBGnTDOEN, DMORE,
+        scan_ignored, captured, tx_response[37:32], control_response[37:32]};
+    /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule
