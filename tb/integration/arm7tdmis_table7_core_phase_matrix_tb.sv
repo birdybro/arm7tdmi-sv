@@ -1,4 +1,4 @@
-// BUS-002/BUS-003/BUS-005: first Execute phase from TRM Tables 7-3--7-23.
+// BUS-002/BUS-003/BUS-005: raw Execute phases from TRM Tables 7-3--7-23.
 //
 // Section 7.1 is easy to misread: Data is the response in the numbered
 // instruction cycle, while TRANS predicts the following bus cycle and the
@@ -9,12 +9,13 @@
 //   * shift(Rs):   pc+3i/I data (first half of a merged I-S)
 //   * LDR/STR:     data-address/N data
 //   * branch:      target/N opcode
-// This reset-isolated matrix checks that first raw phase without conflating
-// it with the pc+2i opcode response that is simultaneously on RDATA.
+// This reset-isolated matrix checks every raw phase of the base ARM
+// instruction families without conflating them with the response that is
+// simultaneously on RDATA.
 
 `timescale 1ns/1ps
 
-module arm7tdmis_table7_first_phase_matrix_tb
+module arm7tdmis_table7_core_phase_matrix_tb
     import arm7tdmis_bus_pkg::*;
     import arm7tdmis_instr_pkg::*;
     import arm7tdmis_types_pkg::*;
@@ -89,43 +90,107 @@ module arm7tdmis_table7_first_phase_matrix_tb
         endcase
     endfunction
 
-    function automatic logic [31:0] expected_addr(input int row);
+    function automatic int expected_phase_count(input int row);
         unique case (row)
-            3: return TEST_PC + 32'd8; // MLA holds pc+2i for its extra I
-            5, 6, 7, 8, 9, 10, 11: return 32'h0000_0100;
-            12: return 32'h0000_0050;  // B destination
-            13: return 32'h0000_0008;  // SWI vector
-            14: return TEST_PC + 32'd8; // Undef recognition I cycle
+            0, 15, 16: return 1;
+            1, 2, 6, 8: return 2;
+            3, 4, 5, 7, 10, 12, 13: return 3;
+            9, 11, 14: return 4;
+            default: return 0;
+        endcase
+    endfunction
+
+    function automatic logic [31:0] expected_addr(
+        input int row,
+        input int phase
+    );
+        unique case (row)
+            3: return phase == 0 ? TEST_PC + 32'd8
+                                : TEST_PC + 32'd12;
+            5, 7: return phase == 0 ? 32'h0000_0100
+                                    : TEST_PC + 32'd12;
+            6, 8: return phase == 0 ? 32'h0000_0100
+                                    : TEST_PC + 32'd12;
+            9, 10: begin
+                if (phase == 0) return 32'h0000_0100;
+                if (phase == 1) return 32'h0000_0104;
+                return TEST_PC + 32'd12;
+            end
+            11: return phase < 2 ? 32'h0000_0100
+                                : TEST_PC + 32'd12;
+            12: return 32'h0000_0050 + 32'(phase * 4);
+            13: return 32'h0000_0008 + 32'(phase * 4);
+            14: return phase == 0 ? TEST_PC + 32'd8
+                                  : 32'h0000_0004 + 32'((phase - 1) * 4);
             default: return TEST_PC + 32'd12;
         endcase
     endfunction
 
-    function automatic logic [1:0] expected_trans(input int row);
+    function automatic logic [1:0] expected_trans(
+        input int row,
+        input int phase
+    );
         unique case (row)
             0, 15, 16: return 2'(TRANS_S);
-            1, 2, 3, 4, 14: return 2'(TRANS_I);
-            default: return 2'(TRANS_N);
+            1, 2: return phase == 0 ? 2'(TRANS_I) : 2'(TRANS_S);
+            3, 4: return phase < expected_phase_count(row) - 1
+                              ? 2'(TRANS_I) : 2'(TRANS_S);
+            5, 7: begin
+                if (phase == 0) return 2'(TRANS_N);
+                return phase == 1 ? 2'(TRANS_I) : 2'(TRANS_S);
+            end
+            6, 8: return 2'(TRANS_N);
+            9: begin
+                if (phase == 0) return 2'(TRANS_N);
+                if (phase == 1) return 2'(TRANS_S);
+                return phase == 2 ? 2'(TRANS_I) : 2'(TRANS_S);
+            end
+            10: return phase == 0 ? 2'(TRANS_N)
+                                  : phase == 1 ? 2'(TRANS_S)
+                                               : 2'(TRANS_N);
+            11: begin
+                if (phase < 2) return 2'(TRANS_N);
+                return phase == 2 ? 2'(TRANS_I) : 2'(TRANS_S);
+            end
+            12, 13: return phase == 0 ? 2'(TRANS_N) : 2'(TRANS_S);
+            14: begin
+                if (phase == 0) return 2'(TRANS_I);
+                return phase == 1 ? 2'(TRANS_N) : 2'(TRANS_S);
+            end
+            default: return 2'(TRANS_I);
         endcase
     endfunction
 
-    function automatic logic [1:0] expected_prot(input int row);
+    function automatic logic [1:0] expected_prot(
+        input int row,
+        input int phase
+    );
         unique case (row)
             0, 12, 13, 14, 15, 16: return 2'(PROT_OPC_PRIV);
+            6, 8, 10: return phase == expected_phase_count(row) - 1
+                                  ? 2'(PROT_OPC_PRIV)
+                                  : 2'(PROT_DAT_PRIV);
             default: return 2'(PROT_DAT_PRIV);
         endcase
     endfunction
 
-    function automatic logic [1:0] expected_size(input int row);
-        return row inside {7, 8} ? 2'(SIZE_HALFWORD) : 2'(SIZE_WORD);
+    function automatic logic [1:0] expected_size(
+        input int row,
+        input int phase
+    );
+        return (row inside {7, 8}) && phase == 0
+             ? 2'(SIZE_HALFWORD) : 2'(SIZE_WORD);
     endfunction
 
-    function automatic logic expected_lock(input int row);
-        return row == 11 ? LOCK_LOCKED : LOCK_FREE;
+    function automatic logic expected_lock(input int row, input int phase);
+        return row == 11 && phase < 2 ? LOCK_LOCKED : LOCK_FREE;
     endfunction
 
-    function automatic logic expected_write(input int row);
+    function automatic logic expected_write(input int row, input int phase);
         unique case (row)
-            6, 8, 10: return WRITE_WRITE;
+            6, 8: return phase == 0 ? WRITE_WRITE : WRITE_READ;
+            10: return phase < 2 ? WRITE_WRITE : WRITE_READ;
+            11: return phase == 1 ? WRITE_WRITE : WRITE_READ;
             default: return WRITE_READ;
         endcase
     endfunction
@@ -171,7 +236,7 @@ module arm7tdmis_table7_first_phase_matrix_tb
     endfunction
 
     task automatic fail(input int row, input string reason);
-        $display("[table7_first_phase_matrix] FAIL row %0d %s: %s",
+        $display("[table7_core_phase_matrix] FAIL row %0d %s: %s",
                  row, row_name(row), reason);
         errors++;
     endtask
@@ -225,34 +290,39 @@ module arm7tdmis_table7_first_phase_matrix_tb
         if (row != 15 && !u_dut.u_core.condition_pass)
             fail(row, "executed row unexpectedly failed its condition");
 
-        if (ADDR !== expected_addr(row)
-            || WRITE !== expected_write(row)
-            || SIZE !== expected_size(row)
-            || PROT !== expected_prot(row)
-            || LOCK !== expected_lock(row)
-            || TRANS !== expected_trans(row))
-            fail(row, $sformatf(
-                "first phase A/W/S/P/L/T=%08x/%0b/%02b/%02b/%0b/%02b expected %08x/%0b/%02b/%02b/%0b/%02b",
-                ADDR, WRITE, SIZE, PROT, LOCK, TRANS,
-                expected_addr(row), expected_write(row),
-                expected_size(row), expected_prot(row), expected_lock(row),
-                expected_trans(row)));
+        for (int phase = 0; phase < expected_phase_count(row); phase++) begin
+            if (ADDR !== expected_addr(row, phase)
+                || WRITE !== expected_write(row, phase)
+                || SIZE !== expected_size(row, phase)
+                || PROT !== expected_prot(row, phase)
+                || LOCK !== expected_lock(row, phase)
+                || TRANS !== expected_trans(row, phase))
+                fail(row, $sformatf(
+                    "phase %0d A/W/S/P/L/T=%08x/%0b/%02b/%02b/%0b/%02b expected %08x/%0b/%02b/%02b/%0b/%02b",
+                    phase + 1, ADDR, WRITE, SIZE, PROT, LOCK, TRANS,
+                    expected_addr(row, phase),
+                    expected_write(row, phase), expected_size(row, phase),
+                    expected_prot(row, phase), expected_lock(row, phase),
+                    expected_trans(row, phase)));
+            if (phase + 1 < expected_phase_count(row))
+                @(negedge CLK);
+        end
     endtask
 
     initial begin
         for (int row = 0; row < ROW_COUNT; row++)
             run_row(row);
         if (errors != 0)
-            $fatal(1, "[table7_first_phase_matrix] FAIL (%0d errors)",
+            $fatal(1, "[table7_core_phase_matrix] FAIL (%0d errors)",
                    errors);
-        $display("[table7_first_phase_matrix] PASS (%0d reset-isolated rows)",
+        $display("[table7_core_phase_matrix] PASS (%0d reset-isolated rows)",
                  ROW_COUNT);
         $finish;
     end
 
     initial begin
         #150000;
-        $fatal(1, "[table7_first_phase_matrix] TIMEOUT");
+        $fatal(1, "[table7_core_phase_matrix] TIMEOUT");
     end
 
     /* verilator lint_off UNUSEDSIGNAL */
