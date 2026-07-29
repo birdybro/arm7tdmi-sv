@@ -2688,7 +2688,6 @@ module arm7tdmis_core_pipelined
             PROT  = {is_priv, 1'b0};
             LOCK  = LOCK_FREE;
             TRANS = 2'(TRANS_N);
-            WDATA = 32'h0000_0000;
         end else if (exception_vector_first_q && issue_fetch) begin
             ADDR  = fetch_pc_q;
             WRITE = WRITE_READ;
@@ -2696,7 +2695,6 @@ module arm7tdmis_core_pipelined
             PROT  = 2'(PROT_OPC_PRIV);
             LOCK  = LOCK_FREE;
             TRANS = 2'(TRANS_S);
-            WDATA = 32'h0000_0000;
         end
 
         // Debug halt isolates the core from the system. TRM §5.3.4
