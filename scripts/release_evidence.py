@@ -286,6 +286,112 @@ def _validated_files(
                 )
             candidates.append(input_path)
         candidates.append(soak_path.resolve())
+    quality_phases = {"lint-independent", "cdc-rdc"}
+    present_quality_phases = quality_phases & phase_names
+    if present_quality_phases and present_quality_phases != quality_phases:
+        raise ValueError("regression contains incomplete FPGA-quality phases")
+    if present_quality_phases:
+        independent_path = REPORT_ROOT / "independent-lint.json"
+        cdc_path = REPORT_ROOT / "cdc-rdc.json"
+        if not independent_path.is_file() or not cdc_path.is_file():
+            raise ValueError("FPGA-quality report is missing")
+        independent = json.loads(
+            independent_path.read_text(encoding="utf-8")
+        )
+        cdc = json.loads(cdc_path.read_text(encoding="utf-8"))
+        for label, report, schema in (
+            (
+                "independent lint",
+                independent,
+                "arm7tdmis-independent-lint-v1",
+            ),
+            ("CDC/RDC", cdc, "arm7tdmis-cdc-rdc-v1"),
+        ):
+            if report.get("schema") != schema or report.get("status") != "passed":
+                raise ValueError(f"{label} report is not passed")
+            if report.get("git", {}).get("dirty"):
+                raise ValueError(f"{label} report describes a dirty source tree")
+            if report.get("git", {}).get("commit") != regression.get(
+                "git", {}
+            ).get("commit"):
+                raise ValueError(f"{label} report commit does not match regression")
+
+        lint_results = independent.get("results", [])
+        expected_tops = {
+            "arm7tdmis_top",
+            "arm7tdmi_mister",
+            "arm7tdmis_no_dft",
+            "arm7tdmi_mister_example_top",
+            "arm7tdmi_generic_soc",
+        }
+        if (
+            independent.get("result_count") != len(lint_results)
+            or {entry.get("top") for entry in lint_results} != expected_tops
+            or any(
+                entry.get("status") != "passed"
+                or entry.get("exit_code") != 0
+                or entry.get("error_count") != 0
+                or entry.get("warning_count") != 0
+                for entry in lint_results
+            )
+        ):
+            raise ValueError("independent lint did not pass every public top")
+        if independent.get("tool", {}).get("version") != (
+            "slang version 11.0.0+7ddf4059f"
+        ):
+            raise ValueError("independent lint used the wrong Slang version")
+        for entry in lint_results:
+            diagnostic = entry.get("diagnostics", {})
+            diagnostic_path = _repo_path(str(diagnostic.get("path", "")))
+            if (
+                diagnostic_path.stat().st_size != diagnostic.get("bytes")
+                or _sha256(diagnostic_path) != diagnostic.get("sha256")
+            ):
+                raise ValueError("independent lint diagnostic hash mismatch")
+            candidates.append(diagnostic_path)
+        for path_text, entry in independent.get("inputs", {}).items():
+            input_path = _repo_path(str(path_text))
+            if (
+                input_path.stat().st_size != entry.get("bytes")
+                or _sha256(input_path) != entry.get("sha256")
+            ):
+                raise ValueError("independent lint input hash mismatch")
+
+        if (
+            cdc.get("clock_domains") != ["CLK"]
+            or cdc.get("violations")
+            or cdc.get("synchronizer_count", 0) < 6
+            or cdc.get("reset_release_count", 0) < 2
+            or cdc.get("reset_synchronizer_primitive", {}).get("status")
+            != "verified"
+        ):
+            raise ValueError("CDC/RDC report does not prove reviewed closure")
+        manifest_entry = cdc.get("manifest", {})
+        manifest_path = _repo_path(str(manifest_entry.get("path", "")))
+        if _sha256(manifest_path) != manifest_entry.get("sha256"):
+            raise ValueError("CDC/RDC manifest hash mismatch")
+        checker_entry = cdc.get("checker", {})
+        checker_path = _repo_path(str(checker_entry.get("path", "")))
+        if (
+            checker_path.stat().st_size != checker_entry.get("bytes")
+            or _sha256(checker_path) != checker_entry.get("sha256")
+        ):
+            raise ValueError("CDC/RDC checker hash mismatch")
+        for path_text, entry in cdc.get("inputs", {}).items():
+            input_path = _repo_path(str(path_text))
+            if (
+                input_path.stat().st_size != entry.get("bytes")
+                or _sha256(input_path) != entry.get("sha256")
+            ):
+                raise ValueError("CDC/RDC input hash mismatch")
+        candidates.extend(
+            (
+                independent_path.resolve(),
+                cdc_path.resolve(),
+                manifest_path,
+                checker_path,
+            )
+        )
     return sorted(set(candidates))
 
 

@@ -4,7 +4,8 @@
 It always removes the Verilator build directory first, then runs:
 
 1. Raw-core RTL, canonical MiSTer wrapper, portable FPGA example, and
-   testbench lint.
+   testbench lint, plus independent all-public-top Slang lint and structural
+   CDC/RDC analysis.
 2. Quartus analysis and complete compile/report checks for both FPGA profiles.
 3. Harness unit tests, the intentional-failure sentinel, and raw-bus-checker
    mutation matrix.
@@ -57,6 +58,38 @@ The final `traceability` phase writes
 and result semantics are defined in [TRACEABILITY.md](TRACEABILITY.md).
 The non-quick `soak` phase separately writes
 `reports/generated/soak-report.json` using schema `arm7tdmis-soak-v1`.
+
+## Independent lint and CDC/RDC closure
+
+`make -C scripts fpga-quality` is the FPGA-004 open-source quality gate. The
+first half runs checksum-installed Slang 11.0.0+7ddf4059f as an independent
+SystemVerilog elaborator over five public synthesis tops: `arm7tdmis_top`,
+`arm7tdmi_mister`, `arm7tdmis_no_dft`,
+`arm7tdmi_mister_example_top`, and `arm7tdmi_generic_soc`. Every compile must
+return zero errors and zero warnings. Schema
+`arm7tdmis-independent-lint-v1` records the exact executable and source
+hashes, command, diagnostic JSON hash, and result for every top.
+
+The second half runs `scripts/cdc_rdc_check.py` against the reviewed
+`verification/cdc_rdc_manifest.json`. The structural audit inventories every
+production `always_ff`, rejects any clock except `CLK`, rejects unapproved or
+multiple asynchronous resets, forbids legacy `always @` and `always_latch`,
+verifies both reset-release synchronizer instances, and proves that each of
+the six `_ASYNC` event inputs feeds exactly one marked first stage whose only
+consumer is its marked second stage. Its mutation unit test injects an extra
+clock, a combinationally generated reset, and first-stage fanout and requires
+all three to fail.
+
+The resulting `arm7tdmis-cdc-rdc-v1` report currently accounts for 37
+sequential source blocks, 15 asynchronous-reset blocks, one clock domain,
+six event synchronizers, two reset-release instances, and zero violations.
+The audit exposed direct asynchronous deassertion of wrapper-owned state;
+`arm7tdmi_mister` now uses a parallel two-stage `wrapper_reset_n` path so the
+memory bridge, event synchronizers, debug transport, TAP, and raw
+architectural domain release on a clock edge together. Both quality phases
+run in quick and full regression. Release archiving rejects missing, dirty,
+stale, nonzero-warning, structurally incomplete, or input-hash-mismatched
+reports.
 
 `make -C scripts regress-quick` exercises the same metadata, clean-build, lint,
 harness, and smoke path with one unit plus the mandatory QEMU differential and

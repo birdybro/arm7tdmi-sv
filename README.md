@@ -31,7 +31,7 @@ The status words used here have the §31 meanings:
 | Raw bus and cycle behavior | **VERIFIED** for §31.5. Endian lanes, CLKEN/ABORT behavior, LOCK/DMORE, redirects, exception cycles, every Chapter 7 family, and reusable protocol assertions are linked to full-phase or specialized scoreboards. |
 | External coprocessor and CP14 | **VERIFIED** for §31.6: absent/ready/busy/abandonment, MCR/MRC/CDP/LDC/STC timing, CP14 DCC and Debug Abort Status, corrected errata 14/15 policy, and absence of internal CP15 are tested. |
 | EmbeddedICE-RT, JTAG, and trace boundary | **VERIFIED** for §31.7/§31.8. JTAG-006 uses its permitted project-specific bridge path: the public same-clock virtual-TCK transport is protocol-tested, while no asynchronous pod/GDB execution is claimed. The project provides the ARM-side ETM7 boundary, not an ETM macrocell. |
-| FPGA/MiSTer package | **PARTIAL**. The canonical valid/ready wrapper, versioned save states, two public bus adapters, option profiles, CDC/reset contract, DMA arbitration, portable QIP/file lists, and two checked Quartus 17.0.2 flows exist. A real framework build, PocketStation integration, and hardware evidence remain open. |
+| FPGA/MiSTer package | **PARTIAL**. The canonical valid/ready wrapper, versioned save states, two public bus adapters, option profiles, synchronized reset/CDC contract, structural CDC/RDC audit, independent all-top Slang lint, DMA arbitration, portable QIP/file lists, and two checked Quartus 17.0.2 flows exist. A real framework build, PocketStation integration, and hardware evidence remain open. |
 | Release evidence | **PARTIAL**. Regressions fail hard; an independent 77-retirement QEMU differential, pinned GCC ARM/Thumb/interworking execution, a 256-seed sanitizer/X-state soak, bidirectional requirement/source traceability, machine-readable regression and structural-coverage reports, mutation tests, and a hashed evidence archive exist. Broader random/formal/suite validation and FPGA release gates remain open. |
 
 No unchecked §31 requirement is implied by a checked neighboring row. In
@@ -140,6 +140,7 @@ make -C scripts quartus-analysis
 make -C scripts quartus-compile
 make -C scripts quartus-conformance-analysis
 make -C scripts quartus-conformance-compile
+make -C scripts fpga-quality
 
 make -C scripts regress
 make -C scripts soak

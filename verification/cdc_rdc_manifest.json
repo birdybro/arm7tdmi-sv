@@ -1,0 +1,83 @@
+{
+  "schema": "arm7tdmis-cdc-rdc-manifest-v1",
+  "clock_domains": ["CLK"],
+  "allowed_async_resets": ["nRESET", "DBGnTRST", "wrapper_reset_n"],
+  "expected_sequential_block_count": 37,
+  "expected_async_reset_block_count": 15,
+  "reset_synchronizer_primitive": {
+    "file": "rtl/core/arm7tdmis_reset_sync.sv",
+    "async_source": "nRESET",
+    "first_stage": "q1",
+    "second_stage": "q2",
+    "output": "core_nreset",
+    "require_attribute": true
+  },
+  "reset_release_instances": [
+    {
+      "file": "rtl/top/arm7tdmis_top.sv",
+      "instance": "u_rst",
+      "source": "nRESET",
+      "released_reset": "core_nreset"
+    },
+    {
+      "file": "rtl/top/arm7tdmi_mister.sv",
+      "instance": "u_wrapper_reset_sync",
+      "source": "RESET_N",
+      "released_reset": "wrapper_reset_n"
+    }
+  ],
+  "synchronizers": [
+    {
+      "file": "rtl/top/arm7tdmi_mister.sv",
+      "source": "IRQ_ASYNC",
+      "first_stage": "irq_meta_q",
+      "second_stage": "irq_sync_q",
+      "require_attribute": true
+    },
+    {
+      "file": "rtl/top/arm7tdmi_mister.sv",
+      "source": "FIQ_ASYNC",
+      "first_stage": "fiq_meta_q",
+      "second_stage": "fiq_sync_q",
+      "require_attribute": true
+    },
+    {
+      "file": "rtl/top/arm7tdmi_mister.sv",
+      "source": "DEBUG_ENABLE_ASYNC",
+      "first_stage": "debug_enable_meta_q",
+      "second_stage": "debug_enable_sync_q",
+      "require_attribute": true
+    },
+    {
+      "file": "rtl/top/arm7tdmi_mister.sv",
+      "source": "DBGRQ_ASYNC",
+      "first_stage": "dbgrq_meta_q",
+      "second_stage": "dbgrq_sync_q",
+      "require_attribute": true
+    },
+    {
+      "file": "rtl/top/arm7tdmi_mister.sv",
+      "source": "DBGBREAK_ASYNC",
+      "first_stage": "dbgbreak_meta_q",
+      "second_stage": "dbgbreak_sync_q",
+      "require_attribute": true
+    },
+    {
+      "file": "rtl/top/arm7tdmi_mister.sv",
+      "source": "DBGEXT_ASYNC",
+      "first_stage": "dbgext_meta_q",
+      "second_stage": "dbgext_sync_q",
+      "require_attribute": true
+    }
+  ],
+  "reviewed_reset_contracts": [
+    {
+      "top": "arm7tdmis_top",
+      "contract": "nRESET uses two-stage synchronous release; DBGnTRST is a raw synchronous-deassert integration responsibility"
+    },
+    {
+      "top": "arm7tdmi_mister",
+      "contract": "RESET_N asynchronously asserts and synchronously releases wrapper/debug and architectural domains in parallel"
+    }
+  ]
+}

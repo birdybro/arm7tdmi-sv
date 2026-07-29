@@ -96,7 +96,7 @@ These are the non-obvious traps the TRM and TASKS.md flag — internalize them b
 - **Reset state is specific.** Supervisor mode, I=1, F=1, T=0, ARM state, PC=0x00000000 — set all of them, don't just clear PC.
 - **Bus is pipelined.** Address-class signals (ADDR/WRITE/SIZE/PROT/LOCK) are broadcast one bus cycle *ahead* of the data cycle they describe. `CLKEN` gates bus progression; treat it as a wait-state mechanism, not a clock gate.
 - **Remaining highest-risk blocks:** random/formal validation,
-  framework/board CDC and timing, post-synthesis equivalence, and
+  framework/board timing, post-synthesis equivalence, and
   hardware/PocketStation evidence.
 - **Reserved coprocessor IDs.** CP14 is the Debug Communications Channel; CP15 is system control. External coprocessors must not use those IDs.
 - **TAP IDCODE.** Rev 4 r4p3 TAP ID register value is `0x7F1F0F0F` (§23).

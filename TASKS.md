@@ -3413,9 +3413,30 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   top/device, and profile-specific resource-budget overruns. Both full flows
   are mandatory phases of `make -C scripts regress`; quick regression runs
   analysis/elaboration for both.
-- [ ] **FPGA-004:** Run an independent synthesizer/linter where supported and CDC/RDC
+- [x] **FPGA-004:** Run an independent synthesizer/linter where supported and CDC/RDC
   analysis. Resolve combinational loops, inferred latches, multiple drivers,
   simulation/synthesis mismatches, unsafe synchronizers, and reset-domain crossings.
+  `scripts/independent_lint.py` requires checksum-installed Slang
+  11.0.0+7ddf4059f and independently elaborates the raw core, canonical
+  wrapper, no-DFT compatibility top, FPGA example, and generic SoC with zero
+  errors and zero warnings. It records tool/source/diagnostic hashes in
+  schema `arm7tdmis-independent-lint-v1`; Slang's elaboration and data-flow
+  analysis independently reject latches, loops, driver conflicts, and
+  simulation/synthesis-invalid constructs already forbidden by fatal
+  Verilator and Quartus gates.
+  `scripts/cdc_rdc_check.py` checks every production `always_ff` against the
+  reviewed `verification/cdc_rdc_manifest.json`: all 37 sequential blocks
+  use the sole `CLK` domain, all 15 asynchronous reset sensitivities use an
+  approved raw or synchronized-release reset, both reset-release instances
+  are structurally present, and each of six async event inputs has exactly
+  first-stage → second-stage fanout with both flops marked. Mutation unit
+  tests prove extra clocks, generated resets, direct async control use, and
+  first-stage fanout fail. The audit found and removed direct asynchronous
+  release of wrapper/debug state by adding the parallel preserved
+  `wrapper_reset_n` synchronizer and an off-edge release regression.
+  `make -C scripts fpga-quality` runs both gates; they are mandatory in every
+  regression and their clean, same-commit, input-hashed reports are required
+  release evidence.
 - [x] **FPGA-005:** Verify RAM/DSP/clock-enable inference in reports. Publish ALM,
   register, MLAB/M10K, DSP, clock, power estimate, and Fmax data with budget headroom.
   Both complete flows now run vectorless PowerPlay before

@@ -46,6 +46,9 @@ jobs:
             reports/generated/logs/
             reports/generated/coverage/
             reports/generated/traceability-report.json
+            reports/generated/independent-lint.json
+            reports/generated/slang-*-diagnostics.json
+            reports/generated/cdc-rdc.json
             reports/generated/release-manifest.json
             reports/generated/arm7tdmis-release-evidence-*.tar.gz
             reports/generated/arm7tdmis-release-evidence-*.tar.gz.sha256

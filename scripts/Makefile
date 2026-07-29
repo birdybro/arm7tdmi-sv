@@ -12,7 +12,9 @@
 
 VERILATOR ?= verilator
 VERILATOR_COVERAGE ?= verilator_coverage
-SLANG     ?= slang
+LOCAL_SLANG := $(firstword $(wildcard ../.tools/slang \
+	../.tools/slang-11.0/slang))
+SLANG     ?= $(if $(LOCAL_SLANG),$(LOCAL_SLANG),slang)
 GTKWAVE   ?= gtkwave
 PYTHON    ?= python3
 CLANG     ?= clang
@@ -52,6 +54,8 @@ COVERAGE_REPORT_DIR := ../reports/generated/coverage
 QEMU_DIFF_DIR := ../reports/generated/qemu_diff
 COMPILER_DIR := ../reports/generated/compiler
 TRACEABILITY_REPORT := ../reports/generated/traceability-report.json
+INDEPENDENT_LINT_REPORT := ../reports/generated/independent-lint.json
+CDC_RDC_REPORT := ../reports/generated/cdc-rdc.json
 SOAK_SEEDS ?= 256
 SOAK_OBJ_DIR := $(OBJ_DIR)/soak
 SOAK_BIN := $(SOAK_OBJ_DIR)/Varm7tdmis_mister_wrapper_tb
@@ -105,7 +109,8 @@ INTEG_RUN_ARGS_compiler = \
 	+PROGRAM_HEX=$(abspath $(COMPILER_DIR)/program.hex)
 
 .PHONY: all lint lint-mister lint-example \
-        lint-generic-soc lint-generic-soc-slang sim-generic-soc lint-tb \
+        lint-generic-soc lint-generic-soc-slang lint-independent \
+        cdc-rdc fpga-quality sim-generic-soc lint-tb \
         quartus-analysis quartus-compile \
         quartus-conformance-analysis quartus-conformance-compile \
         quartus-option-characterization \
@@ -139,6 +144,16 @@ lint-generic-soc-slang:
 	$(SLANG) --version
 	$(SLANG) --allow-use-before-declare \
 	    --top arm7tdmi_generic_soc -f $(SIM_F) $(GENERIC_SOC)
+
+lint-independent:
+	PYTHONPATH=. $(PYTHON) independent_lint.py \
+	    --slang $(SLANG) --output $(INDEPENDENT_LINT_REPORT)
+
+cdc-rdc:
+	PYTHONPATH=. $(PYTHON) cdc_rdc_check.py --check \
+	    --output $(CDC_RDC_REPORT)
+
+fpga-quality: lint-independent cdc-rdc
 
 sim-generic-soc:
 	mkdir -p $(OBJ_DIR)
@@ -406,6 +421,9 @@ help:
 	@echo "  lint-example Verilator --lint-only on the portable FPGA example"
 	@echo "  lint-generic-soc Verilator lint on the ROM/RAM/timer/UART example"
 	@echo "  lint-generic-soc-slang Slang compile of the generic SoC example"
+	@echo "  lint-independent Slang zero-warning compile of all public tops"
+	@echo "  cdc-rdc      structural single-clock/synchronizer/reset audit"
+	@echo "  fpga-quality run independent lint and CDC/RDC gates"
 	@echo "  sim-generic-soc Run the generic SoC architectural program"
 	@echo "  quartus-analysis Quartus analysis/elaboration of the FPGA package"
 	@echo "  quartus-compile Full Quartus synth/fit/timing/assembly/power flow"

@@ -83,6 +83,11 @@
       "tests": ["tb/unit/sync_debug_port_tb.sv"],
       "source_sections": ["TASKS.md section 31.7 JTAG-006"]
     },
+    "FPGA-004": {
+      "rtl": ["rtl/", "fpga/"],
+      "tests": ["scripts/independent_lint.py", "scripts/cdc_rdc_check.py", "scripts/tests/test_fpga_quality_contract.py", "tb/integration/arm7tdmis_mister_cdc_reset_tb.sv"],
+      "source_sections": ["TASKS.md section 31.11 FPGA-004"]
+    },
     "MIST-007": {
       "rtl": ["rtl/top/arm7tdmi_mister.sv", "fpga/"],
       "tests": ["OPEN - real MiSTer framework build evidence required"],
@@ -141,6 +146,7 @@
     {"glob": "verification/programs/*", "requirements": ["VAL-001"]},
     {"glob": "verification/compiler/*", "requirements": ["VAL-009"]},
     {"glob": "scripts/tests/test_*.py", "requirements": ["VER-002", "VER-005"]},
+    {"glob": "scripts/tests/test_fpga_quality_contract.py", "requirements": ["FPGA-004"]},
     {"glob": "scripts/tests/test_soak_contract.py", "requirements": ["VAL-010"]}
   ]
 }

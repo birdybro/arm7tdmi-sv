@@ -22,6 +22,9 @@ sign-off gate in `TASKS.md` §31.13.
 - Add a 256-seed deterministic MiSTer-wrapper soak with sanitizer-instrumented
   simulation, unique X initialization, fail-hard timeouts, machine-readable
   evidence, and automatically minimized failure reproducers.
+- Add zero-warning independent Slang elaboration for every public synthesis
+  top and a mutation-tested structural CDC/RDC gate; synchronize deassertion
+  of every wrapper/debug reset domain.
 - Complete the remaining independent validation, formal, toolchain,
   MiSTer-framework, PocketStation, and hardware requirements in `TASKS.md`.
 - Freeze v1.0 only after every release-gate statement has durable evidence.
