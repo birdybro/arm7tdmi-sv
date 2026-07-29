@@ -1,7 +1,6 @@
 # Multiply Unit Architecture
 
-> **Audit status:** Historical implementation notes. Full operand/timing coverage and
-> long-accumulate S-flag commit are open in `TASKS.md` §31.3 and §31.10.
+> **Audit status:** Implemented and release-gated by `TASKS.md` ISA-003.
 
 How MUL/MLA/UMULL/SMULL/UMLAL/SMLAL are sequenced through the E-stage substate FSM. The actual arithmetic lives in `rtl/datapath/arm7tdmis_multiplier.sv` (a single-cycle 32×32→64 multiplier with optional accumulate); this doc is about the control flow.
 
@@ -46,7 +45,8 @@ The multiplier exposes `cycle_count` (3 bits, 1..4). The core latches it at S_EX
 | UMULL/SMULL | 1 + m + 1 (S_EXEC + S_MUL_BUSY + S_MULL_HI) |
 | UMLAL/SMLAL | 1 + 1 + m + 1 (S_EXEC + S_MULL_ACC + S_MUL_BUSY + S_MULL_HI) |
 
-Per-class totals match TRM Table 7-10/11 within ±1 cycle (the optional vs always-on writeback I cycle).
+Per-class totals match the TRM Tables 7-7 through 7-10 and are checked at the
+architectural E-stage boundary.
 
 ## State transitions
 
@@ -168,7 +168,11 @@ When the S bit is set:
 
 The multiplier exposes `n_out` and `z_out` computed from the 64-bit product width (`is_long ? product[63] : product[31]`, `is_long ? (product == 0) : (product[31:0] == 0)`). The core's CPSR write mux uses these via the `flags_from_mul` path.
 
-Flag update timing for accumulate forms: happens at S_EXEC (where the basic flag select fires via the writeback mux's `mul_writes_flags` gate). For UMLAL the flags shown at S_EXEC reflect the multiplier's view at that cycle (acc_hi=0) — which doesn't match the final result. **The flag update for UMLAL is currently approximate; full TRM compliance would commit flags at S_MULL_ACC instead.** TODO if cycle-accurate flag observation matters.
+Flag update timing for UMLAL/SMLAL is deferred to `S_MULL_ACC`, after both
+accumulator halves have been read and the final 64-bit sum is present. The core
+latches the instruction's S bit in `mull_s_q`, so advancing Decode cannot either
+lose or spuriously create that later flag commit. Non-accumulating multiply forms
+commit flags from their already-final result in `S_EXEC`.
 
 ## Files
 
@@ -177,3 +181,6 @@ Flag update timing for accumulate forms: happens at S_EXEC (where the basic flag
 - `tb/unit/multiplier_tb.sv` — unit tests for the multiplier datapath.
 - `tb/integration/arm7tdmis_umull_tb.sv` — end-to-end UMULL with 2^32 product.
 - `tb/integration/arm7tdmis_umlal_tb.sv` — end-to-end UMLAL with non-zero accumulator.
+- `tb/integration/arm7tdmis_mull_flags_tb.sv` — final accumulated N/Z timing.
+- `tb/integration/arm7tdmis_multiply_matrix_tb.sv` — all forms, S settings,
+  defined aliases, extrema, and m=1/2/3/4 architectural timing.

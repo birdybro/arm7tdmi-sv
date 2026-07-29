@@ -2427,9 +2427,15 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   `tb/integration/arm7tdmis_flags_preserve_tb.sv` observes the resulting CPSR through
   MRS after an overflowing arithmetic operation, a logical/move S operation, and an
   S-clear arithmetic operation.
-- [ ] **ISA-003:** Commit N/Z correctly for `UMLALS` and `SMLALS` after the final
+- [x] **ISA-003:** Commit N/Z correctly for `UMLALS` and `SMLALS` after the final
   accumulated 64-bit result. Cover all six multiply forms, S/non-S, aliasing, signed
-  extrema, and m=1/2/3/4 timing.
+  extrema, and m=1/2/3/4 timing. The final flag commit occurs in `S_MULL_ACC`;
+  `tb/integration/arm7tdmis_mull_flags_tb.sv` distinguishes the final accumulated
+  value from the premature low-half/product value, and the reset-per-row
+  `tb/integration/arm7tdmis_multiply_matrix_tb.sv` executes 19 architectural rows
+  covering every form and S setting, zero/nonzero N/Z, C/V preservation, defined
+  overlaps, both signed endpoints, and all four m timings. The combinational
+  cross-check remains in `tb/unit/multiplier_tb.sv`.
 - [ ] **ISA-004:** Enforce PSR privilege rules: User mode may change CPSR flags only;
   SPSR access in User/System and writes to invalid modes follow the selected
   UNPREDICTABLE policy; reserved x/s fields are preserved/SBZP; the MSR T-bit policy is
