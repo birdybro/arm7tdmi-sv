@@ -345,6 +345,22 @@ module arm7tdmis_exception_return_matrix_tb
                 ADDR, WRITE, SIZE, PROT, LOCK, TRANS));
     endtask
 
+    task automatic check_ldm_internal_bus(
+        input int mode_idx,
+        input int state_idx,
+        input int form_idx
+    );
+        if (ADDR !== (TEST_PC + 32'd12)
+            || WRITE !== WRITE_READ
+            || SIZE !== 2'(SIZE_WORD)
+            || PROT !== 2'(PROT_DAT_PRIV)
+            || LOCK !== LOCK_FREE
+            || TRANS !== 2'(TRANS_N))
+            fail(mode_idx, state_idx, form_idx, $sformatf(
+                "LDM pc+3i cycle A/W/S/P/L/T=%08x/%0b/%02b/%02b/%0b/%02b",
+                ADDR, WRITE, SIZE, PROT, LOCK, TRANS));
+    endtask
+
     task automatic check_following_target_bus(
         input int mode_idx,
         input int state_idx,
@@ -438,6 +454,7 @@ module arm7tdmis_exception_return_matrix_tb
         logic        target_fetch_seen;
         logic        target_follow_seen;
         logic        target_exec_seen;
+        logic        ldm_internal_seen;
         logic [31:0] prev_addr;
         logic        prev_write;
         logic [1:0]  prev_size;
@@ -520,6 +537,7 @@ module arm7tdmis_exception_return_matrix_tb
         target_fetch_seen  = 1'b0;
         target_follow_seen = 1'b0;
         target_exec_seen   = 1'b0;
+        ldm_internal_seen  = 1'b0;
         redirect_count     = 0;
         data_cycles        = 0;
 
@@ -537,7 +555,13 @@ module arm7tdmis_exception_return_matrix_tb
                 if (form_idx != 5)
                     fail(mode_idx, state_idx, form_idx,
                          "data transfer issued by data-processing return");
-                if (data_cycles == 0) begin
+                if (redirect_seen) begin
+                    if (ldm_internal_seen)
+                        fail(mode_idx, state_idx, form_idx,
+                             "more than one LDM pc+3i internal address phase");
+                    check_ldm_internal_bus(mode_idx, state_idx, form_idx);
+                    ldm_internal_seen = 1'b1;
+                end else if (data_cycles == 0) begin
                     if (ADDR !== DATA_BASE || TRANS !== 2'(TRANS_N))
                         fail(mode_idx, state_idx, form_idx,
                              "wrong first LDM data address/cycle");
@@ -554,7 +578,8 @@ module arm7tdmis_exception_return_matrix_tb
                     || PROT !== 2'(PROT_DAT_PRIV) || LOCK !== LOCK_FREE)
                     fail(mode_idx, state_idx, form_idx,
                          "wrong LDM data bus controls");
-                data_cycles++;
+                if (!redirect_seen)
+                    data_cycles++;
             end
 
             if (u_dut.u_core.flush) begin
@@ -625,6 +650,9 @@ module arm7tdmis_exception_return_matrix_tb
             fail(mode_idx, state_idx, form_idx, $sformatf(
                 "data cycle count expected %0d got %0d",
                 form_idx == 5 ? 2 : 0, data_cycles));
+        if (ldm_internal_seen !== (form_idx == 5))
+            fail(mode_idx, state_idx, form_idx,
+                 "wrong number of LDM pc+3i internal address phases");
     endtask
 
     initial begin
