@@ -172,6 +172,18 @@ module psr_tb
         check1("user CPSR I protected", cpsr.i, 1'b1);
         check1("user CPSR F protected", cpsr.f, 1'b1);
 
+        // User mode cannot leave itself with MSR. Model a legal exception
+        // entry back to Supervisor before exercising other privileged
+        // mode changes.
+        exc_new_cpsr        = PSR_RESET_VALUE;
+        exc_target_spsr_idx = 3'd2;
+        exc_enter_en        = 1'b1;
+        @(posedge CLK);
+        @(negedge CLK);
+        exc_enter_en = 1'b0;
+        check32("exception returned test to SVC", 32'(cpsr.m),
+                32'(MODE_SUPERVISOR));
+
         enter_mode(MODE_SYSTEM);
         @(negedge CLK);
         check1("spsr_valid in system", spsr_valid, 1'b0);

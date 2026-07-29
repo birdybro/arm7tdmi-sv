@@ -132,6 +132,12 @@ module arm7tdmis_psr
                 // CPSR field-masked write — drop T (bit 5) per §30.8.3.
                 if (cpsr_write_en) begin
                     cpsr_mask = expand_mask(cpsr_write_mask) & ~(32'h1 << PSR_BIT_T);
+                    // User mode may update NZCV only. In particular, an
+                    // MSR CPSR_c cannot change mode or interrupt masks,
+                    // and the unused high nibble of the flags byte is not
+                    // an architecturally writable flags field.
+                    if (cur_mode == 5'(MODE_USER))
+                        cpsr_mask &= 32'hF000_0000;
                     cpsr_next = (cpsr_next & ~cpsr_mask) |
                                 (cpsr_write_data & cpsr_mask);
                 end
