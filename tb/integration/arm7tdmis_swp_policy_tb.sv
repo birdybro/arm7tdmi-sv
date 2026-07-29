@@ -200,6 +200,7 @@ module arm7tdmis_swp_policy_tb
         int locked_cycles;
         int read_cycles;
         int write_cycles;
+        int merged_internal_cycles;
 
         @(negedge CLK);
         nRESET = 1'b0;
@@ -213,6 +214,7 @@ module arm7tdmis_swp_policy_tb
         locked_cycles = 0;
         read_cycles = 0;
         write_cycles = 0;
+        merged_internal_cycles = 0;
         repeat (100) begin
             @(negedge CLK);
             if ((u_dut.u_core.state_q == 5'd0)
@@ -221,21 +223,43 @@ module arm7tdmis_swp_policy_tb
             if (test_seen
                 && (TRANS inside {TRANS_N, TRANS_S})
                 && PROT[PROT_BIT_DATA]) begin
-                data_cycles++;
-                if (LOCK)
-                    locked_cycles++;
-                if (WRITE)
-                    write_cycles++;
-                else
-                    read_cycles++;
-                if (SIZE !== (byte_access
-                            ? 2'(SIZE_BYTE) : 2'(SIZE_WORD)))
-                    fail(case_id, {label, " emitted wrong SIZE"});
+                if (ADDR == DATA_ADDR) begin
+                    data_cycles++;
+                    if (LOCK)
+                        locked_cycles++;
+                    if (WRITE)
+                        write_cycles++;
+                    else
+                        read_cycles++;
+                    if (SIZE !== (byte_access
+                                ? 2'(SIZE_BYTE) : 2'(SIZE_WORD)))
+                        fail(case_id, {label, " emitted wrong SIZE"});
+                end else begin
+                    // Table 7-15 retains data-class controls while the
+                    // SWP destination writeback merges with pc+12/S.
+                    merged_internal_cycles++;
+                    if (is_trap_case(case_id)
+                        || ADDR !== (TEST_PC + 32'd12)
+                        || WRITE !== WRITE_READ
+                        || SIZE !== 2'(SIZE_WORD)
+                        || PROT !== (user_mode
+                                  ? 2'(PROT_DAT_USR)
+                                  : 2'(PROT_DAT_PRIV))
+                        || LOCK !== LOCK_FREE
+                        || TRANS !== 2'(TRANS_S))
+                        fail(case_id, {label,
+                            " emitted an unexpected merged SWP phase"});
+                end
             end
         end
 
         if (!test_seen)
             fail(case_id, {label, " never reached test instruction"});
+        if (merged_internal_cycles != (is_trap_case(case_id) ? 0 : 1))
+            fail(case_id, $sformatf(
+                "%s merged phase count expected %0d got %0d",
+                label, is_trap_case(case_id) ? 0 : 1,
+                merged_internal_cycles));
 
         if (is_trap_case(case_id)) begin
             if (data_cycles != 0 || locked_cycles != 0)
