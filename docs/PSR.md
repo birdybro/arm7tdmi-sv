@@ -38,6 +38,12 @@ User and System select none. The deterministic no-SPSR policy is:
 The zero read is intentional. The internal bank-index default must never make
 an absent SPSR expose FIQ state.
 
+If an S+PC data-processing operation is executed without an SPSR, the core
+still commits its ordinary current-state-aligned PC result and leaves the
+complete CPSR unchanged. All twelve result-writing DP opcodes are checked in
+both User and System modes by
+`tb/integration/arm7tdmis_dp_pc_no_spsr_policy_tb.sv`.
+
 ## Invalid modes
 
 The seven valid mode values are User `10000`, FIQ `10001`, IRQ `10010`,
@@ -53,6 +59,12 @@ a deterministic, recoverable policy:
 The rule applies to CPSR and SPSR writes. It prevents a malformed debugger or
 guest program from placing the register-file bank selector in an undefined
 state while retaining ordinary MSR field independence.
+
+The same validity guard applies when restoring CPSR from an SPSR. If the
+stored mode is invalid, the complete restore is rejected, the current CPSR is
+retained, and the ordinary aligned PC result still commits. This matters at
+reset because this FPGA implementation deterministically initializes all five
+SPSRs to zero. `arm7tdmis_invalid_spsr_return_policy_tb` locks that behavior.
 
 ## T-bit policy
 
@@ -73,5 +85,12 @@ instruction as one E cycle per TRM Table 7-6.
   storage, invalid modes, User/System RAZ/WI, and privilege filtering.
 - `tb/integration/arm7tdmis_psr_policy_tb.sv` executes the policy in
   Supervisor, FIQ, User, and System modes through the public CPU/memory pins.
+- `tb/integration/arm7tdmis_dp_pc_no_spsr_policy_tb.sv` exhausts all twelve
+  result-writing S+PC opcodes in User and System modes.
+- `tb/integration/arm7tdmis_invalid_spsr_return_policy_tb.sv` checks rejection
+  of an invalid SPSR mode during exception return.
 - `tb/integration/arm7tdmis_debug_register_scan_tb.sv` covers the
   OpenOCD-compatible CPSR/SPSR debug transfer sequence.
+
+The complete project policy inventory is
+[UNPREDICTABLE.md](UNPREDICTABLE.md).

@@ -154,6 +154,11 @@ See [docs/PIPELINE.md](docs/PIPELINE.md) for the detailed FSM, bus-overlap reaso
 
 See [docs/DEBUG.md](docs/DEBUG.md).
 
+The implementation choices for architecturally UNPREDICTABLE and UNKNOWN
+inputs are centralized in
+[docs/UNPREDICTABLE.md](docs/UNPREDICTABLE.md). Those deterministic outcomes
+are compatibility/safety policies, not portable ARM software guarantees.
+
 ### Coprocessor handshake
 
 - **CP14:** c0 control and independent c1 RX/TX buffers implement W/R ownership,
@@ -209,7 +214,8 @@ tb/
   programs/    hand-encoded .hex test programs
 
 docs/
-  PIPELINE.md, DEBUG.md, MULTIPLY.md, EXCEPTIONS.md, README.md
+  PIPELINE.md, DEBUG.md, MULTIPLY.md, EXCEPTIONS.md, PSR.md,
+  UNPREDICTABLE.md, VERIFICATION.md, INTEGRATION.md, README.md
 
 scripts/      Makefile, sim.f / tb.f filelists, arm7tdmis.sdc
 fpga/         portable wrapper file list/QIP/QSF/SDC and public example top

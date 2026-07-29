@@ -47,6 +47,15 @@ accidentally weakened reference map fail hard. The independent
 reserved family through the pin-level memory interface and checks exception
 state and absence of memory/coprocessor side effects.
 
+Allocated encodings whose operands are architecturally UNPREDICTABLE are not
+folded into that Undefined reference map. `unpredictable_decode_tb` separately
+enumerates 1,066 ARM trap-policy rows, 448 Thumb trap-policy rows, and 12
+deterministic executable rows. That enumeration exhausts the affected
+MRS/MSR/BX/SWP and register-offset extra-transfer SBZ/SBO fields rather than
+sampling canonical encodings. `arm7tdmis_unpredictable_trap_tb` carries 24
+representatives through the public pins. The normative distinction and
+complete policy inventory are in [UNPREDICTABLE.md](UNPREDICTABLE.md).
+
 ## Unaligned and endian evidence
 
 `arm7tdmis_unaligned_access_matrix_tb` is a 72-row reset-per-case pin-level
@@ -55,12 +64,23 @@ SWPB at address low bits 0 through 3 in both endian configurations. Each row
 checks architectural data, memory, transfer width/direction/address, and SWP
 lock lifetime. The eight remaining rows feed every two-bit target suffix to BX
 in both endian configurations and require aligned ARM/Thumb fetches of the
-correct width.
+correct width. Suffix `10` is explicitly the selected ISA-016
+clear-low-bits policy; the other suffixes exercise architecture-defined BX
+state/alignment behavior.
 
 The test distinguishes specification from policy. ARMv4T word-load rotation
 is architectural. Odd halfword behavior is labeled architecturally
 UNPREDICTABLE and checked only as this implementation's deterministic r4p3
-bus/lane policy.
+bus/lane policy. `arm7tdmis_thumb_halfword_policy_tb` adds 20 Thumb rows for
+register/immediate LDRH and STRH plus LDRSH in both lanes and endian modes.
+`arm7tdmis_thumb_word_unaligned_policy_tb` adds 48 Thumb register-offset,
+immediate-offset, and SP-relative word LDR/STR rows across every address suffix
+and both endian modes. Its 12 aligned rows are controls; the remaining 36
+freeze the ordinary rotate-on-load/aligned-word-store datapath as project
+policy. `arm7tdmis_ldr_pc_unaligned_policy_tb` separately checks all eight
+address-suffix/endian combinations for ARM LDR-to-PC. Six rows freeze the
+unaligned-data-address policy: ordinary LDR rotation followed by the
+architecture-defined pre-v5 LDR-to-PC result alignment.
 
 ## ARM single-transfer evidence
 
@@ -71,7 +91,10 @@ functional space:
   P/U/B/W/L and immediate/register offset. Register-offset rows exercise LSL,
   LSR, ASR, and the encoded `ROR #0` RRX case.
 - `arm7tdmis_extra_ls_matrix_tb` executes STRH, LDRH, LDRSB, and LDRSH for
-  every P/U/W and immediate/register combination (64 rows).
+  every P/U/W and immediate/register combination (64 rows). The 16
+  `P=0,W=1` rows explicitly freeze an ordinary privileged post-index transfer
+  at the original base followed by deterministic writeback; ARMv4T labels
+  that Mode-3 combination UNPREDICTABLE.
 - `arm7tdmis_single_ls_policy_tb` executes 12 defined alias/r15 cases and 14
   statically detectable ARMv4T UNPREDICTABLE operand combinations.
 
@@ -199,9 +222,12 @@ has committed and injects PABT on the suffix fetch. Both handlers return to
 the suffix, which reaches the same target and link value using the preserved
 User LR. A third row enters an orphan suffix with a seeded LR. That last
 outcome freezes an implementation policy for architecturally UNPREDICTABLE
-software, not a portable ARM guarantee. Together the rows demonstrate that
-there is no required hidden inter-halfword BL state. Four consecutive
-external MRC transfers and their independent responses remain covered by
+software, not a portable ARM guarantee.
+`arm7tdmis_thumb_bl_pair_policy_tb` covers the complementary orphan prefix:
+the prefix value remains in User LR and the ordinary non-suffix successor
+retires without a branch. Together the rows demonstrate that there is no
+required hidden inter-halfword BL state. Four consecutive external MRC
+transfers and their independent responses remain covered by
 `arm7tdmis_cp_erratum15_tb`.
 
 Functional/line/toggle coverage reporting, mutation testing of architectural

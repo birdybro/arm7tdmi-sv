@@ -10,7 +10,10 @@
 // SPSR/LR/SP banks, the first redirected opcode bus tuple (including the
 // restored privilege and instruction width), exact PC alignment, LDM data
 // beats/writeback, all otherwise-unmodified physical registers and SPSRs,
-// and suppression of the sequential instruction after the return.
+// and suppression of the sequential instruction after the return. The raw
+// return values deliberately set discarded address bits; masking those bits
+// is this project's ISA-016 policy for otherwise-UNPREDICTABLE software, not
+// an additional architectural promise.
 
 `timescale 1ns/1ps
 

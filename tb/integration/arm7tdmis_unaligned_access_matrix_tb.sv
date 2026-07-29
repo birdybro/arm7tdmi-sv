@@ -5,7 +5,11 @@
 //     8 * address[1:0].
 //   * STR and the write half of SWP ignore address[1:0].
 //   * byte accesses use every address bit and the configured endian lane.
-//   * ARM/Thumb instruction fetches are word/halfword aligned.
+//   * Defined BX targets select word/halfword-aligned instruction fetches.
+//
+// A BX target ending in binary 10 is itself UNPREDICTABLE in ARMv4T. The
+// fetch rows freeze this implementation's clear-low-two-bits policy for that
+// suffix while retaining architectural checks for the other three suffixes.
 //
 // ISA-016 implementation policy for architecturally UNPREDICTABLE odd
 // halfword accesses:

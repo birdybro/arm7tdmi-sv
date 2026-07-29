@@ -23,6 +23,9 @@ because they agree with each other.
 - **[PSR.md](PSR.md)** — CPSR/SPSR bit map, MSR field and privilege rules,
   deterministic invalid-mode and absent-SPSR policy, and the frozen CPSR.T
   behavior.
+- **[UNPREDICTABLE.md](UNPREDICTABLE.md)** — normative ledger separating
+  ARMv4T guarantees from every deterministic trap/result/RAZ-WI policy selected
+  for architecturally UNPREDICTABLE or UNKNOWN behavior.
 
 - **[MULTIPLY.md](MULTIPLY.md)** — Multiply forms (MUL/MLA/UMULL/SMULL/UMLAL/SMLAL), m-parameter cycle shaping, the UMLAL/SMLAL 2-cycle accumulator read across S_EXEC + S_MULL_ACC and the latches that make it work.
 

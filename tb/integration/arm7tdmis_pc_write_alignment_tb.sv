@@ -2,9 +2,11 @@
 //
 // Every row starts from reset and executes through the pin-level memory bus.
 // It checks the first redirected opcode address/width as well as the PC and
-// state that reach Execute.  Low address bits are deliberately set in every
-// source value so the memory model's significant-address-bit behavior cannot
-// hide a missing architectural alignment step.
+// state that reach Execute. Low address bits are deliberately set in every
+// source value so the memory model cannot hide discarded bits. LDR/LDM/POP
+// and ordinary BX rows check architecture-defined alignment. General DP and
+// exception-return writes with nonzero discarded bits check the deterministic
+// ISA-016 masking policy, not a portable ARM software guarantee.
 //
 // Rows: ARM MOV pc, register-shift MOV pc, LDR pc, LDM pc, Thumb POP pc,
 // MOVS pc restoring Thumb, LDM^ pc restoring Thumb, MOVS pc restoring ARM,

@@ -2432,7 +2432,7 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   extrema, and m=1/2/3/4 timing. The final flag commit occurs in `S_MULL_ACC`;
   `tb/integration/arm7tdmis_mull_flags_tb.sv` distinguishes the final accumulated
   value from the premature low-half/product value, and the reset-per-row
-  `tb/integration/arm7tdmis_multiply_matrix_tb.sv` executes 19 architectural rows
+  `tb/integration/arm7tdmis_multiply_matrix_tb.sv` executes 21 rows
   covering every form and S setting, zero/nonzero N/Z, C/V preservation, defined
   overlaps, both signed endpoints, and all four m timings. The combinational
   cross-check remains in `tb/unit/multiplier_tb.sv`.
@@ -2466,7 +2466,10 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   register-shift ARM DP writes, Thumb DP writes, LDR, LDM, POP, both BX directions,
   MOVS-to-PC restoring ARM and Thumb, and LDM^-to-PC restoring Thumb. PC values are
   masked before reaching the raw address pins; restored SPSR.T selects both that mask
-  and the first-refill width. The register-shift path latches its result and restore
+  and the first-refill width. Instruction-defined LDR/LDM/POP/BX alignment is
+  architectural; deliberately unaligned general DP and exception-return source values
+  freeze the ISA-016 masking policy and are not portable software guarantees. The
+  register-shift path latches its result and restore
   intent through `S_DP_SHIFT`, eliminating its former next-instruction datapath
   dependency. Existing interworking, LDM return, exception, timing, and debug-PC
   regressions pass unchanged.
@@ -2511,7 +2514,15 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   rows (eight access classes x four low-bit values x both endian modes) plus
   eight BX-driven instruction-fetch rows. It checks results, sign extension,
   stores, exact raw address/size/direction, both locked SWP cycles, endian lanes,
-  destination state, and word/halfword fetch alignment.
+  destination state, and word/halfword fetch alignment. The BX `...10` rows are
+  explicitly project policy. `arm7tdmis_thumb_halfword_policy_tb` adds 20 Thumb
+  reset-per-case rows for register/immediate LDRH/STRH and LDRSH across both
+  halfword lanes and endian modes; it found and fixed a Format-8 STRH decoder bug
+  that had emitted a byte transfer. `arm7tdmis_thumb_word_unaligned_policy_tb`
+  adds 48 register/immediate/SP-relative Thumb LDR/STR rows: 12 aligned controls
+  and 36 policy rows across every low-bit value and both endian modes.
+  `arm7tdmis_ldr_pc_unaligned_policy_tb` independently checks all eight
+  address/endian rows for ARM LDR-to-PC, including six unaligned policy rows.
 - [x] **ISA-010:** Verify every load/store P/U/B/W/L combination, immediate and shifted
   register offset, base/destination alias, writeback, r15 use, and defined/
   UNPREDICTABLE case. `tb/integration/arm7tdmis_single_ls_matrix_tb.sv`
@@ -2520,7 +2531,9 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   checks the exact data-cycle pins, privilege, data, destination, and base
   update. `tb/integration/arm7tdmis_extra_ls_matrix_tb.sv` independently
   executes all 64 Addressing Mode 3 rows (STRH/LDRH/LDRSB/LDRSH x P/U/W x
-  immediate/register). `tb/integration/arm7tdmis_single_ls_policy_tb.sv`
+  immediate/register). Its 16 `P=0,W=1` rows freeze the selected privileged
+  post-index result for that architecturally UNPREDICTABLE combination.
+  `tb/integration/arm7tdmis_single_ls_policy_tb.sv`
   adds 26 reset-per-case rows for defined aliases and r15 values plus every
   statically detectable unsafe Rn/Rd/Rm/writeback combination class. The selected
   ISA-016 policy takes a precise Undefined trap before any would-be data
@@ -2541,6 +2554,8 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   forms, and S forms in User/System take the project-wide precise Undefined
   trap before any data beat. `arm7tdmis_stm_base_list_tb` independently covers
   the defined STM base-lowest rule in all four addressing modes, while
+  `arm7tdmis_thumb_block_policy_tb` adds seven Thumb rows for loaded-base-wins,
+  base-lowest/non-lowest stores, and every empty-list form.
   `arm7tdmis_ldm_pc_tb`, `arm7tdmis_pc_write_alignment_tb`, and the per-beat
   abort/base-list regressions preserve the neighboring return and abort rules.
 - [x] **ISA-012:** Verify SWP/SWPB data, alignment, endian lanes, register aliasing,
@@ -2589,7 +2604,9 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   the exception mode so a banked r13/r14 base cannot be written into the
   restored destination bank. The older `arm7tdmis_ldm_pc_tb`,
   `arm7tdmis_pc_write_alignment_tb`, block-transfer matrices, and PSR tests
-  remain independent neighboring evidence.
+  remain independent neighboring evidence. The deliberately discarded bits
+  verify the selected ISA-016 alignment policy, not an architectural promise for
+  otherwise-UNPREDICTABLE return values.
 - [x] **ISA-015:** Test instruction sequences, not only isolated opcodes: forwarding/
   dependency pairs, self-modifying stores under the documented memory contract,
   back-to-back PC changes, back-to-back MRC, and mode/bank transitions.
@@ -2610,10 +2627,23 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   LR-based result, not an ARM software guarantee. The unified-memory coherence and
   required explicit PC-changing refill contract are published in
   `docs/INTEGRATION.md`.
-- [ ] **ISA-016:** Give every architecturally UNPREDICTABLE case a stable policy
+- [x] **ISA-016:** Give every architecturally UNPREDICTABLE case a stable policy
   (`trap`, deterministic result, or real-r4p3 behavior). Tests must never accidentally
   elevate that chosen behavior into an ARM architectural guarantee.
-- [ ] **ISA-017:** Exhaustively verify the 31 physical GPRs and six SPSRs across
+  `docs/UNPREDICTABLE.md` is the normative, scope-bounded ledger. Static allocated-field
+  violations, including every affected SBZ/SBO field, are frozen by
+  `unpredictable_decode_tb` (1,066 ARM traps, 448 Thumb traps, 12 deterministic
+  rows) and 24 public-pin trap representatives. Runtime evidence includes 24
+  no-SPSR S+PC rows, general PC/BX masking, 20 Thumb odd-halfword rows, 36 Thumb
+  unaligned-word policy rows, six unaligned LDR-to-PC rows, 16 Mode-3
+  `P=0,W=1` rows, seven Thumb block-policy rows, 21 multiply rows, reset-zero
+  checks for all 31 GPR slots/five SPSRs, rejected invalid-SPSR restore, both
+  orphan Thumb BL halves, and modulo address rollover across 13
+  branch/fetch/block rows plus two LDC/STC rows. The ledger also covers PSR
+  preservation/rejection, r4p3 MCR-r15, every JTAG IR/chain selector, and every
+  reserved EmbeddedICE-RT address, while explicitly excluding later ISA
+  features and violations of external contracts.
+- [ ] **ISA-017:** Exhaustively verify the 31 physical GPRs and five physical SPSRs across
   User/System/FIQ/IRQ/SVC/Abort/Undefined, including FIQ r8–r14 banking, User/System
   sharing, `^` transfers from every privileged mode, mode changes, and inaccessible/
   UNKNOWN SPSR cases.
