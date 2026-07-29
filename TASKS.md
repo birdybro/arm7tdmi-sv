@@ -2661,22 +2661,45 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
 
 ## 31.4 P0 — exceptions, reset, and aborts
 
-- [ ] **EXC-001:** Generate the exact saved LR for the source state and exception:
+- [x] **EXC-001:** Generate the exact saved LR for the source state and exception:
   ARM SWI/UNDEF +4, Thumb SWI/UNDEF +2, PABT/IRQ/FIQ +4, and DABT +8. Cover every
-  exception from ARM and Thumb.
-- [ ] **EXC-002:** Implement and prove the simultaneous priority
+  exception from ARM and Thumb. The reset-isolated
+  `arm7tdmis_arm_exception_lr_tb` and `arm7tdmis_thumb_exception_lr_tb`
+  matrices cover all six classes in both states and check the selected event,
+  source PC, physical LR/SPSR bank, saved CPSR, vector, handler, and suppressed
+  side effects.
+- [x] **EXC-002:** Implement and prove the simultaneous priority
   Reset > DABT > FIQ > IRQ > PABT > UNDEF > SWI. Lower-priority pending events must
   be retained or discarded exactly as specified, not merely lost in an `if` chain.
-- [ ] **EXC-003:** Implement the DABT+FIQ interlock: enter Abort first, then vector to
+  `arm7tdmis_exception_priority_tb` covers FIQ+IRQ, IRQ+PABT, PABT+UNDEF,
+  and PABT+SWI at one instruction; the reset matrix collides Reset with live
+  DABT+FIQ; the DABT interlock and held-level interrupt tests prove required
+  follow-on service, while marker checks prove discarded instruction-associated
+  lower-priority events do not leak.
+- [x] **EXC-003:** Implement the DABT+FIQ interlock: enter Abort first, then vector to
   FIQ. An abort must not spuriously set CPSR.F merely because FIQ was coincident.
-- [ ] **EXC-004:** Correct LDM abort behavior: complete the instruction, suppress the
+  `arm7tdmis_dabt_fiq_tb` injects a one-enabled-cycle coincident FIQ and proves
+  ABT→FIQ→ABT mode order, both links/SPSRs, untouched Abort-vector restart,
+  and the original F bit. `arm7tdmis_interrupt_latency_tb` independently
+  checks the interlocked 27-cycle worst case at the raw vector address.
+- [x] **EXC-004:** Correct LDM abort behavior: complete the instruction, suppress the
   aborting and every later destination write, preserve r15, and perform requested base
   writeback. Test abort on every beat and base-in-list restoration rules.
-- [ ] **EXC-005:** Correct STM abort behavior: requested base writeback completes.
+  `arm7tdmis_ldm_abort_tb` aborts each of four beats including r15;
+  `arm7tdmis_ldm_abort_base_list_tb` repeats every beat with Rn in the list.
+  Both require all addresses, precise destination suppression, modified-base
+  restoration, Abort entry, and successor flushing.
+- [x] **EXC-005:** Correct STM abort behavior: requested base writeback completes.
   Test abort on every beat and verify which stores reached memory.
-- [ ] **EXC-006:** Verify single LDR/STR abort behavior for every pre/post-index and
+  `arm7tdmis_stm_abort_tb` aborts every beat independently, requires all four
+  transfers to be presented, checks exactly which stores committed, and proves
+  requested writeback plus precise Abort entry.
+- [x] **EXC-006:** Verify single LDR/STR abort behavior for every pre/post-index and
   writeback form: requested base modification still occurs, a load destination is not
   overwritten, and no later side effect leaks from the aborted instruction.
+  `arm7tdmis_ls_abort_modes_tb` executes the complete 16-row P/U/W/L word
+  matrix, including both post-index encodings, and checks base outcome,
+  destination/memory preservation, link, handler state, and successor suppression.
 - [x] **EXC-007:** Reconcile SWP's read-only abort requirement with the external bus
   contract. Once a read abort occurs, do not issue/commit the write and do not change
   the destination. `arm7tdmis_swp_read_abort_tb` independently covers SWP and
@@ -2684,19 +2707,35 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   covers write-response aborts: a read abort issues no write address, neither
   abort commits memory or Rd, the successor is flushed, LR_abt is PC+8, and
   LOCK is released.
-- [ ] **EXC-008:** Prove PABT metadata follows the fetched instruction and disappears
+- [x] **EXC-008:** Prove PABT metadata follows the fetched instruction and disappears
   when that instruction is flushed by a branch, exception, condition path, or debug
-  event.
-- [ ] **EXC-009:** Verify reset while `CLKEN=0`, reset during every multicycle state,
+  event. `arm7tdmis_pabt_pipeline_tb` covers branch and exception flushes plus
+  condition-failed Undefined followers; `arm7tdmis_pabt_debug_flush_tb`
+  retains a tagged abort through halt, redirects r15 through the real scan path,
+  and proves all metadata is gone before RESTART.
+- [x] **EXC-009:** Verify reset while `CLKEN=0`, reset during every multicycle state,
   minimum-low duration, asynchronous assertion/synchronous release contract, initial
   CPSR/mode/banks, architecturally UNKNOWN register values, bus I cycles, and first
   fetch at zero. Document any deterministic FPGA initialization without depending on
-  it as architectural behavior.
-- [ ] **EXC-010:** Verify synchronous level-sensitive nIRQ/nFIQ sampling, masking,
+  it as architectural behavior. `reset_sync_tb`, `reset_state_policy_tb`,
+  `arm7tdmis_reset_clken_tb`, and the 15-row
+  `arm7tdmis_reset_multicycle_matrix_tb` cover the complete contract, including
+  every non-Execute state and a live Reset+DABT+FIQ collision.
+  `docs/UNPREDICTABLE.md` records zero initialization as a project policy,
+  explicitly not an architectural software guarantee.
+- [x] **EXC-010:** Verify synchronous level-sensitive nIRQ/nFIQ sampling, masking,
   persistence, late arrival, CLKEN stalls, simultaneous requests, and minimum/maximum
   latency including the documented 27-cycle case.
-- [ ] **EXC-011:** Scoreboard every exception-entry and return bus cycle from Table
+  `arm7tdmis_interrupt_sampling_matrix_tb` has eight reset-isolated rows for
+  every listed sampling case; `arm7tdmis_interrupt_latency_tb` measures both
+  the four-cycle synchronized minimum and 27-cycle LDM-abort/FIQ maximum.
+- [x] **EXC-011:** Scoreboard every exception-entry and return bus cycle from Table
   7-16, including address, T state, mode/PROT, TRANS, and discarded prefetched data.
+  `arm7tdmis_exception_bus_matrix_tb` scoreboards all three cycles for six
+  exception classes from ARM and Thumb User state (12 rows).
+  `arm7tdmis_exception_return_matrix_tb` scoreboards source, address-only,
+  target, and following-target phases for 60 mode/state/form rows, including
+  register-shift and LDM-PC returns.
 
 ## 31.5 P0 — memory interface and cycle accuracy
 

@@ -1,8 +1,8 @@
 # Exception Entry Architecture
 
-> **Audit status:** Implementation notes, not a release sign-off. Use `TASKS.md`
-> §31.4 as the authoritative requirement and status; directed evidence below does
-> not replace the remaining exception, bus, and verification gates.
+> **Audit status:** `TASKS.md` §31.4 is closed by the fail-hard matrices named
+> below. This is subsystem evidence, not whole-core release sign-off; the
+> remaining bus, debug, validation, and FPGA gates in §31 still apply.
 
 Seven exception types per the ARM7TDMI-S r4p3 TRM §2.9. This doc captures their entry semantics, priorities, and where they fire in our pipelined core.
 
@@ -115,9 +115,10 @@ exception. There is no r4p3 defect-emulation parameter.
 
 ### PABT (prefetch abort)
 
-```systemverilog
-wire pabt_fires = executing && de_q.pabort;
-```
+`fd_q.pabort` is carried into `de_q.pabort`. A monitor-mode instruction
+breakpoint supplies the same instruction-associated request through
+`debug_pabt_pending`; the explicit priority selector only asserts
+`pabt_fires` when no DABT, FIQ, or IRQ is selected.
 
 `fd_q.pabort` latches at the F-stage RDATA capture; carried through D into `de_q.pabort`. When the aborted instruction reaches E, this fires. The same instruction is *not* committed (no regfile write, no PC advance — exception entry takes over).
 
@@ -141,15 +142,12 @@ The `data_abort_now` term is load-bearing: for single-beat LDR/STR, the S_DDATA 
 
 ### IRQ / FIQ
 
-```systemverilog
-wire irq_pending = executing && !nIRQ && !cpsr.i;
-wire fiq_pending = executing && !nFIQ && !cpsr.f;
-wire fiq_fires   = fiq_pending && !swi_fires && !undef_fires;
-wire irq_fires   = irq_pending && !fiq_pending
-                && !swi_fires && !undef_fires;
-```
-
-Both gate on `executing` (= state_q==S_EXEC && de_q.valid), so an interrupt asserting during a multi-cycle substate doesn't fire until E returns to S_EXEC. FIQ wins over IRQ.
+The raw active-low levels are sampled only on enabled architectural
+instruction boundaries. Ordinary multicycle instructions defer recognition
+to their final substate; a busy external coprocessor can be abandoned at its
+defined wait boundary. FIQ wins over IRQ. A coincident one-cycle FIQ at a
+failed data response is retained by the DABT interlock until the complete
+three-cycle Abort entry has finished.
 
 Note that `nIRQ` / `nFIQ` are pre-gated at the top by IFEN (the EmbeddedICE-RT interrupt-mask logic — see DEBUG.md):
 
@@ -279,6 +277,14 @@ focused regressions.
 | `arm7tdmis_abort_tb` | DABT during LDR → vector 0x10 → handler |
 | `arm7tdmis_pabt_tb` | PABT during fetch → vector 0x0C → handler |
 | `arm7tdmis_pabt_pipeline_tb` | Flush-associated PABT metadata and condition-failed-UDF → SWI/PABT sequencing |
+| `arm7tdmis_pabt_debug_flush_tb` | PABT metadata retained through debug halt and discarded by scan-loaded-PC redirect |
+| `arm7tdmis_exception_priority_tb` | FIQ+IRQ, IRQ+PABT, PABT+UNDEF, and PABT+SWI selection/discard behavior |
+| `arm7tdmis_dabt_fiq_tb` | Coincident DABT+FIQ interlock, links, SPSRs, and Abort-vector resumption |
+| `arm7tdmis_interrupt_sampling_matrix_tb` | Masking, held/pulsed levels, CLKEN stalls, late arrival, and FIQ+IRQ |
+| `arm7tdmis_interrupt_latency_tb` | Four-cycle synchronized minimum and 27-cycle LDM-abort/FIQ maximum |
+| `arm7tdmis_arm_exception_lr_tb` | All six ARM-state exception links and physical save banks |
+| `arm7tdmis_thumb_exception_lr_tb` | All six Thumb-state exception links and physical save banks |
+| `arm7tdmis_exception_bus_matrix_tb` | Table 7-16 entry pins for six classes × ARM/Thumb |
 | `arm7tdmis_cond_fail_matrix_tb` | Every condition-failed class suppresses exceptions and all other side effects |
 | `arm7tdmis_ldm_abort_tb` | DABT on every LDM beat → later destinations suppressed, Base Updated, r15 protected |
 | `arm7tdmis_ldm_abort_base_list_tb` | DABT on every LDM beat with Rn in list → modified base restored |
@@ -287,6 +293,7 @@ focused regressions.
 | `arm7tdmis_swp_bus_matrix_tb` | SWP/SWPB read/write abort and LOCK exit matrix |
 | `arm7tdmis_ldm_pc_tb` | LDM ^ PC exception return → CPSR restore |
 | `arm7tdmis_exception_return_matrix_tb` | Five modes × ARM/Thumb × six DP/LDM return forms |
+| `arm7tdmis_reset_multicycle_matrix_tb` | Reset dominance and quiescence in all 15 non-Execute states |
 | `arm7tdmis_tb_top` | SWI (in smoke flow) |
 
 `arm7tdmis_undef_tb`, `arm7tdmis_reserved_execute_tb`, and the exhaustive
