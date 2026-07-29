@@ -4,11 +4,11 @@
 //   * an STM watchpoint to wait for every store and base writeback;
 //   * a watchpointed access that Data Aborts to enter debug in Abort mode,
 //     after fetching the Data Abort vector;
-//   * an interrupt sampled with a watchpoint to be remembered, enter its
+//   * an IRQ or FIQ sampled with a watchpoint to be remembered, enter its
 //     exception mode, and fetch its vector before debug entry; and
 //   * a simultaneous DBGRQ not to erase the watchpoint entry cause.
 //
-// Four independent cores make each collision a fresh reset-state event.
+// Five independent cores make each collision a fresh reset-state event.
 
 `timescale 1ns/1ps
 
@@ -29,6 +29,7 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
     localparam int unsigned DABT_SCENARIO  = 1;
     localparam int unsigned IRQ_SCENARIO   = 2;
     localparam int unsigned DBGRQ_SCENARIO = 3;
+    localparam int unsigned FIQ_SCENARIO   = 4;
 
     localparam logic [31:0] STM_INSTR = 32'hE8A0_000E;
     localparam logic [31:0] WATCH_ADDR =
@@ -37,11 +38,12 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
     localparam logic [31:0] EXCEPTION_VECTOR =
         (SCENARIO == DABT_SCENARIO) ? 32'h0000_0010
       : (SCENARIO == IRQ_SCENARIO)  ? 32'h0000_0018
+      : (SCENARIO == FIQ_SCENARIO)  ? 32'h0000_001C
                                     : 32'hFFFF_FFFF;
 
     logic nRESET = 1'b0;
     logic CLKEN = 1'b0;
-    logic nIRQ;
+    logic nIRQ, nFIQ;
     logic ABORT;
     logic DBGRQ;
     logic DBGTCKEN = 1'b0;
@@ -64,7 +66,7 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
         .nRESET,
         .CFGBIGEND        (1'b0),
         .nIRQ,
-        .nFIQ             (1'b1),
+        .nFIQ,
         .ABORT,
         .ADDR, .WRITE, .SIZE, .PROT, .LOCK, .TRANS, .WDATA, .RDATA,
         .CPnMREQ, .CPSEQ, .CPnTRANS, .CPnOPC, .CPTBIT, .CPnI,
@@ -108,6 +110,8 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
     assign inject_abort = (SCENARIO == DABT_SCENARIO)
                         && watched_response;
     assign nIRQ = ((SCENARIO == IRQ_SCENARIO) && watched_response)
+                ? 1'b0 : 1'b1;
+    assign nFIQ = ((SCENARIO == FIQ_SCENARIO) && watched_response)
                 ? 1'b0 : 1'b1;
     assign DBGRQ = ((SCENARIO == DBGRQ_SCENARIO) && watched_response)
                  ? 1'b1 : 1'b0;
@@ -293,6 +297,22 @@ module arm7tdmis_debug_watchpoint_priority_scenario #(
                     fail($sformatf("SPSR_irq expected 00000013 got %08x",
                                    u_dut.u_core.u_psr.spsr_q[1]));
             end
+            FIQ_SCENARIO: begin
+                if (!vector_fetch_seen)
+                    fail("FIQ vector was not fetched before DBGACK");
+                if (u_dut.u_core.cpsr.m !== 5'(MODE_FIQ))
+                    fail($sformatf("FIQ collision halted in mode %05b",
+                                   u_dut.u_core.cpsr.m));
+                check_reg(4, 32'hFEED_BEEF,
+                          "watchpointed LDR did not complete before FIQ");
+                check_reg(12, 32'h0000_0000,
+                          "FIQ vector instruction executed");
+                check_reg(22, 32'h0000_003C,
+                          "FIQ link register");
+                if (u_dut.u_core.u_psr.spsr_q[0] !== 32'h0000_0013)
+                    fail($sformatf("SPSR_fiq expected 00000013 got %08x",
+                                   u_dut.u_core.u_psr.spsr_q[0]));
+            end
             default: begin
                 check_reg(4, 32'hFEED_BEEF,
                           "simultaneous-DBGRQ LDR did not complete");
@@ -320,8 +340,8 @@ module arm7tdmis_debug_watchpoint_priority_tb;
     logic CLK = 1'b0;
     initial forever #5 CLK = ~CLK;
 
-    logic [3:0] done;
-    logic [3:0] failed;
+    logic [4:0] done;
+    logic [4:0] failed;
 
     arm7tdmis_debug_watchpoint_priority_scenario #(.SCENARIO(0)) u_stm (
         .CLK, .done(done[0]), .failed(failed[0])
@@ -335,13 +355,16 @@ module arm7tdmis_debug_watchpoint_priority_tb;
     arm7tdmis_debug_watchpoint_priority_scenario #(.SCENARIO(3)) u_dbgrq (
         .CLK, .done(done[3]), .failed(failed[3])
     );
+    arm7tdmis_debug_watchpoint_priority_scenario #(.SCENARIO(4)) u_fiq (
+        .CLK, .done(done[4]), .failed(failed[4])
+    );
 
     initial begin
         $dumpfile("debug_watchpoint_priority.fst");
         $dumpvars(0, arm7tdmis_debug_watchpoint_priority_tb);
         wait (&done);
         if (|failed)
-            $fatal(1, "[debug_watchpoint_priority] FAIL scenarios=%04b",
+            $fatal(1, "[debug_watchpoint_priority] FAIL scenarios=%05b",
                    failed);
         $display("[debug_watchpoint_priority] PASS");
         $finish;
@@ -350,7 +373,7 @@ module arm7tdmis_debug_watchpoint_priority_tb;
     initial begin
         repeat (CYCLE_LIMIT) @(posedge CLK);
         $fatal(1,
-               "[debug_watchpoint_priority] TIMEOUT done=%04b failed=%04b",
+               "[debug_watchpoint_priority] TIMEOUT done=%05b failed=%05b",
                done, failed);
     end
 endmodule
