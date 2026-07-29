@@ -47,6 +47,7 @@ module reserved_decode_tb
 
     int unsigned errors;
     int unsigned arm_class_count [0:15];
+    int unsigned arm_nv_class_count [0:15];
     int unsigned thumb_reserved_count [0:1];
 
     // Independent ARMv4T allocation map for the twelve architectural
@@ -203,6 +204,8 @@ module reserved_decode_tb
         thumb_instr = 16'h0;
         for (int i = 0; i < 16; i++)
             arm_class_count[i] = 0;
+        for (int i = 0; i < 16; i++)
+            arm_nv_class_count[i] = 0;
         thumb_reserved_count[0] = 0;
         thumb_reserved_count[1] = 0;
 
@@ -240,6 +243,37 @@ module reserved_decode_tb
          || (arm_class_count[INSTR_LDC_STC]   != 448)) begin
             $display("FAIL [ARM coverage]: class allocation totals changed");
             errors++;
+        end
+
+        // ARMv4 defines cond=1111 as UNPREDICTABLE.  This core's stable
+        // ISA-016 policy is to trap every such word as Undefined, which
+        // also guarantees that no ARMv5+ unconditional extension can leak
+        // into the ARM7TDMI-S decode.  Exhaust the lower decode domain.
+        for (int hi = 0; hi < 256; hi++) begin
+            for (int lo = 0; lo < 16; lo++) begin
+                expected = armv4t_class(hi[7:0], lo[3:0]);
+                arm_instr = canonical_arm_word(hi[7:0], lo[3:0], expected);
+                arm_instr[31:28] = 4'hF;
+                #1;
+                arm_nv_class_count[int'(arm_dec.instr_class)]++;
+                if ((arm_dec.cond !== COND_NV)
+                 || (arm_dec.instr_class !== INSTR_UNDEF)
+                 || (arm_is_unimplemented !== 1'b1))
+                    fail_arm(hi[7:0], lo[3:0], INSTR_UNDEF);
+            end
+        end
+
+        if (arm_nv_class_count[INSTR_UNDEF] != 4096) begin
+            $display("FAIL [ARM cond=1111 coverage]: Undefined rows=%0d, expected 4096",
+                     arm_nv_class_count[INSTR_UNDEF]);
+            errors++;
+        end
+        for (int i = 1; i < 16; i++) begin
+            if (arm_nv_class_count[i] != 0) begin
+                $display("FAIL [ARM cond=1111 coverage]: class %0d has %0d rows",
+                         i, arm_nv_class_count[i]);
+                errors++;
+            end
         end
 
         // Exhaust every possible original Thumb instruction.
