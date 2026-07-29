@@ -2754,7 +2754,7 @@ number of cycles spent in an internal FSM state.
   in `docs/DEBUG.md`; default fields/serial order are fail-hard checked by
   `tb/unit/jtag_tap_tb.sv`, and overrides by
   `tb/unit/jtag_idcode_config_tb.sv`.
-- [ ] **JTAG-003:** Implement and verify SCAN_N selection, chain 0, 33-bit chain 1,
+- [x] **JTAG-003:** Implement and verify SCAN_N selection, chain 0, 33-bit chain 1,
   38-bit chain 2, reserved chains, the TRM-defined physical cell order, update
   atomicity, and chain-1 bit 33's entry-cause/debug-speed/system-speed meanings.
   Selection, widths, reserved-chain behavior, physical order, update atomicity,
