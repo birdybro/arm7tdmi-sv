@@ -134,6 +134,33 @@ module arm7tdmis_core_pipelined
         logic        valid;
     } de_t;
 
+    // A breakpoint stops the core before the Execute edge, but the external
+    // bus already carries the response for a younger in-flight opcode fetch.
+    // Preserve that response while the rest of the core is clock-disabled;
+    // otherwise restart would associate a later halted-bus value with the
+    // old inflight_pc_q and skip or corrupt the younger instruction.
+    logic        breakpoint_response_valid_q;
+    logic [31:0] breakpoint_response_data_q;
+    logic        breakpoint_response_abort_q;
+    logic        breakpoint_response_tag_q;
+
+    always_ff @(posedge CLK) begin
+        if (!nRESET) begin
+            breakpoint_response_valid_q <= 1'b0;
+            breakpoint_response_data_q  <= 32'h0;
+            breakpoint_response_abort_q <= 1'b0;
+            breakpoint_response_tag_q   <= 1'b0;
+        end else if (!breakpoint_response_valid_q
+                     && dbg_halted && dbg_breakpoint_execute) begin
+            breakpoint_response_valid_q <= 1'b1;
+            breakpoint_response_data_q  <= RDATA;
+            breakpoint_response_abort_q <= ABORT;
+            breakpoint_response_tag_q   <= dbg_breakpoint_fetch;
+        end else if (CLKEN && breakpoint_response_valid_q) begin
+            breakpoint_response_valid_q <= 1'b0;
+        end
+    end
+
     // =====================================================================
     // E-stage substate FSM — bus-pipelined per TRM §3.3 / §18
     // =====================================================================
@@ -320,11 +347,15 @@ module arm7tdmis_core_pipelined
                 end
 
                 if (latch_into_fd) begin
-                    fd_q.instr <= RDATA;
+                    fd_q.instr <= breakpoint_response_valid_q
+                                ? breakpoint_response_data_q : RDATA;
                     fd_q.pc    <= inflight_pc_q;
                     fd_q.thumb <= cpsr.t;
-                    fd_q.pabort <= ABORT;       // §17: sample at fetch landing
-                    fd_q.breakpoint <= dbg_breakpoint_fetch;
+                    fd_q.pabort <= breakpoint_response_valid_q
+                                 ? breakpoint_response_abort_q : ABORT;
+                    fd_q.breakpoint <= breakpoint_response_valid_q
+                                     ? breakpoint_response_tag_q
+                                     : dbg_breakpoint_fetch;
                     fd_q.valid <= 1'b1;
                 end else if (d_advance) begin
                     fd_q.valid <= 1'b0;

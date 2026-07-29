@@ -241,6 +241,8 @@ module arm7tdmis_ice_rt
     // Exit: TAP RESTART instruction observed (tap_restart_req pulse).
     debug_state_e dbg_state_q;
     logic         halt_pending_q;
+    logic         breakpoint_halt_q;
+    logic         breakpoint_resume_q;
 
     wire ice_dbgrq_force = regs[5'h00][1];
     wire dbgrqi          = (ice_dbgrq_force || dbg_rq_synced) && DBGEN;
@@ -446,40 +448,65 @@ module arm7tdmis_ice_rt
     // ---- Debug-state FSM body
     always_ff @(posedge CLK or negedge DBGnTRST) begin
         if (!DBGnTRST) begin
-            dbg_state_q    <= DBG_RUNNING;
-            halt_pending_q <= 1'b0;
+            dbg_state_q       <= DBG_RUNNING;
+            halt_pending_q    <= 1'b0;
+            breakpoint_halt_q <= 1'b0;
+            breakpoint_resume_q <= 1'b0;
         end else if (CLKEN) begin
             unique case (dbg_state_q)
                 DBG_RUNNING: begin
                     if (!DBGEN) begin
                         halt_pending_q <= 1'b0;
+                        breakpoint_halt_q <= 1'b0;
+                        breakpoint_resume_q <= 1'b0;
+                    end else if (breakpoint_resume_q
+                                 && core_breakpoint_execute) begin
+                        // Consume exactly the breakpoint tag that caused
+                        // the preceding halt. A simultaneous ordinary halt
+                        // request is taken after this instruction completes.
+                        breakpoint_halt_q   <= 1'b0;
+                        breakpoint_resume_q <= 1'b0;
+                        if (halt_entry_req && core_halt_boundary) begin
+                            dbg_state_q    <= DBG_HALTED;
+                            halt_pending_q <= 1'b0;
+                        end else if (halt_entry_req) begin
+                            halt_pending_q <= 1'b1;
+                        end
                     end else if (core_breakpoint_execute) begin
                         // The core suppresses this edge's execution and
                         // freezes while this FSM enters debug state.
-                        dbg_state_q    <= DBG_HALTED;
-                        halt_pending_q <= 1'b0;
+                        dbg_state_q       <= DBG_HALTED;
+                        halt_pending_q    <= 1'b0;
+                        breakpoint_halt_q <= 1'b1;
                     end else if ((halt_pending_q || halt_entry_req)
                                  && core_halt_boundary) begin
                         // The core commits its final state on this edge;
                         // freezing begins immediately after the edge.
-                        dbg_state_q    <= DBG_HALTED;
-                        halt_pending_q <= 1'b0;
+                        dbg_state_q       <= DBG_HALTED;
+                        halt_pending_q    <= 1'b0;
+                        breakpoint_halt_q <= 1'b0;
                     end else if (halt_entry_req) begin
                         halt_pending_q <= 1'b1;
                     end
                 end
                 DBG_HALTED: begin
                     halt_pending_q <= 1'b0;
-                    if (tap_restart_req)
+                    if (tap_restart_req) begin
                         dbg_state_q <= DBG_RUNNING;
+                        breakpoint_resume_q <= breakpoint_halt_q;
+                    end
                 end
                 DBG_MONITOR: begin
-                    halt_pending_q <= 1'b0;
-                    dbg_state_q    <= DBG_MONITOR;
+                    halt_pending_q      <= 1'b0;
+                    breakpoint_halt_q   <= 1'b0;
+                    breakpoint_resume_q <= 1'b0;
+                    dbg_state_q         <= DBG_MONITOR;
                 end
                 default: begin
-                    dbg_state_q    <= DBG_RUNNING;
-                    halt_pending_q <= 1'b0;
+                    dbg_state_q       <= DBG_RUNNING;
+                    halt_pending_q    <= 1'b0;
+                    breakpoint_halt_q <= 1'b0;
+                    breakpoint_resume_q <= 1'b0;
                 end
             endcase
         end
@@ -532,7 +559,8 @@ module arm7tdmis_ice_rt
     // The ICE FSM itself still advances on raw CLKEN and enters HALTED on
     // that edge; the top-level gates only the core's clock enable.
     wire breakpoint_stop = (dbg_state_q == DBG_RUNNING)
-                         && DBGEN && core_breakpoint_execute;
+                         && DBGEN && core_breakpoint_execute
+                         && !breakpoint_resume_q;
 
     // Core un-halts while injecting.
     assign core_halt = (in_debug_halt || breakpoint_stop) && !injecting;

@@ -178,11 +178,14 @@ module arm7tdmis_debug_breakpoint_execute_tb
 
         CLKEN = 1'b1;
         wp0_range_seen = 1'b0;
+        wp1_range_seen = 1'b0;
         first_halt = 1'b0;
         for (int i = 0; i < 240; i++) begin
             @(posedge CLK);
             if (DBGRNG[0])
                 wp0_range_seen = 1'b1;
+            if (DBGRNG[1])
+                wp1_range_seen = 1'b1;
             if (DBGACK) begin
                 #1;
                 first_halt = 1'b1;
@@ -206,7 +209,6 @@ module arm7tdmis_debug_breakpoint_execute_tb
         // instruction. WP1 must subsequently stop the ADD at 0x30.
         write_ice(5'h0C, 32'h0000_0014);
         load_ir(4'(IR_RESTART));
-        wp1_range_seen = 1'b0;
         second_halt = 1'b0;
         for (int i = 0; i < 160; i++) begin
             @(posedge CLK);
