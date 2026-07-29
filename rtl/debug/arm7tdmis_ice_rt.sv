@@ -232,6 +232,18 @@ module arm7tdmis_ice_rt
     logic         system_speed_active_q;
     logic [31:0]  system_speed_instr_q;
 
+    // Bit 33 on one scan arms the following pipeline word. Only memory
+    // transfers are legal system-speed instructions (TRM §5.16.2).
+    // A non-memory word is the final debug-exit PC-control instruction;
+    // it remains a synchronization marker for the scan-loaded resume PC
+    // and must not trigger automatic system-speed re-entry.
+    wire tap_system_speed_memory =
+           (tap_inject_instr[27:26] == 2'b01)
+        || (tap_inject_instr[27:25] == 3'b100)
+        || ((tap_inject_instr[27:25] == 3'b000)
+            && tap_inject_instr[7] && tap_inject_instr[4]
+            && (tap_inject_instr[6:5] != 2'b00));
+
     wire ice_dbgrq_force = regs[5'h00][1];
     wire dbgrqi          = (ice_dbgrq_force || dbg_rq_synced) && DBGEN;
     wire halt_entry_req  = DBGEN
@@ -562,11 +574,15 @@ module arm7tdmis_ice_rt
         end else if (tap_inject_we && in_debug_halt
                      && !inject_active_q && !system_speed_pending_q) begin
             if (system_speed_armed_q) begin
-                // DBGBREAK HIGH on the preceding scan marks this word as
-                // the system-speed instruction. It is loaded into the
-                // debug pipeline only when RESTART reaches Run-Test/Idle.
-                system_speed_instr_q   <= tap_inject_instr;
-                system_speed_pending_q <= 1'b1;
+                // DBGBREAK HIGH on the preceding scan marks a legal
+                // load/store as the system-speed instruction. The
+                // non-memory case is the final branch/SUB-PC debug-exit
+                // word; scan-loaded PC state already contains the exact
+                // resume target, so RESTART performs an ordinary exit.
+                if (tap_system_speed_memory) begin
+                    system_speed_instr_q   <= tap_inject_instr;
+                    system_speed_pending_q <= 1'b1;
+                end
                 system_speed_armed_q   <= 1'b0;
             end else begin
                 inject_instr_q    <= tap_inject_instr;

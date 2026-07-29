@@ -2576,7 +2576,11 @@ number of cycles spent in an internal FSM state.
   the full allowed-instruction and 16-register matrix remains open.
 - [ ] **DBG-007:** Implement debug entry/exit PC formulas, temporary DBGACK behavior,
   pending interrupt preservation, interrupt masking during at-speed execution, and
-  the DBGRQ/PC-modify errata policy.
+  the DBGRQ/PC-modify errata policy. Scan-loaded r15 now replaces all stale
+  fetch/decode state and the OpenOCD-style branch/RESTART sequence resumes at that
+  address without spurious system-speed re-entry; this is fail-hard covered by
+  `tb/integration/arm7tdmis_debug_pc_resume_tb.sv`. Exact entry-cause PC formulas,
+  pending-interrupt preservation, and the documented erratum policy remain open.
 - [x] **JTAG-001:** Exhaustively verify all 16 TAP states and transitions, async
   `DBGnTRST`, Capture/Shift/Update-IR, fixed `0001` capture, all five public
   instructions, and BYPASS for every other IR encoding. Fail-hard evidence:
@@ -2608,8 +2612,10 @@ number of cycles spent in an internal FSM state.
   restart, exercise DCC both directions, set break/watchpoints, and enter monitor mode.
   The OpenOCD-compatible debug-speed LDM/STM round trip for r0-r14, including
   external-bus isolation, is covered by
-  `tb/integration/arm7tdmis_debug_register_scan_tb.sv`; r15, PSRs, the
-  remaining end-to-end operations, and debugger-process integration remain open.
+  `tb/integration/arm7tdmis_debug_register_scan_tb.sv`; scan-loaded r15 and the
+  branch/RESTART resume path are covered by
+  `tb/integration/arm7tdmis_debug_pc_resume_tb.sv`. Reading r15, PSRs, the remaining
+  end-to-end operations, and debugger-process integration remain open.
 - [ ] **JTAG-006:** Demonstrate a pinned open-source debugger/GDB flow against the
   simulated scan transport and on FPGA, or document precisely why the r4p3 scan
   protocol needs a project-specific bridge and release that bridge with protocol tests.

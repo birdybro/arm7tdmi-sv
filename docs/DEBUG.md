@@ -262,6 +262,14 @@ user-bank selection, and keeps the external bus idle. The public-pin round
 trip for r0-r14 is verified by
 `tb/integration/arm7tdmis_debug_register_scan_tb.sv`.
 
+Writing r15 through that stream also replaces the halted pipeline's fetch PC.
+The address is halfword-aligned in Thumb state and word-aligned in ARM state;
+all saved pre-debug fetch/decode state is discarded. The standard scan exit
+sequence (four pipeline NOPs, a bit-33-marked NOP, the final branch, then
+`RESTART`) therefore resumes from the scan-loaded address without exposing the
+debug instructions on the external memory bus. This public-pin sequence is
+fail-hard covered by `tb/integration/arm7tdmis_debug_pc_resume_tb.sv`.
+
 For a system-speed access, bit 33 arms the *following* scan-chain word rather
 than changing the speed of the word shifted beside it. The debugger scans
 `NOP/0`, `NOP/1`, then the load or store with bit 33 low. That final
@@ -271,6 +279,11 @@ it, keeps interrupts masked, and automatically returns to debug halt when its
 accepted/retired handshake completes. The first chain-1 capture after that
 return reports bit 33 high. A stalled LDR exercises the complete sequence in
 `tb/integration/arm7tdmis_debug_system_speed_tb.sv`.
+
+Only ARM single-, block-, and extra-load/store encodings are admitted to this
+at-speed path. A non-memory word following a bit-33-marked scan is the final
+debug-exit PC-control marker; it is consumed while halted and does not arm
+automatic debug re-entry.
 
 ## CP14 DCC data path
 

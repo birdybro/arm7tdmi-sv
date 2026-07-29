@@ -164,6 +164,10 @@ module arm7tdmis_core_pipelined
             breakpoint_response_data_q  <= 32'h0;
             breakpoint_response_abort_q <= 1'b0;
             breakpoint_response_tag_q   <= 1'b0;
+        end else if (dbg_pc_write) begin
+            // A scan-loaded resume PC invalidates the younger fetch response
+            // saved when a breakpoint stopped the pipeline.
+            breakpoint_response_valid_q <= 1'b0;
         end else if (!breakpoint_response_valid_q
                      && dbg_halted && dbg_breakpoint_execute) begin
             breakpoint_response_valid_q <= 1'b1;
@@ -244,6 +248,10 @@ module arm7tdmis_core_pipelined
     psr_t        cpsr;
 
     wire [31:0]  fetch_step = cpsr.t ? 32'd2 : 32'd4;
+    wire         dbg_pc_write = dbg_reg_we && (dbg_reg_addr == 4'd15);
+    wire [31:0]  dbg_pc_aligned = cpsr.t
+                                ? {dbg_reg_wdata[31:1], 1'b0}
+                                : {dbg_reg_wdata[31:2], 2'b00};
 
     // E-stall (Phase 5): whenever E is in a memory substate, hold F and D.
     wire e_busy = (state_q != S_EXEC);
@@ -320,6 +328,15 @@ module arm7tdmis_core_pipelined
             fd_q             <= '{instr:32'h0, pc:32'h0, thumb:1'b0,
                               pabort:1'b0, breakpoint:1'b0, injected:1'b0,
                               valid:1'b0};
+        end else if (dbg_pc_write) begin
+            // A debug-speed LDM of r15 restores the debugger-selected
+            // resume address while the normal core enable is stopped.
+            // Discard every pre-debug pipeline value so RESTART's first
+            // active bus cycle fetches exactly this address.
+            fetch_pc_q       <= dbg_pc_aligned;
+            inflight_pc_q    <= dbg_pc_aligned;
+            inflight_valid_q <= 1'b0;
+            fd_q.valid       <= 1'b0;
         end else if (CLKEN) begin
             if (flush) begin
                 if (early_flush_fetch) begin
@@ -389,6 +406,8 @@ module arm7tdmis_core_pipelined
             de_q <= '{dec:'0, instr:32'h0, pc:32'h0, thumb:1'b0,
                       pabort:1'b0, breakpoint:1'b0, injected:1'b0,
                       valid:1'b0};
+        end else if (dbg_pc_write) begin
+            de_q.valid <= 1'b0;
         end else if (CLKEN) begin
             if (dbg_inject_we) begin
                 // Discard the normal instruction that occupied Execute at
@@ -2191,6 +2210,8 @@ module arm7tdmis_core_pipelined
     always_ff @(posedge CLK) begin
         if (!nRESET)
             pc_q <= 32'h0;
+        else if (dbg_pc_write)
+            pc_q <= dbg_pc_aligned;
         else if (CLKEN) begin
             if (state_q == S_EXEC && de_q.valid)
                 pc_q <= de_q.pc;
