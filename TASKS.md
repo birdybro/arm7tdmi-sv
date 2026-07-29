@@ -2581,8 +2581,11 @@ number of cycles spent in an internal FSM state.
   `tb/integration/arm7tdmis_debug_control_sync_tb.sv`. Watchpoint priority over
   simultaneous DBGRQ and watchpoint interaction with Data Abort and IRQ are
   covered by `tb/integration/arm7tdmis_debug_watchpoint_priority_tb.sv`.
-  Remaining breakpoint/vector-catch/exception priority cases and the complete
-  DBGEN matrix keep this item open.
+  A Prefetch Abort on the breakpointed fetch is proven to discard the
+  breakpoint without debug entry by
+  `tb/integration/arm7tdmis_debug_breakpoint_pabt_tb.sv`. Remaining
+  breakpoint/vector-catch/exception priority cases and the complete DBGEN
+  matrix keep this item open.
 - [ ] **DBG-002:** Feed Debug Status TRANS from the actual `TRANS[1]`, not PROT.
   Align address/control and read/write data before data-dependent watchpoint comparison.
 - [ ] **DBG-003:** Implement exact WP0/WP1 value/mask, XNOR, size, read/write,

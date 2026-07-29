@@ -157,7 +157,10 @@ Trap fires when `!watch_nopc` (opcode fetch) AND `watch_addr` matches one of the
 
 WP0/WP1 or external opcode breakpoints do not use the generic request path:
 they are carried as tags with the fetched instruction and stop only if that
-instruction reaches Execute.
+instruction reaches Execute. If the same fetch returns an external Prefetch
+Abort, the abort takes priority and the breakpoint tag is discarded without
+entering debug, as required by TRM §5.19.1 and covered by
+`tb/integration/arm7tdmis_debug_breakpoint_pabt_tb.sv`.
 
 `tap_restart_req` is sampled on the edge that enters Run-Test/Idle with
 IR=RESTART, matching TRM §5.13.5.

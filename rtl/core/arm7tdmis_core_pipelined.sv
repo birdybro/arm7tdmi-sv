@@ -968,7 +968,11 @@ module arm7tdmis_core_pipelined
 
     // `executing` predicate — only valid de_q during S_EXEC writes back.
     wire executing = (state_q == S_EXEC) && de_q.valid && !dbg_inject_we;
-    assign dbg_breakpoint_execute = executing && de_q.breakpoint;
+    // TRM §5.19.1: an external Prefetch Abort on the breakpointed fetch
+    // takes priority and disregards the breakpoint. Do not let ICE gate
+    // off the very Execute edge on which the core must select PABT.
+    assign dbg_breakpoint_execute = executing && de_q.breakpoint
+                                  && !de_q.pabort;
     wire passes_cond = executing && condition_pass && !dec_is_unimplemented_q;
 
     // Explicit scan-chain instruction handshake. Acceptance is the edge
