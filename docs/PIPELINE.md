@@ -218,6 +218,12 @@ Multiplier inputs muxed in S_MULL_ACC: op_a/op_b from latches, acc_lo from latch
 
 Same idea: `ls_data_addr_q`, `ls_rd_q`, `ls_byte_q`, `ls_halfword_q`, `ls_signed_q`, `ls_load_q`, `ls_addr_lo_q` snapshot the LDR/STR's parameters.
 
+`ls_addr_lo_q` is architecturally significant after the memory response:
+ARMv4T word loads rotate the naturally aligned `RDATA` right by eight times
+those low bits. `swp_addr_lo_q` applies the same rule to the read half of SWP.
+Word stores remain unrotated because the memory system ignores their low
+address bits.
+
 ### Heuristic
 
 If you find yourself writing a substate cycle that references `dec.*` or any signal that depends on `dec.*` (like `rf_ra_data` via `ra_addr_eff`), you almost certainly have a `de_q` staleness bug. Latch what you need at S_EXEC.

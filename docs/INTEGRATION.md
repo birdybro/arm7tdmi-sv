@@ -89,6 +89,28 @@ The active lanes select the corresponding eight-bit slices of `MEM_WDATA` or
 `MEM_RDATA`. The `BIG_ENDIAN` synthesis parameter is frozen for an instance;
 changing it requires reset and a different build.
 
+### Legacy unaligned accesses
+
+The raw r4p3 address remains the calculated byte address even when its low bits
+are nonzero. A target must use `MEM_ADDR & ~3` as the physical base of a word
+request and ignore `MEM_ADDR[0]` for a halfword request. It must not turn either
+request into a cross-boundary modern unaligned transfer:
+
+- `LDR` and the read half of `SWP` receive the naturally aligned 32-bit word;
+  the core rotates it right by `8 * MEM_ADDR[1:0]`.
+- `STR` and the write half of `SWP` replace the naturally aligned word and are
+  otherwise unaffected by `MEM_ADDR[1:0]`.
+- Byte requests use the complete address and endian-selected byte lane.
+- Odd-address `LDRH`, `LDRSH`, and `STRH` are architecturally
+  UNPREDICTABLE. This project deliberately freezes the r4p3 pin-level result:
+  the target ignores bit 0 and the core selects the endian halfword lane from
+  bit 1. That is a compatibility policy, not an ARM architectural guarantee.
+
+Opcode requests are never unaligned: ARM fetches have `MEM_ADDR[1:0]=0` and
+Thumb fetches have `MEM_ADDR[0]=0`. A target can therefore use the same
+word/halfword lane contract for instruction memory without guessing discarded
+PC bits.
+
 `MEM_SEQUENTIAL` and `MEM_MORE` are optimization hints, not permission to
 merge handshakes. Every beat still has its own `MEM_VALID && MEM_READY`
 completion. `MEM_LOCK` is an arbitration exclusion request; an adapter must

@@ -2498,9 +2498,20 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   post-index forms. Every row checks the original base as the transfer address,
   post-index writeback, load/store data and width, User `PROT`, continued
   privileged opcode fetches, and unchanged Supervisor mode.
-- [ ] **ISA-009:** Freeze exact ARM7TDMI unaligned-access behavior for word,
+- [x] **ISA-009:** Freeze exact ARM7TDMI unaligned-access behavior for word,
   halfword, signed-halfword, signed-byte, SWP, and instruction fetches; verify all
-  address low bits in both endian modes.
+  address low bits in both endian modes. ARMv4T `LDR` and the read half of `SWP`
+  now rotate the naturally aligned memory word right by
+  `8 * effective_address[1:0]`; `STR` and the write half of `SWP` retain the
+  aligned-memory rule. Architecturally UNPREDICTABLE odd `LDRH/LDRSH/STRH`
+  accesses have an explicitly non-architectural ISA-016 policy matching the
+  r4p3 pin behavior: present the calculated address, ignore `ADDR[0]` in the
+  memory system, and select the halfword using `ADDR[1]`. The fail-hard
+  `tb/integration/arm7tdmis_unaligned_access_matrix_tb.sv` executes 64 data/SWP
+  rows (eight access classes x four low-bit values x both endian modes) plus
+  eight BX-driven instruction-fetch rows. It checks results, sign extension,
+  stores, exact raw address/size/direction, both locked SWP cycles, endian lanes,
+  destination state, and word/halfword fetch alignment.
 - [ ] **ISA-010:** Verify every load/store P/U/B/W/L combination, immediate and shifted
   register offset, base/destination alias, writeback, r15 use, and defined/
   UNPREDICTABLE case.
@@ -2567,10 +2578,13 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
 Cycle conformance means matching pins on every enabled clock, not matching only the
 number of cycles spent in an internal FSM state.
 
-- [ ] **BUS-001:** Implement `CFGBIGEND`; it is currently unused. Verify instruction
-  halfword selection, byte/halfword extraction, sign extension, stores, SWPB, and all
-  byte-lane mappings from the TRM in little- and big-endian configurations. Assert it
-  remains static outside reset and define behavior if an integrator violates that rule.
+- [ ] **BUS-001:** `CFGBIGEND` data/fetch mapping is implemented and the endian,
+  MiSTer-profile, debug-lane, and ISA-009 matrices verify instruction-halfword
+  selection, byte/halfword extraction, sign extension, stores, SWP/SWPB, and every
+  byte lane in both configurations. The canonical FPGA wrapper makes endianness a
+  synthesis parameter. Remaining work is a reusable raw-pin protocol assertion that
+  rejects a `CFGBIGEND` change outside reset and an explicit raw-integrator violation
+  policy; do not describe the signal as unused.
 - [ ] **BUS-002:** Add a phase-aware scoreboard for every clock:
   `ADDR/WRITE/SIZE/PROT/LOCK/TRANS/WDATA/RDATA/ABORT/DMORE`, CP signals, CLKEN, PC,
   CPSR, instruction state, and exception/debug events.

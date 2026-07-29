@@ -47,6 +47,21 @@ accidentally weakened reference map fail hard. The independent
 reserved family through the pin-level memory interface and checks exception
 state and absence of memory/coprocessor side effects.
 
+## Unaligned and endian evidence
+
+`arm7tdmis_unaligned_access_matrix_tb` is a 72-row reset-per-case pin-level
+matrix. Its 64 data rows cover LDR, STR, LDRH, STRH, LDRSH, LDRSB, SWP, and
+SWPB at address low bits 0 through 3 in both endian configurations. Each row
+checks architectural data, memory, transfer width/direction/address, and SWP
+lock lifetime. The eight remaining rows feed every two-bit target suffix to BX
+in both endian configurations and require aligned ARM/Thumb fetches of the
+correct width.
+
+The test distinguishes specification from policy. ARMv4T word-load rotation
+is architectural. Odd halfword behavior is labeled architecturally
+UNPREDICTABLE and checked only as this implementation's deterministic r4p3
+bus/lane policy.
+
 Functional/line/toggle coverage reporting, mutation testing of architectural
 controls, differential testing, and formal evidence remain separate open
 requirements in `TASKS.md` §31.
