@@ -127,6 +127,15 @@ The non-pipelined model had separate `S_DADDR`, `S_BLOCK_ADDR`, `S_SWP_RADDR`, `
 
 `m` is the multiplier early-termination parameter from `Rs` (1..4 per TRM §7.7).
 
+Condition failure bypasses every multicycle branch in this table. Regardless
+of the decoded class or the cycles the successful form would require, it
+remains in `S_EXEC` for exactly one clock. During that clock, the returned
+opcode/address tuple is PC+8 and the outgoing sequential opcode address is
+PC+12, matching r4p3 Table 7-23. All architectural enables and coprocessor
+requests use `passes_cond`; `DBGINSTRVALID` stays HIGH while `DBGnEXEC` is
+HIGH to identify the instruction as unexecuted. The 1,092-row pin/state proof
+is `arm7tdmis_cond_fail_matrix_tb`.
+
 Three non-obvious cycle-shape decisions:
 
 - **STM has no I cycle.** TRM Table 7-15 gives STM `n+1` cycles vs LDM's `n+2`. To match, STM commits Rn writeback in the *last* `S_BLOCK_DATA` cycle and transitions directly to `S_EXEC` (skipping `S_BLOCK_WB`). The regfile write port is free that cycle because STM has no load to commit. See `block_stm_does_writeback`.

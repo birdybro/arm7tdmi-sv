@@ -133,6 +133,31 @@ either abort suppresses Rd and memory modification. The independent
 `arm7tdmis_swp_read_abort_tb`, `arm7tdmis_swpb_data_tb`, cycle, and
 debug-injection tests preserve neighboring behavior.
 
+## ARM condition-failure evidence
+
+`arm7tdmis_cond_fail_matrix_tb` executes 1,092 independent rows: Supervisor
+and User modes, all 14 ARM conditions that can evaluate false, and 39
+representative instruction paths. The path set spans all 16 decode classes,
+every multicycle detour, register/flag/PC/base/memory destinations,
+policy-Undefined routes, SWI, ready external CDP/MCR/MRC/LDC/STC, and every
+supported CP14 side-effect type.
+
+Each row checks both pipelined halves of r4p3 Table 7-23. The returned opcode
+and saved address-class tuple are the sequential word read at instruction
+PC+8; the simultaneously outgoing address is the sequential opcode read at
+PC+12. Opcode/data and User/privileged PROT, LOCK, the coprocessor-following
+signals, `DBGINSTRVALID`, and `DBGnEXEC` are exact. The next instruction must
+reach Execute one clock later. Snapshots prove all 31 physical GPRs, CPSR,
+all five SPSRs, the complete test memory, and CP14 DCC/debug-abort state are
+unchanged, with no exception, coprocessor request, DMORE, or LOCK activity.
+
+`arm7tdmis_pabt_pipeline_tb` covers the sequence-specific r4p3 erratum-11
+boundary. A condition-failed UDF retires without an exception; a following
+unconditional SWI selects SWI, and a following aborted opcode selects PABT.
+Both cases check the selected source, handler, mode, LR, SPSR, and absence of
+a false Undefined exception. The project deliberately implements this
+architecturally corrected behavior only; it has no defect-emulation mode.
+
 Functional/line/toggle coverage reporting, mutation testing of architectural
 controls, differential testing, and formal evidence remain separate open
 requirements in `TASKS.md` §31.

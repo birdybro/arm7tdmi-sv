@@ -65,9 +65,14 @@ During exception entry, the regfile is muxed to the *target* mode (`regfile_mode
 ### UNDEF
 
 ```systemverilog
-wire undef_fires = executing && ((condition_pass && instr_is_undef)
-                              || cond_is_nv
-                              || cp_undef_trap);
+wire undef_pending = executing
+                   && ((condition_pass
+                     && (instr_is_undef || block_policy_undef
+                      || swp_policy_undef))
+                       || cond_is_nv
+                       || cp_undef_trap);
+wire undef_fires = undef_pending && !fiq_pending && !irq_pending
+                 && !pabt_pending;
 ```
 
 `instr_is_undef` matches the decoded `INSTR_UNDEF` class. ARMv4 specifies
@@ -86,6 +91,15 @@ reserved word cannot perform a memory transfer or assert `CPnI` before taking
 Undefined. The exhaustive evidence is `reserved_decode_tb` (4,096 ARM decode
 rows, all 4,096 `cond=1111` variants, and all 65,536 Thumb words) plus the
 pin-level `arm7tdmis_reserved_execute_tb`.
+
+An Undefined-class word whose ordinary ARM condition fails is unexecuted; it
+does not set `undef_pending`. The corrected erratum-11 policy carries no
+residual Undefined state into the next instruction. Consequently an
+immediately following SWI selects the SWI vector, while Prefetch Abort
+metadata attached to the following opcode selects PABT. The fourth and third
+scenarios in `arm7tdmis_pabt_pipeline_tb`, respectively, check the selected
+event signal, vector handler, LR/SPSR, and absence of a false Undefined
+exception. There is no r4p3 defect-emulation parameter.
 
 ### PABT (prefetch abort)
 
@@ -230,6 +244,8 @@ Validated by `tb/integration/arm7tdmis_ldm_pc_tb.sv`: handler clears cpsr.F befo
 | `arm7tdmis_fiq_tb` | nFIQ pin → vector 0x1C → handler |
 | `arm7tdmis_abort_tb` | DABT during LDR → vector 0x10 → handler |
 | `arm7tdmis_pabt_tb` | PABT during fetch → vector 0x0C → handler |
+| `arm7tdmis_pabt_pipeline_tb` | Flush-associated PABT metadata and condition-failed-UDF → SWI/PABT sequencing |
+| `arm7tdmis_cond_fail_matrix_tb` | Every condition-failed class suppresses exceptions and all other side effects |
 | `arm7tdmis_ldm_abort_tb` | DABT on every LDM beat → later destinations suppressed, Base Updated, r15 protected |
 | `arm7tdmis_ldm_abort_base_list_tb` | DABT on every LDM beat with Rn in list → modified base restored |
 | `arm7tdmis_stm_abort_tb` | DABT on every STM beat → sequence completes and requested writeback remains |
@@ -238,4 +254,5 @@ Validated by `tb/integration/arm7tdmis_ldm_pc_tb.sv`: handler clears cpsr.F befo
 | `arm7tdmis_ldm_pc_tb` | LDM ^ PC exception return → CPSR restore |
 | `arm7tdmis_tb_top` | SWI (in smoke flow) |
 
-UNDEF currently smoke-only (the smoke test exercises the NV-cond → undef path implicitly through the SWI handler's MOVS PC, LR sequence).
+`arm7tdmis_undef_tb`, `arm7tdmis_reserved_execute_tb`, and the exhaustive
+reserved-decode unit test provide independent Undefined-instruction evidence.

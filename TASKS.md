@@ -2557,9 +2557,21 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   read and write. Every accepted pair is uninterrupted, same-address,
   correctly sized, privileged, and locked; cancellation paths prove memory,
   Rd, handler state, and LOCK release.
-- [ ] **ISA-013:** Prove condition-failed ARM instructions have exactly the documented
+- [x] **ISA-013:** Prove condition-failed ARM instructions have exactly the documented
   bus cycle and no register, CPSR/SPSR, memory, lock, coprocessor, or exception side
   effect. Include a condition-failed undefined instruction before SWI and PABT.
+  `arm7tdmis_cond_fail_matrix_tb` executes 1,092 reset-per-row cases: Supervisor
+  and User modes × all 14 conditions that can fail × 39 paths spanning every
+  ARM decode class, multicycle detour, policy-Undefined route, external
+  coprocessor handshake, and supported CP14 side effect. Each row proves the
+  Table 7-23 incoming PC+8 opcode and outgoing PC+12 address halves are one
+  word-read S cycle with correct opcode/data and User/privileged PROT, then compares all
+  31 physical GPRs, CPSR, all five SPSRs, all test memory, CP14 state, LOCK,
+  DMORE, coprocessor pins, and `DBGINSTRVALID/DBGnEXEC`. The successor reaches
+  Execute exactly one cycle later. `arm7tdmis_pabt_pipeline_tb` separately
+  proves a condition-failed UDF raises no exception and the immediately
+  following SWI or aborted fetch independently selects SWI or PABT, with the
+  correct vector, LR, and SPSR rather than a false Undefined exception.
 - [ ] **ISA-014:** Verify all exception-return idioms (`MOVS/SUBS PC`, LDM with
   `S+PC`) from every exception mode and return to ARM and Thumb.
 - [ ] **ISA-015:** Test instruction sequences, not only isolated opcodes: forwarding/
@@ -2942,7 +2954,7 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
 | [8] Interrupt during at-speed debug instruction | Corrected in r4p3 | Regression with long LDM/STM |
 | [9] wrong ICE version through JTAG | Corrected in r4p3 | Return selected r4p3 value consistently |
 | [10] Thumb EIS log error | Corrected / non-synthesized | Ensure project trace logger is correct |
-| [11] SWI/PABT after condition-failed Undef | Present in r4p3 | Decide corrected-default vs compatibility parameter |
+| [11] SWI/PABT after condition-failed Undef | Present in r4p3 | Corrected only: a failed UDF retires as one S cycle and the following SWI/PABT is selected independently; no defect-emulation parameter; `arm7tdmis_cond_fail_matrix_tb.sv`, `arm7tdmis_pabt_pipeline_tb.sv` |
 | [12] Thumb DABT LR low-bit error | Corrected in r4p3 | Regression |
 | [13] async DBGRQ during PC modification | Present in r4p3 | Corrected default: synchronous `DBGRQ` contract, atomic PC commit, retained redirect regression; synchronize asynchronous sources externally |
 | [14] non-indexed LDC/STC decode | Present in r4p3 | Corrected only: execute P=0,U=1,W=0 LDC/LDCL/STC/STCL architecturally; no defect-emulation parameter; `arm7tdmis_cp_erratum14_tb.sv` |

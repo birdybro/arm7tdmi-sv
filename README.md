@@ -46,8 +46,10 @@ the evidence required to promote a path to VERIFIED are listed in `TASKS.md` §3
 | Software interrupt | An SWI entry path exists |
 | Coprocessor | Decode classes and pins exist; accepted-operation and busy/data protocols do not |
 
-The RTL contains condition-code handling for ARM instructions, but complete side-effect
-suppression and exact failed-condition bus/debug behavior are not yet proven.
+ARM condition failure is directed-verified across Supervisor/User modes, all
+14 conditions that can fail, every decode class, and every distinct
+architectural/external side-effect path. Unexecuted instructions take the
+documented single S opcode cycle and drive `DBGnEXEC` HIGH.
 
 ### Thumb instruction decoder paths
 
@@ -275,8 +277,10 @@ evidence.
 | `block_ls_policy` | User-bank/PC/base-list behavior and precise-Undefined policy across 21 rows |
 | `swp_policy` | Defined aliases/modes and precise-Undefined policy for every unsafe SWP/SWPB operand class |
 | `swp_bus_matrix` | Both widths across normal, stall, read/write abort, reset, and mid-pair DBGRQ exits |
+| `cond_fail_matrix` | 1,092 Supervisor/User × condition × instruction-path rows with exact Table 7-23 bus/debug and no-side-effect checks |
 | `abort` | DABT during LDR — Rd preserved, vector entry |
 | `pabt` | PABT propagation via `fd_q.pabort` |
+| `pabt_pipeline` | PABT metadata flushes and corrected condition-failed-UDF → SWI/PABT sequencing |
 | `ldm_abort` / `ldm_abort_base_list` | Every abort beat, later-load suppression, Base Updated writeback, and r15 protection |
 | `stm_abort` / `stm_base_list` | Every abort beat plus base writeback/store reachability and all-mode base-lowest rules |
 | `ldm_pc` | LDM with PC in list + `^` — CPSR restored from SPSR |
