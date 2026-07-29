@@ -24,4 +24,6 @@ set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) .
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ../rtl/trace/arm7tdmis_etm7_adapter.sv]
 
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ../rtl/top/arm7tdmis_top.sv]
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ../rtl/top/arm7tdmi_wishbone_adapter.sv]
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ../rtl/top/arm7tdmi_mister_enable_done_adapter.sv]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ../rtl/top/arm7tdmi_mister.sv]

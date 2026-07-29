@@ -168,6 +168,32 @@ The `DBG_STEP_*` interface is the explicitly synchronous transport specified
 in [DEBUG.md](DEBUG.md). It remains isolated when debug is disabled. It is not
 an asynchronous TCK/RTCK interface.
 
+## Public memory-bus adapters
+
+The canonical valid/ready interface remains the versioned CPU boundary. Two
+optional stateless adapters are included in the public file list and QIP:
+
+- `arm7tdmi_mister_enable_done_adapter` maps `MEM_VALID` to a selected
+  active-high `HOST_ENABLE` convention and qualifies completion with
+  `HOST_DONE`. Address, direction, write data, byte enables, code/data,
+  privilege, lock, sequential, and more fields are preserved with `HOST_*`
+  names. `HOST_DONE`, `HOST_RDATA`, and `HOST_ERROR` may arrive while
+  `CPU_CE` is low because the canonical wrapper buffers the response.
+- `arm7tdmi_wishbone_adapter` emits one Wishbone B4 classic cycle per
+  canonical request. `WB_ADR` is a byte address, `WB_SEL` is the canonical
+  lane mask, `WB_LOCK` preserves SWP ownership, and `WB_ERR` becomes
+  `MEM_ERROR`. `WB_CTI=000` and `WB_BTE=00`: the adapter deliberately does
+  not claim a Wishbone incrementing burst. Optional `WB_CODE`,
+  `WB_PRIVILEGED`, `WB_SEQUENTIAL`, and `WB_MORE` sidebands preserve metadata
+  for interconnects that can use it.
+
+Neither adapter contains storage, CPU hierarchy, or a clock. The canonical
+wrapper guarantees payload stability through completion and owns the
+one-response holding register. A bus fabric must return exactly one done,
+acknowledge, or error for each enabled request; for a locked SWP/SWPB pair it
+must not grant the protected target to another master between the two
+`WB_LOCK`/`HOST_LOCK` transfers.
+
 ## Portable FPGA package
 
 `fpga/arm7tdmi_mister.f` is the simulator/tool-neutral ordered source list.
@@ -257,8 +283,7 @@ The following are intentionally not claimed by this version of the wrapper:
 - save-state export/import or quiescent snapshot;
 - a PocketStation subsystem or BIOS/software bundle;
 - MiSTer framework integration, fitted/timed, or on-board evidence;
-- DMA/arbitration behavior beyond the exposed lock/more hints; or
-- Avalon-MM, Wishbone, or MiSTer `enable/done` thin adapters.
+- DMA/arbitration behavior beyond the exposed lock/more hints.
 
 Those remain visible release blockers in `TASKS.md` rather than implicit
 features of the canonical memory handshake.

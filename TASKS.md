@@ -3222,9 +3222,19 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   optional-feature costs.
 - [ ] **MIST-012:** Test coexistence with DMA/bus arbitration, including SWP LOCK,
   LDM/STM DMORE, stalls, and abort/error responses.
-- [ ] **MIST-013:** Supply checked thin adapters from the canonical wrapper interface
+- [x] **MIST-013:** Supply checked thin adapters from the canonical wrapper interface
   to the selected MiSTer `enable/done` convention and at least one standard FPGA bus
   (Avalon-MM or Wishbone). Keep the CPU contract independent of any one adapter.
+  `arm7tdmi_mister_enable_done_adapter` preserves the complete request payload
+  and qualifies the selected active-high host completion. The independent
+  `arm7tdmi_wishbone_adapter` maps byte address, data, select, error, and lock
+  to conservative B4 classic cycles while exposing canonical metadata as
+  optional sidebands; it does not falsely extend DMORE into a Wishbone burst.
+  Both are stateless, hierarchy-free public-package sources.
+  `adapters_tb` verifies idle qualification, multi-cycle backpressure, exact
+  payload/metadata, success, read data, and error mapping for both adapters;
+  `test_fpga_package.py` enforces file-list/QIP inclusion and independence
+  from the canonical wrapper implementation.
 
 ## 31.10 P0/P1 — verification closure
 

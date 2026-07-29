@@ -26,4 +26,6 @@
 ../rtl/trace/arm7tdmis_etm7_adapter.sv
 
 ../rtl/top/arm7tdmis_top.sv
+../rtl/top/arm7tdmi_wishbone_adapter.sv
+../rtl/top/arm7tdmi_mister_enable_done_adapter.sv
 ../rtl/top/arm7tdmi_mister.sv
