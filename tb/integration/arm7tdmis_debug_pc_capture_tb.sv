@@ -1,4 +1,4 @@
-// DBG-007/JTAG-005 DBGRQ program-counter capture regression.
+// DBG-007/JTAG-005 DBGRQ and breakpoint PC-capture regression.
 //
 // The program repeatedly executes MOV r0,pc, so the last completed
 // instruction's architectural PC value is visible without peeking at an

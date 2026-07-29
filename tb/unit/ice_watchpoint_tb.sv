@@ -93,6 +93,7 @@ module ice_watchpoint_tb;
         .tap_restart_req    (1'b0),
         .tap_chain1_capture (1'b0),
         .chain1_capture_break(tb_chain1_capture_break),
+        .entry_breakpoint   (tb_entry_breakpoint),
         .core_dcc_we        (1'b0),
         .core_dcc_re        (1'b0),
         .core_dcc_wdata     (32'h0),
@@ -127,6 +128,7 @@ module ice_watchpoint_tb;
         .scan_raddr
     );
     logic tb_chain1_capture_break;
+    logic tb_entry_breakpoint;
 
     int unsigned errors = 0;
 
@@ -382,7 +384,7 @@ module ice_watchpoint_tb;
         breakpoint_fetch,
         core_dcc_control, core_dcc_rdata, core_dbgabt_rdata,
         dcc_tx_empty, dcc_rx_full, dbg_inject_we, dbg_inject_instr,
-        dbg_inject_active, tb_chain1_capture_break,
+        dbg_inject_active, tb_chain1_capture_break, tb_entry_breakpoint,
         WP0_ADDR_MASK, WP0_DATA_VAL, WP0_DATA_MASK, WP0_CTRL_MASK,
         WP1_ADDR_MASK, WP1_DATA_VAL, WP1_DATA_MASK, WP1_CTRL_MASK};
     /* verilator lint_on UNUSEDSIGNAL */

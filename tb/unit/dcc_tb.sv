@@ -63,6 +63,7 @@ module dcc_tb;
         .tap_restart_req    (1'b0),
         .tap_chain1_capture (1'b0),
         .chain1_capture_break(tb_chain1_capture_break),
+        .entry_breakpoint   (tb_entry_breakpoint),
         .core_dcc_we,
         .core_dcc_re,
         .core_dcc_wdata,
@@ -97,6 +98,7 @@ module dcc_tb;
         .scan_raddr
     );
     logic tb_chain1_capture_break;
+    logic tb_entry_breakpoint;
 
     int unsigned errors = 0;
 
@@ -285,6 +287,7 @@ module dcc_tb;
                      dbg_ack, ifen, halt_request,
                      core_halt, DBGRNG, dbg_inject_we, dbg_inject_instr,
                      dbg_inject_active, tb_chain1_capture_break,
+                     tb_entry_breakpoint,
                      scan_raddr};
     /* verilator lint_on UNUSEDSIGNAL */
 

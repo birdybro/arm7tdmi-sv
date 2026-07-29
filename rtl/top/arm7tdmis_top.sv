@@ -180,6 +180,7 @@ module arm7tdmis_top
     logic        dbg_inject_retire;
     logic        tap_chain1_capture;
     logic        ice_chain1_capture_break;
+    logic        ice_entry_breakpoint;
     logic        ice_data_write_q;
     logic [31:0] ice_watch_data;
 
@@ -215,6 +216,7 @@ module arm7tdmis_top
         .tap_restart_req    (tap_restart_req),
         .tap_chain1_capture (tap_chain1_capture),
         .chain1_capture_break(ice_chain1_capture_break),
+        .entry_breakpoint   (ice_entry_breakpoint),
         .dbg_break_internal (ice_dbg_break),
         .breakpoint_fetch   (ice_breakpoint_fetch),
         .dbg_ack            (ice_dbg_ack),
@@ -381,7 +383,8 @@ module arm7tdmis_top
     // advanced r15 by three ARM words when the first register reaches
     // the scan data bus, so restore that visible bias for r15 only.
     wire [31:0] dbg_block_capture_data =
-        (dbg_block_reg_q == 4'd15) ? (dbg_reg_rdata + 32'd12)
+        (dbg_block_reg_q == 4'd15) ? (dbg_reg_rdata + 32'd12
+                                     + (ice_entry_breakpoint ? 32'd4 : 32'd0))
                                    : dbg_reg_rdata;
     wire [31:0] tap_chain1_capture_data = dbg_block_active_q
                                        && !dbg_block_load_q

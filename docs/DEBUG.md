@@ -270,6 +270,12 @@ architectural instruction address. A linear `MOV r0,pc` program verifies that
 relationship without using an internal PC signal in
 `tb/integration/arm7tdmis_debug_pc_capture_tb.sv`.
 
+For an instruction breakpoint, ICE retains the pre-execute entry cause for the
+whole halt session. The stream adapter adds the breakpoint's extra PC word as
+well as the common three-word STM bias, so OpenOCD's two `-12` corrections
+recover the exact breakpoint address. The same regression verifies both the
+captured address and suppression of the breakpointed instruction.
+
 Writing r15 through that stream also replaces the halted pipeline's fetch PC.
 The address is halfword-aligned in Thumb state and word-aligned in ARM state;
 all saved pre-debug fetch/decode state is discarded. The standard scan exit

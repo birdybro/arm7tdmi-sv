@@ -29,6 +29,7 @@ module arm7tdmis_ice_rt
     input  logic        tap_chain1_capture,// first Capture-DR consumes the
                                             //      latched entry-cause bit
     output logic        chain1_capture_break,
+    output logic        entry_breakpoint,  // retained for r15 scan formula
 
     // §20: CP14 DCC and Debug Abort Status paths. Processor c1 writes fill
     // TX; processor c1 reads consume RX. c0 returns live version/W/R status.
@@ -544,6 +545,7 @@ module arm7tdmis_ice_rt
     end
 
     assign chain1_capture_break = entry_watchpoint_q;
+    assign entry_breakpoint = breakpoint_halt_q;
 
     wire in_debug_halt = (dbg_state_q == DBG_HALTED);
 

@@ -2581,9 +2581,10 @@ number of cycles spent in an internal FSM state.
   address without spurious system-speed re-entry; this is fail-hard covered by
   `tb/integration/arm7tdmis_debug_pc_resume_tb.sv`. The DBGRQ STM capture includes
   the exact three-word scan-pipeline bias and survives OpenOCD's ARM7TDMI-specific
-  correction in `tb/integration/arm7tdmis_debug_pc_capture_tb.sv`. Breakpoint, watchpoint,
-  exception, and system-speed PC formulas, pending-interrupt preservation, and
-  the documented PC-modify erratum policy remain open.
+  correction in `tb/integration/arm7tdmis_debug_pc_capture_tb.sv`; the same
+  regression verifies the distinct pre-execute breakpoint formula. Watchpoint
+  with exception and system-speed PC formulas, pending-interrupt preservation,
+  and the documented PC-modify erratum policy remain open.
 - [x] **JTAG-001:** Exhaustively verify all 16 TAP states and transitions, async
   `DBGnTRST`, Capture/Shift/Update-IR, fixed `0001` capture, all five public
   instructions, and BYPASS for every other IR encoding. Fail-hard evidence:
@@ -2618,8 +2619,9 @@ number of cycles spent in an internal FSM state.
   `tb/integration/arm7tdmis_debug_register_scan_tb.sv`; scan-loaded r15 and the
   branch/RESTART resume path are covered by
   `tb/integration/arm7tdmis_debug_pc_resume_tb.sv`, and DBGRQ r15 capture by
-  `tb/integration/arm7tdmis_debug_pc_capture_tb.sv`. PSRs, the remaining entry
-  causes and end-to-end operations, and debugger-process integration remain open.
+  `tb/integration/arm7tdmis_debug_pc_capture_tb.sv`, which also covers a
+  scan-programmed instruction breakpoint. PSRs, the remaining entry causes and
+  end-to-end operations, and debugger-process integration remain open.
 - [ ] **JTAG-006:** Demonstrate a pinned open-source debugger/GDB flow against the
   simulated scan transport and on FPGA, or document precisely why the r4p3 scan
   protocol needs a project-specific bridge and release that bridge with protocol tests.
