@@ -280,7 +280,9 @@ module arm7tdmis_unpredictable_trap_tb
             fail(case_id, $sformatf("%s handler marker missing", label));
         if (u_mem.mem[64] !== DATA_SENTINEL)
             fail(case_id, $sformatf("%s changed memory", label));
-        if (data_cycles != (case_id >= 19 ? 1 : 0))
+        // Thumb setup executes one LDR. Its Table 7-11 sequence exposes
+        // the data address/N plus the merged pc+3i/S data-class phase.
+        if (data_cycles != (case_id >= 19 ? 2 : 0))
             fail(case_id, $sformatf(
                 "%s issued unexpected data cycles (%0d)", label, data_cycles));
         if (cp_request_seen)
