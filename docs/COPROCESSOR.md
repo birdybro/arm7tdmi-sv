@@ -13,6 +13,11 @@ coprocessor claims the instruction (`CPA=1`, `CPB=1`), the instruction enters
 Undefined. A system that needs CP15 must implement and claim it outside the
 bare core.
 
+Only ARMv4T coprocessor instruction rows are offered. In particular,
+`bits[27:23]=11000` with `bit[21]=0` is the later MCRR/MRRC extension space;
+it decodes directly as Undefined and never asserts `CPnI`, regardless of
+`CPA/CPB`.
+
 Internal CP14 accepts only these exact ARM-state register-transfer encodings:
 
 - `MRC p14,0,Rd,c0,c0,0`: read DCC control.
@@ -89,7 +94,8 @@ does not provide real-silicon-defect compatibility parameters for errata 14 or
 The public regressions are:
 
 - Decode and ownership:
-  `decoder_tb`, `arm7tdmis_cp15_undef_tb`,
+  `decoder_tb`, `reserved_decode_tb`, `arm7tdmis_reserved_execute_tb`,
+  `arm7tdmis_cp15_undef_tb`,
   `arm7tdmis_cp14_decode_tb`, and `arm7tdmis_cp14_r15_tb`.
 - Pipeline and privilege:
   `arm7tdmis_cpntrans_tb` and `arm7tdmis_cp_pipeline_follow_tb`.

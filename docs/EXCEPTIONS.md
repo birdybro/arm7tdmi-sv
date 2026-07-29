@@ -10,7 +10,7 @@ Seven exception types per the ARM7TDMI-S r4p3 TRM §2.9. This doc captures their
 
 ```
 0x00  Reset       ← deassertion of nRESET
-0x04  Undefined   ← INSTR_UNDEF + cond_pass, NV-cond, unhandled coprocessor
+0x04  Undefined   ← INSTR_UNDEF + cond_pass, cond=1111 policy, unhandled coprocessor
 0x08  SWI         ← INSTR_SWI + cond_pass
 0x0C  PABT        ← fd_q.pabort (= ABORT during this instruction's fetch)
 0x10  DABT        ← ABORT during a memory data cycle
@@ -70,7 +70,22 @@ wire undef_fires = executing && ((condition_pass && instr_is_undef)
                               || cp_undef_trap);
 ```
 
-`instr_is_undef` matches the decoded `INSTR_UNDEF` class. `cond_is_nv` traps the NV condition encoding (`4'hF` — reserved in ARMv4T). `cp_undef_trap` fires on coprocessor instructions the core doesn't handle (CDP/MCR/MRC/LDC/STC with cp_num ∉ {14, 15-c0-read}).
+`instr_is_undef` matches the decoded `INSTR_UNDEF` class. ARMv4 specifies
+`cond=1111` as UNPREDICTABLE, not as the ARMv5+ unconditional extension
+space. This implementation freezes a precise Undefined trap as its
+deterministic policy; `cond_is_nv` is a defense-in-depth trap route even
+though the ARM decoder also returns `INSTR_UNDEF`. `cp_undef_trap` fires on
+coprocessor instructions the core does not handle (CDP/MCR/MRC/LDC/STC with
+`cp_num` outside the internal CP14 subset and no external acceptor).
+
+The ARM decoder applies the ARM ARM extension-space rule before selecting an
+execute unit. It rejects all unallocated `[27:20]`/`[7:4]` decode rows,
+including the signed-store encodings later used for doubleword transfers and
+the `11000x0x` coprocessor double-register-transfer space. Consequently a
+reserved word cannot perform a memory transfer or assert `CPnI` before taking
+Undefined. The exhaustive evidence is `reserved_decode_tb` (4,096 ARM decode
+rows, all 4,096 `cond=1111` variants, and all 65,536 Thumb words) plus the
+pin-level `arm7tdmis_reserved_execute_tb`.
 
 ### PABT (prefetch abort)
 

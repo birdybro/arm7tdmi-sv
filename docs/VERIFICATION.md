@@ -36,6 +36,17 @@ versioned artifact archive together with the corresponding clean source commit.
 harness, and smoke path with one unit and one integration test. Its report is
 explicitly marked `"mode": "quick"` and cannot be mistaken for the full run.
 
+## Exhaustive encoding evidence
+
+`reserved_decode_tb` is deliberately exhaustive rather than sample-based. It
+checks all 4,096 ARMv4T decode-bit combinations, every one of those
+combinations under the implementation's ARMv4 `cond=1111` trap policy, and
+all 65,536 original Thumb halfwords. Fixed allocation totals make an
+accidentally weakened reference map fail hard. The independent
+`arm7tdmis_reserved_execute_tb` then executes one representative from every
+reserved family through the pin-level memory interface and checks exception
+state and absence of memory/coprocessor side effects.
+
 Functional/line/toggle coverage reporting, mutation testing of architectural
 controls, differential testing, and formal evidence remain separate open
 requirements in `TASKS.md` §31.

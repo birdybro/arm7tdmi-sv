@@ -2470,10 +2470,23 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   intent through `S_DP_SHIFT`, eliminating its former next-instruction datapath
   dependency. Existing interworking, LDM return, exception, timing, and debug-PC
   regressions pass unchanged.
-- [ ] **ISA-007:** Treat Thumb conditional-branch condition `1110` as Undefined, not
+- [x] **ISA-007:** Treat Thumb conditional-branch condition `1110` as Undefined, not
   AL. Treat ARM condition `1111` according to ARMv4T (not later unconditional
-  encodings). Exhaustively test all Thumb reserved encodings and all ARM
-  class-overlap/invalid encodings.
+  encodings). `tb/unit/reserved_decode_tb.sv` exhausts all 4,096 combinations of
+  the ARM ARM-defined decode bits `[27:20]`/`[7:4]`, anchors the expected class
+  totals (including 445 Undefined rows), repeats all 4,096 rows under
+  `cond=1111`, and exhausts all 65,536 Thumb halfwords (5,120 ARMv4T-reserved
+  words). Non-decode SBZ/SBO violations that share an allocated decode row are
+  architecturally UNPREDICTABLE and remain in ISA-016 rather than being
+  mislabeled Undefined. The decoder now rejects signed-store/doubleword,
+  unallocated multiply/control/media, and ARMv5 coprocessor-extension holes
+  before any execute or external-coprocessor side effect. ARMv4 defines
+  `cond=1111` as UNPREDICTABLE; the frozen implementation policy is a precise
+  Undefined trap for every lower encoding, never an ARMv5+ unconditional
+  instruction. `tb/integration/arm7tdmis_reserved_execute_tb.sv` independently
+  executes 12 reset-per-case representatives and checks exact ARM/Thumb LR and
+  SPSR values, ARM-state handler entry, successor flush, memory preservation,
+  and absence of external `CPnI`.
 - [ ] **ISA-008:** Implement translated post-indexed loads/stores (`LDRT/STRT`,
   `LDRBT/STRBT`, and applicable extra-transfer encodings) with User-mode `PROT` while
   retaining the current processor mode.
