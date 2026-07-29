@@ -172,8 +172,11 @@ module arm7tdmis_decoder
             // TST/TEQ/CMP/CMN require Rd=0000. MOV/MVN require Rn=0000.
             // (Their required S values are already enforced by the
             // control-extension decode above.)
-            if ((((instr[24:21] inside {4'h8, 4'h9, 4'hA, 4'hB}))
-                  && (instr[15:12] != 4'h0))
+            if ((((instr[24:21] == 4'h8)
+               || (instr[24:21] == 4'h9)
+               || (instr[24:21] == 4'hA)
+               || (instr[24:21] == 4'hB))
+                 && (instr[15:12] != 4'h0))
              || (((instr[24:21] == 4'hD) || (instr[24:21] == 4'hF))
                   && (instr[19:16] != 4'h0)))
                 c = INSTR_UNDEF;
