@@ -2040,7 +2040,11 @@ Do not implement; remove if mistakenly introduced:
 3. **`SIZE` encoding** (TRM §3.4.3 Table 3-3): `00=byte`, `01=halfword`, `10=word`, `11=reserved` (never generated; assert).
 4. **Significant-address-bit rule** (TRM §3.5.4 Table 3-6): word — use `ADDR[31:2]`; halfword — `ADDR[31:1]`; byte — `ADDR[31:0]`.
 5. **`ABORT` sampling** (TRM §3.5.3, p. 87): sampled on rising `CLK` *only during S/N memory cycles*; ignored in I/C. On data access, traps immediately. On opcode fetch, marks the prefetched instruction invalid; trap fires only when (and if) it reaches Execute.
-6. **`DMORE`** (TRM §1.5.5, p. 40 / Appendix A): HIGH during the current data access ⇒ next data access *will* be sequential (mid-LDM/STM). LOW ⇒ last beat or no immediate further data access. Distinct from `TRANS[1:0]`, which describes the next *transaction's* type.
+6. **`DMORE`** (TRM §1.5.5, p. 40 / Appendix A): an address-class
+   prediction, HIGH when the next data memory access is followed by a
+   sequential data memory access. For an n-word LDM/STM it is HIGH on data
+   addresses 1 through n-1 and LOW on address n. It is sampled with
+   `ADDR/TRANS`, not with the returning `RDATA/WDATA` phase.
 7. During `nRESET` LOW the bus is forced into I-cycles; existing memory cycles abandon. No spurious access on the way to `0x00000000`.
 
 ## 30.18 Cycle accuracy (amends §18)
@@ -2773,9 +2777,10 @@ number of cycles spent in an internal FSM state.
   stable pins/state, and proves a mid-pair DBGRQ waits for atomic completion
   before DBGACK. `arm7tdmis_unaligned_access_matrix_tb` additionally requires
   exactly two locked accepted transfers for every endian/address suffix.
-- [ ] **BUS-010:** Drive `DMORE` from the current transfer's guaranteed continuation,
-  not a loose "block active" flag. Verify first/middle/last/single-beat/stalled/aborted
-  LDM and STM.
+- [ ] **BUS-010:** Drive `DMORE` as the §1.5.5 address-class prediction for a
+  next data access that has a guaranteed sequential follower, not from the
+  returning data phase or a loose "block active" flag. Verify
+  first/middle/last/single-beat/stalled/aborted LDM and STM.
 - [ ] **BUS-011:** Verify burst address increments, control stability, byte
   non-bursting, alignment, reset I cycles, and branch/exception/refill waveforms.
 - [ ] **BUS-012:** Publish a precise raw-bus integration contract, including when an

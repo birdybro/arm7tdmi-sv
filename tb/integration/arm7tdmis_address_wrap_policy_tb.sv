@@ -321,14 +321,13 @@ module arm7tdmis_address_wrap_policy_tb
                         fail(case_id, $sformatf(
                             "beat %0d SIZE/WRITE/TRANS=%02b/%0b/%02b",
                             data_cycles, SIZE, WRITE, TRANS));
-                    // ADDR describes the next transfer while DMORE
-                    // describes the currently returning data transfer.
-                    // It therefore rises with the second address phase,
-                    // while the first beat is completing.
-                    if (DMORE !== (data_cycles == 1))
+                    // DMORE describes this address-class prediction: the
+                    // first address has a guaranteed sequential follower,
+                    // while the second and final address does not.
+                    if (DMORE !== (data_cycles == 0))
                         fail(case_id, $sformatf(
                             "beat %0d DMORE expected %0b got %0b",
-                            data_cycles, data_cycles == 1, DMORE));
+                            data_cycles, data_cycles == 0, DMORE));
                 end
                 data_cycles++;
             end
