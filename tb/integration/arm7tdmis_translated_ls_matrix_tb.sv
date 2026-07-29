@@ -148,6 +148,7 @@ module arm7tdmis_translated_ls_matrix_tb
         logic [31:0] expected_memory;
         logic [31:0] expected_load;
         int unsigned data_cycles;
+        int unsigned merged_load_cycles;
         int unsigned privileged_fetches;
 
         @(negedge CLK);
@@ -157,12 +158,13 @@ module arm7tdmis_translated_ls_matrix_tb
         @(negedge CLK);
         nRESET = 1'b1;
 
-        data_cycles       = 0;
+        data_cycles        = 0;
+        merged_load_cycles = 0;
         privileged_fetches = 0;
         repeat (100) begin
             @(negedge CLK);
             if (TRANS inside {TRANS_N, TRANS_S}) begin
-                if (PROT[PROT_BIT_DATA]) begin
+                if (PROT[PROT_BIT_DATA] && TRANS == 2'(TRANS_N)) begin
                     data_cycles++;
                     if (ADDR !== BASE_ADDR)
                         fail(case_id, $sformatf(
@@ -181,6 +183,19 @@ module arm7tdmis_translated_ls_matrix_tb
                         fail(case_id, $sformatf(
                             "%s WRITE expected %0b got %0b",
                             label, !load, WRITE));
+                end else if (PROT[PROT_BIT_DATA]) begin
+                    // Table 7-11 retains data-class controls while the
+                    // LDR writeback I cycle merges with pc+12/S. This is
+                    // not a second translated data access.
+                    merged_load_cycles++;
+                    if (!load || TRANS !== 2'(TRANS_S)
+                        || ADDR !== 32'h0000_0038
+                        || WRITE !== WRITE_READ
+                        || SIZE !== 2'(SIZE_WORD)
+                        || PROT[PROT_BIT_PRIV] !== 1'b1)
+                        fail(case_id, $sformatf(
+                            "%s unexpected merged data-class phase A/W/S/P/T=%08x/%0b/%02b/%02b/%02b",
+                            label, ADDR, WRITE, SIZE, PROT, TRANS));
                 end else if (PROT[PROT_BIT_PRIV]) begin
                     privileged_fetches++;
                 end
@@ -197,6 +212,10 @@ module arm7tdmis_translated_ls_matrix_tb
             fail(case_id, $sformatf(
                 "%s data-cycle count expected 1 got %0d",
                 label, data_cycles));
+        if (merged_load_cycles != (load ? 1 : 0))
+            fail(case_id, $sformatf(
+                "%s merged-load phase count expected %0d got %0d",
+                label, load, merged_load_cycles));
         if (privileged_fetches == 0)
             fail(case_id, $sformatf(
                 "%s never observed a privileged opcode fetch", label));
