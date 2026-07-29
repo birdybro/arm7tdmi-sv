@@ -118,15 +118,14 @@ module arm7tdmis_psr
         logic [31:0] cpsr_next;
         logic [31:0] spsr_next;
 
-        if (CLKEN) begin
-            if (!nRESET) begin
-                cpsr_q    <= 32'(PSR_RESET_VALUE);
-                spsr_q[0] <= 32'h0;
-                spsr_q[1] <= 32'h0;
-                spsr_q[2] <= 32'h0;
-                spsr_q[3] <= 32'h0;
-                spsr_q[4] <= 32'h0;
-            end else begin
+        if (!nRESET) begin
+            cpsr_q    <= 32'(PSR_RESET_VALUE);
+            spsr_q[0] <= 32'h0;
+            spsr_q[1] <= 32'h0;
+            spsr_q[2] <= 32'h0;
+            spsr_q[3] <= 32'h0;
+            spsr_q[4] <= 32'h0;
+        end else if (CLKEN) begin
                 cpsr_next = cpsr_q;
 
                 // CPSR field-masked write — drop T (bit 5) per §30.8.3.
@@ -173,7 +172,6 @@ module arm7tdmis_psr
                                 (spsr_write_data & spsr_mask);
                     spsr_q[cur_spsr_ix] <= spsr_next;
                 end
-            end
         end
     end
 

@@ -69,18 +69,16 @@ module arm7tdmis_memory
     //      FPGA preference and avoids a sync/async-net warning across
     //      modules that read nRESET as data, e.g. the cycle logger).
     always_ff @(posedge CLK) begin
-        if (CLKEN) begin
-            if (!nRESET) begin
-                addr_q  <= 32'h0;
-                write_q <= 1'b0;
-                size_q  <= 2'(SIZE_WORD);
-                trans_q <= 2'(TRANS_I);
-            end else begin
-                addr_q  <= ADDR;
-                write_q <= WRITE;
-                size_q  <= SIZE;
-                trans_q <= TRANS;
-            end
+        if (!nRESET) begin
+            addr_q  <= 32'h0;
+            write_q <= 1'b0;
+            size_q  <= 2'(SIZE_WORD);
+            trans_q <= 2'(TRANS_I);
+        end else if (CLKEN) begin
+            addr_q  <= ADDR;
+            write_q <= WRITE;
+            size_q  <= SIZE;
+            trans_q <= TRANS;
         end
     end
 
@@ -119,7 +117,7 @@ module arm7tdmis_memory
     always_ff @(posedge CLK) begin
         logic       hw_hi;
         logic [1:0] byte_lane;
-        if (CLKEN && is_active_q && write_q) begin
+        if (nRESET && CLKEN && is_active_q && write_q) begin
             unique case (size_q)
                 2'(SIZE_WORD): mem[index_q] <= WDATA;
                 2'(SIZE_HALFWORD): begin

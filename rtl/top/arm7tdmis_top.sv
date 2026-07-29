@@ -81,11 +81,12 @@ module arm7tdmis_top
     // outside debug state. With DBGEN=0 the ICE drives IFEN=1, so this
     // is a pass-through.
     //
-    // core_halt freezes the entire core pipeline by gating its CLKEN:
-    // every internal always_ff in the core is `if (CLKEN) ...`, so a
-    // single AND at the top suffices. The memory model still ticks with
-    // the unmodified CLKEN so a debugger can drive bus accesses via
-    // scan-chain-2 / chain-1 without losing the core's frozen state.
+    // core_halt freezes normal pipeline progress by gating its CLKEN.
+    // Reset remains independent of CLKEN so architectural state can
+    // always be cleared while the debugger has the core halted. The
+    // memory model still ticks with the unmodified CLKEN so a debugger
+    // can drive bus accesses via scan-chain-2 / chain-1 without losing
+    // the core's frozen state.
     wire nIRQ_eff   = nIRQ | ~ice_ifen;
     wire nFIQ_eff   = nFIQ | ~ice_ifen;
     wire core_clken = CLKEN && !ice_core_halt;

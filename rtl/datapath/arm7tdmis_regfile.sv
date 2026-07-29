@@ -115,10 +115,10 @@ module arm7tdmis_regfile
 
     // ---- Write port (suppressed for wa_addr=15 — PC lives in core) ----
     always_ff @(posedge CLK) begin
-        if (CLKEN) begin
-            if (!nRESET) begin
-                for (int i = 0; i < 31; i = i + 1) regs[i] <= 32'h0;
-            end else if (wa_enable && wa_addr != 4'd15) begin
+        if (!nRESET) begin
+            for (int i = 0; i < 31; i = i + 1) regs[i] <= 32'h0;
+        end else if (CLKEN) begin
+            if (wa_enable && wa_addr != 4'd15) begin
                 regs[bank_index(wa_addr, effective_mode)] <= wa_data;
             end
         end

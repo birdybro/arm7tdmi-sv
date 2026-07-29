@@ -217,16 +217,17 @@ module arm7tdmis_core_pipelined
 
     wire d_advance = fd_q.valid && !flush && !e_busy;
 
-    // F stage update — synchronous reset, gated by CLKEN.
+    // F stage update. Reset dominates CLKEN so a stopped core cannot miss
+    // a complete reset pulse.
     always_ff @(posedge CLK) begin
-        if (CLKEN) begin
-            if (!nRESET) begin
-                fetch_pc_q       <= 32'h0;
-                inflight_pc_q    <= 32'h0;
-                inflight_valid_q <= 1'b0;
-                fd_q             <= '{instr:32'h0, pc:32'h0, thumb:1'b0,
-                                  pabort:1'b0, valid:1'b0};
-            end else if (flush) begin
+        if (!nRESET) begin
+            fetch_pc_q       <= 32'h0;
+            inflight_pc_q    <= 32'h0;
+            inflight_valid_q <= 1'b0;
+            fd_q             <= '{instr:32'h0, pc:32'h0, thumb:1'b0,
+                              pabort:1'b0, valid:1'b0};
+        end else if (CLKEN) begin
+            if (flush) begin
                 if (early_flush_fetch) begin
                     // Capture the target as the inflight prefetch this
                     // cycle (ADDR=flush_target_pc, TRANS=N driven below).
@@ -282,11 +283,11 @@ module arm7tdmis_core_pipelined
 
     // D stage update.
     always_ff @(posedge CLK) begin
-        if (CLKEN) begin
-            if (!nRESET) begin
-                de_q <= '{dec:'0, instr:32'h0, pc:32'h0, thumb:1'b0,
-                          pabort:1'b0, valid:1'b0};
-            end else if (flush) begin
+        if (!nRESET) begin
+            de_q <= '{dec:'0, instr:32'h0, pc:32'h0, thumb:1'b0,
+                      pabort:1'b0, valid:1'b0};
+        end else if (CLKEN) begin
+            if (flush) begin
                 de_q.valid <= 1'b0;
             end else if (!e_busy) begin
                 if (fd_q.valid) begin
@@ -777,10 +778,10 @@ module arm7tdmis_core_pipelined
     // same time we latch de_q.
     logic dec_is_unimplemented_q;
     always_ff @(posedge CLK) begin
-        if (CLKEN) begin
-            if (!nRESET)
-                dec_is_unimplemented_q <= 1'b0;
-            else if (flush)
+        if (!nRESET)
+            dec_is_unimplemented_q <= 1'b0;
+        else if (CLKEN) begin
+            if (flush)
                 dec_is_unimplemented_q <= 1'b0;
             else if (!e_busy && fd_q.valid)
                 dec_is_unimplemented_q <= dec_is_unimplemented_w;
@@ -858,10 +859,10 @@ module arm7tdmis_core_pipelined
 
     logic data_abort_q;
     always_ff @(posedge CLK) begin
-        if (CLKEN) begin
-            if (!nRESET) begin
-                data_abort_q <= 1'b0;
-            end else if (state_q == S_EXEC) begin
+        if (!nRESET) begin
+            data_abort_q <= 1'b0;
+        end else if (CLKEN) begin
+            if (state_q == S_EXEC) begin
                 data_abort_q <= 1'b0;             // clear on entering a new instr
             end else if (data_abort_now) begin
                 data_abort_q <= 1'b1;
@@ -1185,8 +1186,7 @@ module arm7tdmis_core_pipelined
     // E-stage sequential state
     // =====================================================================
     always_ff @(posedge CLK) begin
-        if (CLKEN) begin
-            if (!nRESET) begin
+        if (!nRESET) begin
                 state_q             <= S_EXEC;
                 ls_data_addr_q      <= 32'h0;
                 ls_store_data_q     <= 32'h0;
@@ -1229,7 +1229,7 @@ module arm7tdmis_core_pipelined
                 dp_shift_flags_we_q      <= 1'b0;
                 dp_shift_writes_pc_q     <= 1'b0;
                 load_value_q             <= 32'h0;
-            end else begin
+        end else if (CLKEN) begin
                 state_q <= state_next;
 
                 // L/S micro-op snapshot at end of S_EXEC.
@@ -1361,7 +1361,6 @@ module arm7tdmis_core_pipelined
                 if (state_q == S_DDATA && ls_load_q) begin
                     load_value_q <= load_value;
                 end
-            end
         end
     end
 
@@ -1554,9 +1553,21 @@ module arm7tdmis_core_pipelined
             PROT  = {is_priv, 1'b0};
             WRITE = WRITE_READ;
         end
+
+        // Reset is an idle bus cycle regardless of stale pre-reset state
+        // or CLKEN. The first real request is generated after release.
+        if (!nRESET) begin
+            ADDR  = 32'h0000_0000;
+            WRITE = WRITE_READ;
+            SIZE  = 2'(SIZE_WORD);
+            PROT  = 2'(PROT_OPC_PRIV);
+            LOCK  = LOCK_FREE;
+            TRANS = 2'(TRANS_I);
+            WDATA = 32'h0000_0000;
+        end
     end
 
-    assign DMORE = block_active && block_has_more;
+    assign DMORE = nRESET && block_active && block_has_more;
 
     // =====================================================================
     // §19: Coprocessor pipeline-following signals
@@ -1610,10 +1621,10 @@ module arm7tdmis_core_pipelined
     logic [31:0] pc_q;
     /* verilator lint_on UNUSEDSIGNAL */
     always_ff @(posedge CLK) begin
-        if (CLKEN) begin
-            if (!nRESET)
-                pc_q <= 32'h0;
-            else if (state_q == S_EXEC && de_q.valid)
+        if (!nRESET)
+            pc_q <= 32'h0;
+        else if (CLKEN) begin
+            if (state_q == S_EXEC && de_q.valid)
                 pc_q <= de_q.pc;
         end
     end
