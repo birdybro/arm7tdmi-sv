@@ -867,10 +867,10 @@ module arm7tdmis_core_pipelined
     // §17: data abort fires when ABORT is asserted during the active data
     // cycle of an LDR/STR/LDM/STM/SWP. Latched so the exception can be
     // raised at the boundary back to S_EXEC.
-    wire data_abort_now = ABORT && ((state_q == S_DDATA)
-                                  || (state_q == S_BLOCK_DATA)
-                                  || (state_q == S_SWP_RDATA)
-                                  || (state_q == S_SWP_WDATA));
+    wire data_abort_now = CLKEN && ABORT && ((state_q == S_DDATA)
+                                           || (state_q == S_BLOCK_DATA)
+                                           || (state_q == S_SWP_RDATA)
+                                           || (state_q == S_SWP_WDATA));
 
     logic data_abort_q;
     always_ff @(posedge CLK) begin
