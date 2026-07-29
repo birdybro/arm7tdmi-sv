@@ -1,6 +1,7 @@
 // EXC-002 pairwise priority regression. The cases create simultaneous
-// FIQ+IRQ, IRQ+PABT, and PABT+UNDEF requests at the same ARM instruction.
-// Together they prove the non-reset ordering FIQ > IRQ > PABT > UNDEF.
+// FIQ+IRQ, IRQ+PABT, PABT+UNDEF, and PABT+SWI requests at the same ARM
+// instruction. Together they prove every realizable adjacent selection
+// below Data Abort in the non-reset priority chain.
 
 `timescale 1ns/1ps
 
@@ -17,6 +18,7 @@ module arm7tdmis_exception_priority_scenario #(
     localparam int CASE_FIQ_IRQ     = 0;
     localparam int CASE_IRQ_PABT    = 1;
     localparam int CASE_PABT_UNDEF  = 2;
+    localparam int CASE_PABT_SWI    = 3;
 
     logic CLK;
     logic nRESET;
@@ -39,13 +41,18 @@ module arm7tdmis_exception_priority_scenario #(
         .nRESET      (nRESET)
     );
 
-    // CASE_PABT_UNDEF fetches a real absent-coprocessor instruction.
-    // The other rows use a harmless MOV r0,r0. Patch while reset is low.
+    // The low-priority side is encoded in the faulted instruction itself.
+    // Patch while reset is low.
     initial begin
         @(posedge CLK);
-        u_fixture.u_mem.mem[64] =
-            (CASE_ID == CASE_PABT_UNDEF) ? 32'hEE000700
-                                         : 32'hE1A00000;
+        unique case (CASE_ID)
+            CASE_PABT_UNDEF:
+                u_fixture.u_mem.mem[64] = 32'hEE000700;
+            CASE_PABT_SWI:
+                u_fixture.u_mem.mem[64] = 32'hEF000000;
+            default:
+                u_fixture.u_mem.mem[64] = 32'hE1A00000;
+        endcase
     end
 
     wire collision_window =
@@ -102,8 +109,16 @@ module arm7tdmis_exception_priority_scenario #(
                 lr_index      = 24;
                 expected_lr   = 32'h00000104;
             end
-            default: begin
+            CASE_PABT_UNDEF: begin
                 case_name     = "PABT>UNDEF";
+                expected_mode = 5'(MODE_ABORT);
+                expected_pc   = 32'h00000094;
+                marker_mask[4] = 1'b1;
+                lr_index      = 28;
+                expected_lr   = 32'h00000104;
+            end
+            default: begin
+                case_name     = "PABT>SWI";
                 expected_mode = 5'(MODE_ABORT);
                 expected_pc   = 32'h00000094;
                 marker_mask[4] = 1'b1;
@@ -150,29 +165,34 @@ endmodule
 /* verilator lint_on DECLFILENAME */
 
 module arm7tdmis_exception_priority_tb;
-    logic done0, done1, done2;
-    logic fail0, fail1, fail2;
+    logic [3:0] done;
+    logic [3:0] failed;
 
     arm7tdmis_exception_priority_scenario #(
         .CASE_ID  (0),
         .FST_FILE ("exception_priority_fiq_irq.fst")
-    ) u_fiq_irq (.done(done0), .failed(fail0));
+    ) u_fiq_irq (.done(done[0]), .failed(failed[0]));
 
     arm7tdmis_exception_priority_scenario #(
         .CASE_ID  (1),
         .FST_FILE ("exception_priority_irq_pabt.fst")
-    ) u_irq_pabt (.done(done1), .failed(fail1));
+    ) u_irq_pabt (.done(done[1]), .failed(failed[1]));
 
     arm7tdmis_exception_priority_scenario #(
         .CASE_ID  (2),
         .FST_FILE ("exception_priority_pabt_undef.fst")
-    ) u_pabt_undef (.done(done2), .failed(fail2));
+    ) u_pabt_undef (.done(done[2]), .failed(failed[2]));
+
+    arm7tdmis_exception_priority_scenario #(
+        .CASE_ID  (3),
+        .FST_FILE ("exception_priority_pabt_swi.fst")
+    ) u_pabt_swi (.done(done[3]), .failed(failed[3]));
 
     initial begin
-        wait (done0 && done1 && done2);
-        if (fail0 || fail1 || fail2)
+        wait (&done);
+        if (|failed)
             $fatal(1, "[exception_priority] FAIL");
-        $display("[exception_priority] PASS");
+        $display("[exception_priority] PASS (4 priority collisions)");
         $finish;
     end
 endmodule
