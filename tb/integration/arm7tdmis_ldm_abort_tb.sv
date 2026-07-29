@@ -228,11 +228,15 @@ module arm7tdmis_ldm_abort_tb
             errors = errors + 1;
         end
 
-        if (errors == 0)
-            $display("[ldm_abort] PASS");
-        else
-            $display("[ldm_abort] FAIL (%0d errors)", errors);
+        if (errors != 0)
+            $fatal(1, "[ldm_abort] FAIL (%0d errors)", errors);
+        $display("[ldm_abort] PASS");
         $finish;
+    end
+
+    initial begin
+        repeat (CYCLE_LIMIT + 32) @(posedge CLK);
+        $fatal(1, "[ldm_abort] TIMEOUT after %0d cycles", CYCLE_LIMIT + 32);
     end
 
 endmodule

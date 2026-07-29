@@ -30,8 +30,7 @@ module arm7tdmis_cycle_logger #(
     initial begin
         fh = $fopen(LOG_FILE, "w");
         if (fh == 0) begin
-            $display("[cycle_logger] could not open %s", LOG_FILE);
-            $finish;
+            $fatal(1, "[cycle_logger] could not open %s", LOG_FILE);
         end
         $fdisplay(fh, "cycle,nRESET,ADDR,WRITE,SIZE,PROT,LOCK,TRANS,WDATA,RDATA,ABORT");
     end

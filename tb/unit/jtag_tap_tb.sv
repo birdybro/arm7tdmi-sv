@@ -132,11 +132,15 @@ module jtag_tap_tb
             $display("[jtag_tap] BYPASS IR loaded ok");
         end
 
-        if (errors == 0)
-            $display("jtag_tap_tb: PASS");
-        else
-            $display("jtag_tap_tb: FAIL (%0d errors)", errors);
+        if (errors != 0)
+            $fatal(1, "jtag_tap_tb: FAIL (%0d errors)", errors);
+        $display("jtag_tap_tb: PASS");
         $finish;
+    end
+
+    initial begin
+        #10000;
+        $fatal(1, "jtag_tap_tb: TIMEOUT");
     end
 
     /* verilator lint_off UNUSEDSIGNAL */

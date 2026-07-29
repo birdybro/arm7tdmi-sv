@@ -22,21 +22,16 @@ module arm7tdmis_assertions (
     always_ff @(posedge CLK) begin
         if (nRESET) begin
             assert (SIZE != 2'(SIZE_RESERVED))
-                else $error("SIZE drove reserved value 2'b11");
+                else $fatal(1, "SIZE drove reserved value 2'b11");
         end
     end
 
-    // ABORT must only assert during active S/N memory cycles per TRM §3.5.3
-    // / TASKS.md §30.17.5. The behavioral memory model already enforces this
-    // on its own output, but assert at the DUT boundary too — if the core
-    // ever sees ABORT during I/C cycles in a real system, it must ignore
-    // the input rather than trap.
-    always_ff @(posedge CLK) begin
-        if (nRESET && ABORT) begin
-            assert (TRANS == 2'(TRANS_N) || TRANS == 2'(TRANS_S))
-                else $error("ABORT asserted during non-S/N cycle (TRANS=%b)", TRANS);
-        end
-    end
+    // ABORT is an unconstrained input. Per TRM §3.5.3 the core samples it
+    // only during enabled S/N data or opcode phases and must ignore it in
+    // I/C cycles. Do not assert an environment restriction here; BUS-007
+    // supplies directed ignore/sampling tests.
+    wire _unused_abort = ABORT;
+    wire _unused_trans = ^TRANS;
 
     // nRESET hold-time check per TRM §30.4.1: the system must hold nRESET
     // LOW for at least 2 CLK cycles. This is a system-side contract, not a
@@ -51,8 +46,9 @@ module arm7tdmis_assertions (
         end else if (!nreset_q && nRESET) begin
             // rising edge of nRESET — verify hold count
             assert (nreset_low_cycles >= 2)
-                else $error("nRESET held LOW for only %0d cycles (TRM requires >= 2)",
-                            nreset_low_cycles);
+                else $fatal(1,
+                    "nRESET held LOW for only %0d cycles (TRM requires >= 2)",
+                    nreset_low_cycles);
             nreset_low_cycles <= 0;
         end
     end

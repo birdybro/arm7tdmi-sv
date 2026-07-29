@@ -226,11 +226,15 @@ module arm7tdmis_ldm_pc_tb
             errors = errors + 1;
         end
 
-        if (errors == 0)
-            $display("[ldm_pc] PASS");
-        else
-            $display("[ldm_pc] FAIL (%0d errors)", errors);
+        if (errors != 0)
+            $fatal(1, "[ldm_pc] FAIL (%0d errors)", errors);
+        $display("[ldm_pc] PASS");
         $finish;
+    end
+
+    initial begin
+        repeat (CYCLE_LIMIT + 32) @(posedge CLK);
+        $fatal(1, "[ldm_pc] TIMEOUT after %0d cycles", CYCLE_LIMIT + 32);
     end
 
 endmodule

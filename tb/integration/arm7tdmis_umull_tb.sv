@@ -192,11 +192,15 @@ module arm7tdmis_umull_tb
             errors = errors + 1;
         end
 
-        if (errors == 0)
-            $display("[umull] PASS");
-        else
-            $display("[umull] FAIL (%0d errors)", errors);
+        if (errors != 0)
+            $fatal(1, "[umull] FAIL (%0d errors)", errors);
+        $display("[umull] PASS");
         $finish;
+    end
+
+    initial begin
+        repeat (CYCLE_LIMIT + 32) @(posedge CLK);
+        $fatal(1, "[umull] TIMEOUT after %0d cycles", CYCLE_LIMIT + 32);
     end
 
 endmodule

@@ -232,11 +232,15 @@ module arm7tdmis_irq_tb
             errors = errors + 1;
         end
 
-        if (errors == 0)
-            $display("[irq] PASS");
-        else
-            $display("[irq] FAIL (%0d errors)", errors);
+        if (errors != 0)
+            $fatal(1, "[irq] FAIL (%0d errors)", errors);
+        $display("[irq] PASS");
         $finish;
+    end
+
+    initial begin
+        repeat (CYCLE_LIMIT + 32) @(posedge CLK);
+        $fatal(1, "[irq] TIMEOUT after %0d cycles", CYCLE_LIMIT + 32);
     end
 
 endmodule

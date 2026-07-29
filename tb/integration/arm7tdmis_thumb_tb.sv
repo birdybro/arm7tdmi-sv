@@ -238,11 +238,15 @@ module arm7tdmis_thumb_tb
             errors = errors + 1;
         end
 
-        if (errors == 0)
-            $display("[thumb] PASS");
-        else
-            $display("[thumb] FAIL (%0d errors)", errors);
+        if (errors != 0)
+            $fatal(1, "[thumb] FAIL (%0d errors)", errors);
+        $display("[thumb] PASS");
         $finish;
+    end
+
+    initial begin
+        repeat (CYCLE_LIMIT + 32) @(posedge CLK);
+        $fatal(1, "[thumb] TIMEOUT after %0d cycles", CYCLE_LIMIT + 32);
     end
 
 endmodule

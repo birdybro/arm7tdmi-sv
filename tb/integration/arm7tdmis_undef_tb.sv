@@ -223,11 +223,15 @@ module arm7tdmis_undef_tb
             errors = errors + 1;
         end
 
-        if (errors == 0)
-            $display("[undef] PASS");
-        else
-            $display("[undef] FAIL (%0d errors)", errors);
+        if (errors != 0)
+            $fatal(1, "[undef] FAIL (%0d errors)", errors);
+        $display("[undef] PASS");
         $finish;
+    end
+
+    initial begin
+        repeat (CYCLE_LIMIT + 32) @(posedge CLK);
+        $fatal(1, "[undef] TIMEOUT after %0d cycles", CYCLE_LIMIT + 32);
     end
 
 endmodule

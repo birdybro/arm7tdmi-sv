@@ -178,11 +178,15 @@ module ice_rt_tb
             errors = errors + 1;
         end
 
-        if (errors == 0)
-            $display("ice_rt_tb: PASS");
-        else
-            $display("ice_rt_tb: FAIL (%0d errors)", errors);
+        if (errors != 0)
+            $fatal(1, "ice_rt_tb: FAIL (%0d errors)", errors);
+        $display("ice_rt_tb: PASS");
         $finish;
+    end
+
+    initial begin
+        #10000;
+        $fatal(1, "ice_rt_tb: TIMEOUT");
     end
 
     /* verilator lint_off UNUSEDSIGNAL */

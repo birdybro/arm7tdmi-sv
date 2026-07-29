@@ -22,7 +22,7 @@ TOP_TB    := arm7tdmis_tb_top
 # Verilator flags. -Wall enables every warning category. UNUSEDPARAM is
 # suppressed while package constants are being introduced ahead of their
 # consumers; re-enable once each constant has at least one user.
-VFLAGS_COMMON := -Wall -Wno-UNUSEDPARAM --timescale 1ns/1ps
+VFLAGS_COMMON := -Wall -Wno-UNUSEDPARAM --assert --timescale 1ns/1ps
 VFLAGS_LINT   := $(VFLAGS_COMMON)
 VFLAGS_BUILD  := $(VFLAGS_COMMON) --binary --trace-fst -j 0
 
@@ -34,8 +34,9 @@ UNIT_TESTS := regfile psr reset_sync shifter alu multiplier condition decoder jt
 
 INTEG_TESTS := umull umlal cp15_main_id cp14_dcc vector_catch abort irq fiq ldm_pc pabt ldm_abort cycles swi undef thumb
 
-.PHONY: all lint lint-tb sim run wave clean help \
-        $(addprefix unit-, $(UNIT_TESTS)) unit
+.PHONY: all lint lint-tb sim run wave clean help regress \
+        $(addprefix unit-, $(UNIT_TESTS)) unit \
+        $(addprefix integ-, $(INTEG_TESTS)) integ
 
 all: lint
 
@@ -94,6 +95,17 @@ $(foreach t,$(INTEG_TESTS),$(eval $(call INTEG_RULE,$(t))))
 
 integ: $(addprefix integ-, $(INTEG_TESTS))
 
+# Release-facing entry point. Recursive invocations make the ordering explicit:
+# a regression always starts clean, then lints RTL/TB sources before executing
+# every unit, directed integration, and smoke test.
+regress:
+	$(MAKE) clean
+	$(MAKE) lint
+	$(MAKE) lint-tb
+	$(MAKE) unit
+	$(MAKE) integ
+	$(MAKE) run
+
 clean:
 	rm -rf $(OBJ_DIR) $(RUN_ARTIFACTS)
 
@@ -106,4 +118,6 @@ help:
 	@echo "  wave         open waves.fst in GTKWave (requires \$$DISPLAY)"
 	@echo "  unit-<name>  build + run a unit test (e.g. unit-regfile)"
 	@echo "  unit         run every unit test ($(UNIT_TESTS))"
+	@echo "  integ        run every directed integration test ($(INTEG_TESTS))"
+	@echo "  regress      clean, lint, and run every unit/integration/smoke test"
 	@echo "  clean        remove obj_dir + run artifacts"

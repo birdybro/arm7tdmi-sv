@@ -292,11 +292,15 @@ module arm7tdmis_cycles_tb
         // same cycle, refill is 2 cycles; LR is written in S_EXEC.
         check_cycles(32'h00000080, 3, "BL 0x8C (TRM 2S+1N = 3 cyc)");
 
-        if (errors == 0)
-            $display("[cycles] PASS (%0d instructions verified)", record_idx);
-        else
-            $display("[cycles] FAIL (%0d errors)", errors);
+        if (errors != 0)
+            $fatal(1, "[cycles] FAIL (%0d errors)", errors);
+        $display("[cycles] PASS (%0d instructions verified)", record_idx);
         $finish;
+    end
+
+    initial begin
+        repeat (CYCLE_LIMIT + 32) @(posedge CLK);
+        $fatal(1, "[cycles] TIMEOUT after %0d cycles", CYCLE_LIMIT + 32);
     end
 
 endmodule

@@ -228,8 +228,7 @@ module arm7tdmis_tb_top
         $display("[tb] starting; CYCLE_LIMIT=%0d", CYCLE_LIMIT);
         wait (nRESET);
         repeat (CYCLE_LIMIT) @(posedge CLK);
-        $display("[tb] reached CYCLE_LIMIT (%0d cycles); finishing.", CYCLE_LIMIT);
-        $finish;
+        $fatal(1, "[smoke] TIMEOUT after %0d cycles", CYCLE_LIMIT);
     end
 
     // ---- §15 smoke verification ----
@@ -343,11 +342,10 @@ module arm7tdmis_tb_top
             smoke_errors = smoke_errors + 1;
         end
 
-        if (smoke_errors == 0) begin
-            $display("[smoke] PASS");
-        end else begin
-            $display("[smoke] FAIL (%0d errors)", smoke_errors);
+        if (smoke_errors != 0) begin
+            $fatal(1, "[smoke] FAIL (%0d errors)", smoke_errors);
         end
+        $display("[smoke] PASS");
         $finish;
     end
 
