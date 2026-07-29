@@ -210,6 +210,7 @@ module arm7tdmis_debug_entry_cause_tb
     initial begin : run_test
         logic breakpoint_cause;
         logic watchpoint_cause;
+        logic consumed_cause;
 
         $dumpfile("debug_entry_cause.fst");
         $dumpvars(0, arm7tdmis_debug_entry_cause_tb);
@@ -274,6 +275,9 @@ module arm7tdmis_debug_entry_cause_tb
         capture_entry_cause(watchpoint_cause);
         if (watchpoint_cause !== 1'b1)
             fail("data watchpoint did not scan out entry cause one");
+        capture_entry_cause(consumed_cause);
+        if (consumed_cause !== 1'b0)
+            fail("watchpoint entry cause remained set after first capture");
 
         // No architectural instruction after the watched LDR may retire.
         if (u_dut.u_core.u_regfile.regs[3] !== 32'h0000_0000)
