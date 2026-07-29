@@ -581,7 +581,12 @@ module arm7tdmis_core_pipelined
     logic [31:0] rf_write_data;
     logic        rf_write_en;
 
-    wire instr_is_ls_decoder = (dec.instr_class == INSTR_LDR_STR);
+    // Both ordinary and extra load/store encodings name their store source
+    // in Rd. The extra halfword/signed class otherwise falls through to
+    // dec.rs (instruction bits 11:8), which is part of its split immediate
+    // and can silently source the wrong register for STRH.
+    wire instr_is_ls_decoder = (dec.instr_class == INSTR_LDR_STR)
+                            || (dec.instr_class == INSTR_LDRH_STRH);
     wire block_active        = (state_q == S_BLOCK_DATA);
     // MCR reads dec.rd via port C (the source register goes to the
     // coprocessor). LDR/STR also uses port C for dec.rd as the store source.
