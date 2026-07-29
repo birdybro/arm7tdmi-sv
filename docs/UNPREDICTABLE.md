@@ -77,7 +77,7 @@ cover them.
 
 | ARMv4T case | Selected behavior | Primary evidence |
 |---|---|---|
-| Register-controlled ARM data processing using r15 as Rn, Rm, Rs, or Rd | Rn/Rs read the visible PC+8 value, Rm reads the r4p3 PC+12 value, and Rd commits the deterministic aligned result. | `arm7tdmis_unpredictable_runtime_tb` |
+| Register-controlled ARM data processing using r15 as Rn, Rm, Rs, or Rd | The added internal cycle makes Rn/Rm read the r4p3 PC+12 value, Rs reads the visible PC+8 value, and Rd commits the deterministic aligned result. | `arm7tdmis_unpredictable_runtime_tb` |
 | BX target ending in binary `10` | Enter ARM state after clearing bits `[1:0]`. | `arm7tdmis_unaligned_access_matrix_tb` |
 | Thumb `BX pc` at a halfword-only instruction address | Use visible PC+4, clear bits `[1:0]`, and enter ARM state. Word-aligned `BX pc` remains the defined case. | `arm7tdmis_thumb_bx_pc_policy_tb` |
 | Standalone Thumb BL suffix | Use the current architectural LR as its target base and write the ordinary suffix link value. | `arm7tdmis_thumb_bl_boundary_tb` |

@@ -4,8 +4,9 @@
 // rely on.  Their expected results are implementation policy, not additional
 // architectural guarantees:
 //   * ARM7TDMI-S register-controlled data operations accept r15 in every
-//     operand position. Rn/Rs use pc+8, Rm uses the r4p3 pc+12 value, and a
-//     destination-PC result is aligned in the current state.
+//     operand position. The added internal cycle makes Rn/Rm read pc+12,
+//     while Rs uses pc+8 and a destination-PC result is aligned in the
+//     current state.
 //   * MOVS pc,<op> in User/System has no SPSR to restore. The selected policy
 //     commits the aligned PC result and leaves CPSR unchanged.
 //   * pre-ARMv6 Thumb MUL with Rd=Rm returns the ordinary square and preserves
@@ -116,7 +117,7 @@ module arm7tdmis_unpredictable_runtime_tb
 
             unique case (case_id)
                 1: begin
-                    // ADD r4,pc,r0,LSL r1: Rn sees 0x28+8.
+                    // ADD r4,pc,r0,LSL r1: Rn sees 0x28+12.
                     u_mem.mem[10] = dp_reg_shift(
                         4'b0100, 1'b0, 4'd15, 4'd4,
                         4'd1, 2'b00, 4'd0);
@@ -222,8 +223,10 @@ module arm7tdmis_unpredictable_runtime_tb
             fail(case_id, "flushed successor executed");
 
         unique case (case_id)
-            1: if (u_dut.u_core.u_regfile.regs[4] !== 32'h0000_0032)
-                fail(case_id, "Rn=pc did not use pc+8");
+            1: if (u_dut.u_core.u_regfile.regs[4] !== 32'h0000_0036)
+                fail(case_id, $sformatf(
+                    "Rn=pc expected register-shift pc+12 result 00000036 got %08x",
+                    u_dut.u_core.u_regfile.regs[4]));
             2: if (u_dut.u_core.u_regfile.regs[4] !== 32'h0000_0034)
                 fail(case_id, "Rm=pc did not use r4p3 pc+12");
             3: if (u_dut.u_core.u_regfile.regs[4] !== 32'h0000_0000)
