@@ -32,7 +32,7 @@ RUN_ARTIFACTS  := cycle.csv waves.fst
 
 UNIT_TESTS := regfile psr reset_sync shifter alu multiplier condition decoder thumb_decoder jtag_tap ice_rt
 
-INTEG_TESTS := umull umlal cp15_main_id cp15_undef cp14_dcc vector_catch abort irq fiq ldm_pc pabt ldm_abort cycles swi undef thumb bx_interwork swpb_data flags_preserve mull_flags
+INTEG_TESTS := umull umlal cp15_main_id cp15_undef cp14_dcc cpntrans vector_catch abort irq fiq ldm_pc pabt ldm_abort cycles swi undef thumb bx_interwork swpb_data flags_preserve mull_flags
 
 INTEG_COMMON_SRCS := \
 	../tb/integration/arm7tdmis_memory.sv \
