@@ -10,6 +10,9 @@ because they agree with each other.
 - **[PIPELINE.md](PIPELINE.md)** — 3-stage F/D/E pipeline structure, stage registers, bus-cycle overlap in the E substate FSM, the `issue_fetch` `state_next` gate (one of the load-bearing decisions of the whole design), `de_q` staleness traps and the latch protocol.
 
 - **[DEBUG.md](DEBUG.md)** — EmbeddedICE-RT macrocell (r4p3 register map, WP comparators with TRM-correct XNOR+mask shape, CHAIN/RANGE coupling, debug-state FSM), JTAG TAP (16-state controller, IDCODE, scan chains 1+2), scan-chain-1 instruction-injection runtime path, CP14 DCC data flow.
+- **[VERIFICATION.md](VERIFICATION.md)** — fail-hard regression ordering,
+  intentional-failure sentinel, reproducibility metadata, and the
+  `arm7tdmis-regression-v1` machine-readable result schema.
 
 - **[MULTIPLY.md](MULTIPLY.md)** — Multiply forms (MUL/MLA/UMULL/SMULL/UMLAL/SMLAL), m-parameter cycle shaping, the UMLAL/SMLAL 2-cycle accumulator read across S_EXEC + S_MULL_ACC and the latches that make it work.
 

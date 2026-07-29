@@ -7,6 +7,11 @@ obj_dir/
 *.vcd
 *.csv
 *.log
+__pycache__/
+*.pyc
+
+# Generated release evidence (archive selected immutable reports separately)
+/reports/generated/
 
 # Editor / OS
 .vscode/

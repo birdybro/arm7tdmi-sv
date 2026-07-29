@@ -12,6 +12,7 @@
 
 VERILATOR ?= verilator
 GTKWAVE   ?= gtkwave
+PYTHON    ?= python3
 
 SIM_F     := sim.f
 TB_F      := tb.f
@@ -40,7 +41,8 @@ INTEG_COMMON_SRCS := \
 	../tb/integration/arm7tdmis_assertions.sv \
 	../tb/integration/arm7tdmis_test_fixture.sv
 
-.PHONY: all lint lint-tb sim run wave clean help regress harness-unit \
+.PHONY: all lint lint-tb sim run wave clean help regress regress-quick \
+        harness-unit harness-self-test \
         $(addprefix unit-, $(UNIT_TESTS)) unit \
         $(addprefix integ-, $(INTEG_TESTS)) integ
 
@@ -101,19 +103,33 @@ $(foreach t,$(INTEG_TESTS),$(eval $(call INTEG_RULE,$(t))))
 
 integ: $(addprefix integ-, $(INTEG_TESTS))
 
-# Release-facing entry point. Recursive invocations make the ordering explicit:
-# a regression always starts clean, then lints RTL/TB sources before executing
-# every unit, directed integration, and smoke test.
+# Release-facing entry point. The runner always starts clean, records the
+# complete source/tool/variant/seed manifest, executes every phase separately,
+# and atomically updates a machine-readable JSON result with per-phase logs.
 regress:
-	$(MAKE) clean
-	$(MAKE) lint
-	$(MAKE) lint-tb
-	$(MAKE) unit
-	$(MAKE) integ
-	$(MAKE) run
+	PYTHONPATH=. $(PYTHON) regression_harness.py \
+	    --unit-tests "$(UNIT_TESTS)" \
+	    --integration-tests "$(INTEG_TESTS)"
+
+regress-quick:
+	PYTHONPATH=. $(PYTHON) regression_harness.py --quick \
+	    --unit-tests "$(UNIT_TESTS)" \
+	    --integration-tests "$(INTEG_TESTS)"
 
 harness-unit:
-	PYTHONPATH=. python3 -m unittest -v tests/test_regression_harness.py
+	PYTHONPATH=. $(PYTHON) -m unittest -v tests/test_regression_harness.py
+
+harness-self-test:
+	mkdir -p $(OBJ_DIR)
+	$(VERILATOR) $(VFLAGS_BUILD) --top-module expected_failure_tb \
+	    --Mdir $(OBJ_DIR)/harness_expected_failure \
+	    ../tb/harness/expected_failure_tb.sv
+	@if ./$(OBJ_DIR)/harness_expected_failure/Vexpected_failure_tb; then \
+	    echo "[harness-self-test] FAIL: expected simulator failure returned zero"; \
+	    exit 1; \
+	else \
+	    echo "[harness-self-test] PASS: simulator failure propagated nonzero"; \
+	fi
 
 clean:
 	rm -rf $(OBJ_DIR) $(RUN_ARTIFACTS)
@@ -128,6 +144,8 @@ help:
 	@echo "  unit-<name>  build + run a unit test (e.g. unit-regfile)"
 	@echo "  unit         run every unit test ($(UNIT_TESTS))"
 	@echo "  integ        run every directed integration test ($(INTEG_TESTS))"
-	@echo "  regress      clean, lint, and run every unit/integration/smoke test"
+	@echo "  regress      clean full run with JSON metadata/results under reports/"
+	@echo "  regress-quick lint/harness plus one unit/integration test and smoke"
 	@echo "  harness-unit unit-test the machine-readable regression harness"
+	@echo "  harness-self-test prove an intentional simulator failure stays fatal"
 	@echo "  clean        remove obj_dir + run artifacts"

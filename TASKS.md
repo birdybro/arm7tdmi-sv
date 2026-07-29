@@ -2370,12 +2370,18 @@ No functional claim can become VERIFIED until every item here is complete.
   `scripts/Makefile` manifests exactly match every unit and directed integration
   test top, and `make -C scripts regress` orders clean, both lint passes, unit,
   integration, and smoke execution.
-- [ ] **VER-004:** Make stale cached binaries impossible to mistake for a new result;
+- [x] **VER-004:** Make stale cached binaries impossible to mistake for a new result;
   record the RTL git hash, tool versions, build variant, seed, and test manifest in the
-  regression output.
+  regression output. `scripts/regression_harness.py` starts every full/quick run
+  with `clean`, records the Git commit and dirty-source SHA-256, tool/platform
+  versions, variant, seed, and complete manifest, then hashes every phase log in
+  the atomic `arm7tdmis-regression-v1` JSON result.
 - [ ] **VER-005:** Run a harness self-test in CI that deliberately corrupts one expected
   result and proves the overall command fails. Add periodic mutation testing for major
-  writeback, flag, exception, and bus controls.
+  writeback, flag, exception, and bus controls. The local regression now always
+  runs `tb/harness/expected_failure_tb.sv` and passes only when its real
+  simulator `$fatal` propagates nonzero; CI wiring and architectural-control
+  mutation jobs remain open.
 - [ ] **VER-006:** Treat assertions and simulator errors as fatal. Remove unsupported
   warning suppressions or give each one an owner, rationale, and expiry.
 - [x] **VER-007:** Stop treating `ABORT` during I/C as illegal testbench stimulus.
@@ -2384,7 +2390,10 @@ No functional claim can become VERIFIED until every item here is complete.
   phases, while `tb/integration/arm7tdmis_abort_clken_tb.sv` covers an inactive
   assertion overlapping a stopped clock-enable interval.
 - [ ] **VER-008:** Publish machine-readable regression and coverage reports as release
-  artifacts. A console line containing `PASS` is not release evidence.
+  artifacts. A console line containing `PASS` is not release evidence. The
+  versioned regression JSON schema and per-phase log hashes are implemented and
+  documented in `docs/VERIFICATION.md`; coverage generation and release-artifact
+  archival remain open.
 - [ ] **VER-009:** Expose a verification-only architectural retirement interface
   (instruction PC/opcode/state/condition result/register and CPSR effects/exception)
   instead of making all scoreboards depend on private hierarchy.
