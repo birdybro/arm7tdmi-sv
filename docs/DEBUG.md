@@ -49,11 +49,16 @@ The TAP runs on the system CLK gated by DBGTCKEN (off-chip TCK synchronizer defe
 |---|---|---|---|
 | 0x00 | Debug Control | 6 bits | Bit 5 comparator disable; bit 4 monitor mode; bit 3 RAZ; bit 2 INTDIS; bit 1 force-DBGRQ; bit 0 force-DBGACK |
 | 0x01 | Debug Status | 5 bits, read-only | Live state mux (see below) |
-| 0x02 | Vector Catch | 8 bits | One bit per exception vector |
 | 0x04 | DCC Control | 32 bits | Version `0111`, W/R ownership; also CP14 c0 |
 | 0x05 | DCC Data | 32 bits | JTAG side of the separate CP14 c1 TX/RX buffers |
-| 0x08-0x0F | WP0 (8 regs) | 32/9 bits | Addr/Data/Ctrl value+mask + 2 reserved |
-| 0x10-0x17 | WP1 (8 regs) | same | |
+| 0x08-0x0D | WP0 (6 regs) | 32/9/8 bits | Address, data, and control value/mask pairs |
+| 0x10-0x15 | WP1 (6 regs) | same | |
+
+Every unlisted address is reserved and follows a deterministic RAZ/WI policy.
+In particular, r4p3 has no Vector Catch register at `0x02`; that register exists
+in other ARM debug implementations but is absent from ARM7TDMI-S r4p3 TRM
+Table 5-1. Public-JTAG coverage for all 16 reserved addresses lives in
+`tb/integration/arm7tdmis_debug_reserved_regs_tb.sv`.
 
 ### Debug Status live mux
 
@@ -121,19 +126,6 @@ wp0_event = wp0_addr_match && wp0_data_match
 ```
 
 WP1 has zero on its RANGE and CHAIN inputs and uses `DBGEXT[1]`.
-
-## Vector Catch
-
-Register addr 0x02, 8 bits, one bit per vector:
-
-```
-[0] reset    @ 0x00      [4] DABT     @ 0x10
-[1] undef    @ 0x04      [5] reserved @ 0x14
-[2] SWI      @ 0x08      [6] IRQ      @ 0x18
-[3] PABT     @ 0x0C      [7] FIQ      @ 0x1C
-```
-
-Trap fires when `!watch_nopc` (opcode fetch) AND `watch_addr` matches one of the eight vector addresses AND the corresponding bit is set. ORs into `dbg_break_internal` alongside WP0/WP1 full matches.
 
 ## Debug-state FSM
 

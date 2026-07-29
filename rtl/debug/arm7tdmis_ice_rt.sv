@@ -97,19 +97,17 @@ module arm7tdmis_ice_rt
 );
 
     // ---- Register bank
-    // Indexed by 5-bit address. Most are 32-bit; smaller ones (Debug
-    // Control = 6 bits, Debug Status = 5 bits, Vector Catch = 8 bits)
-    // get the upper bits SBZ.
+    // Indexed by 5-bit address. Most implemented registers are 32-bit;
+    // smaller ones (Debug Control = 6 bits, Debug Status = 5 bits) get
+    // the upper bits SBZ. Unimplemented addresses are RAZ/WI.
     //
-    // Address map (TRM Table 5-2 / §5.14.5):
+    // Address map (ARM7TDMI-S r4p3 TRM Table 5-1):
     //   0x00: Debug Control     (6 bits used)
     //   0x01: Debug Status      (5 bits, read-only)
-    //   0x02: Vector Catch      (8 bits)
     //   0x04: Debug Comms Control (32-bit live version/W/R value)
     //   0x05: Debug Comms Data    (RX on host write, TX on host read)
-    //   0x08-0x0F: WP0 (Addr Val, Addr Mask, Data Val, Data Mask,
-    //              Ctrl Val, Ctrl Mask, reserved, reserved)
-    //   0x10-0x17: WP1 (same shape)
+    //   0x08-0x0D: WP0 (address/data/control value and mask pairs)
+    //   0x10-0x15: WP1 (address/data/control value and mask pairs)
 
     logic [31:0] regs [0:31];
 
@@ -133,32 +131,30 @@ module arm7tdmis_ice_rt
     // separately below rather than ordinary storage slots.
     localparam logic [4:0] DEBUG_CTRL_ADDR = 5'h00;
     localparam logic [4:0] DEBUG_STAT_ADDR = 5'h01;
-    localparam logic [4:0] VECTOR_CATCH_ADDR = 5'h02;
     localparam logic [4:0] DCC_CTRL_ADDR = 5'h04;
     always_ff @(posedge CLK or negedge DBGnTRST) begin
         if (!DBGnTRST) begin
             for (int i = 0; i < 32; i = i + 1) regs[i] <= 32'h0;
-        end else begin
-            if (scan_we && (scan_addr != DCC_CTRL_ADDR)
-                        && (scan_addr != 5'h05)) begin
-                unique case (scan_addr)
-                    // Debug Control is six bits wide and bit 3 is SBZ/RAZ.
-                    DEBUG_CTRL_ADDR:
-                        regs[scan_addr] <=
-                            {26'h0, scan_wdata[5:4], 1'b0,
-                             scan_wdata[2:0]};
-                    // Debug Status is a live, read-only register.
-                    DEBUG_STAT_ADDR: ;
-                    VECTOR_CATCH_ADDR:
-                        regs[scan_addr] <= {24'h0, scan_wdata[7:0]};
-                    WP0_CTRL_VAL, WP1_CTRL_VAL:
-                        regs[scan_addr] <= {23'h0, scan_wdata[8:0]};
-                    WP0_CTRL_MASK, WP1_CTRL_MASK:
-                        regs[scan_addr] <= {24'h0, scan_wdata[7:0]};
-                    default:
-                        regs[scan_addr] <= scan_wdata[31:0];
-                endcase
-            end
+        end else if (scan_we) begin
+            unique case (scan_addr)
+                // Debug Control is six bits wide and bit 3 is SBZ/RAZ.
+                DEBUG_CTRL_ADDR:
+                    regs[scan_addr] <=
+                        {26'h0, scan_wdata[5:4], 1'b0,
+                         scan_wdata[2:0]};
+                WP0_CTRL_VAL, WP1_CTRL_VAL:
+                    regs[scan_addr] <= {23'h0, scan_wdata[8:0]};
+                WP0_CTRL_MASK, WP1_CTRL_MASK:
+                    regs[scan_addr] <= {24'h0, scan_wdata[7:0]};
+                WP0_ADDR_VAL, WP0_ADDR_MASK,
+                WP0_DATA_VAL, WP0_DATA_MASK,
+                WP1_ADDR_VAL, WP1_ADDR_MASK,
+                WP1_DATA_VAL, WP1_DATA_MASK:
+                    regs[scan_addr] <= scan_wdata[31:0];
+                // Debug Status and DCC are live resources. Every other
+                // address is reserved by Table 5-1 and ignores writes.
+                default: ;
+            endcase
         end
     end
 
@@ -238,7 +234,7 @@ module arm7tdmis_ice_rt
     // external DBGBREAK is unsupported while monitor mode is selected.
     //
     // Entry conditions (any of):
-    //   - dbg_break_internal (WP/VC hit, see above)
+    //   - dbg_break_internal (watchpoint-unit match, see below)
     //   - an aligned data watchpoint, including external DBGBREAK
     //   - DBGRQI = RTI-latched Debug Control[1] OR synchronous dbg_rq_in
     // All gated by DBGEN.
@@ -300,7 +296,15 @@ module arm7tdmis_ice_rt
             DEBUG_STAT_ADDR: scan_rdata = {27'h0, dbg_status};
             5'h04: scan_rdata = core_dcc_control;
             5'h05: scan_rdata = dcc_tx_data_q;
-            default: scan_rdata = regs[scan_addr];
+            DEBUG_CTRL_ADDR,
+            WP0_ADDR_VAL, WP0_ADDR_MASK,
+            WP0_DATA_VAL, WP0_DATA_MASK,
+            WP0_CTRL_VAL, WP0_CTRL_MASK,
+            WP1_ADDR_VAL, WP1_ADDR_MASK,
+            WP1_DATA_VAL, WP1_DATA_MASK,
+            WP1_CTRL_VAL, WP1_CTRL_MASK:
+                scan_rdata = regs[scan_addr];
+            default: scan_rdata = 32'h0000_0000;
         endcase
     end
     // Rev-4 DCC optimization: a data-register response replaces address
@@ -445,23 +449,6 @@ module arm7tdmis_ice_rt
     assign DBGRNG = comparators_enabled
                   ? {wp1_rangeout, wp0_rangeout} : 2'b00;
 
-    // §22: Vector Catch (ICE-RT register 0x02, 8 bits) — trap on opcode
-    // fetch of an exception vector address. Each bit corresponds to one
-    // vector (TRM §5.27):
-    //   [0] Reset       — vector 0x00
-    //   [1] Undef       — 0x04
-    //   [2] SWI         — 0x08
-    //   [3] PrefAbort   — 0x0C
-    //   [4] DataAbort   — 0x10
-    //   [5] reserved    — 0x14
-    //   [6] IRQ         — 0x18
-    //   [7] FIQ         — 0x1C
-    wire [7:0]  vector_catch = regs[5'h02][7:0];
-    wire        is_vec_fetch = watch_valid_q && !watch_nopc_q
-                             && (watch_addr_q[31:5] == 27'h0);
-    wire [2:0]  vec_index    = watch_addr_q[4:2];
-    wire        vec_catch_hit = is_vec_fetch && vector_catch[vec_index];
-
     // §5.3: opcode breakpoints are marked in the fetch pipeline and only
     // stop the core if the marked instruction reaches Execute. A branch,
     // PC write, or exception therefore cancels a breakpoint by flushing
@@ -501,7 +488,7 @@ module arm7tdmis_ice_rt
         monitor_mode
         ? (monitor_enabled_wp_match && !watch_nopc_q)
         : ((comparators_enabled
-            && ((enabled_wp_match && !watch_nopc_q) || vec_catch_hit))
+            && enabled_wp_match && !watch_nopc_q)
            || (external_break_match && !watch_nopc_q));
     wire data_watchpoint_pre = (enabled_wp_match || external_break_match)
                              && watch_nopc_q;

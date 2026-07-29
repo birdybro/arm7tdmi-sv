@@ -261,7 +261,7 @@ evidence.
 | `umull` / `umlal` | 64-bit multiply with high-half writeback |
 | `cp15_undef` | Bare-core p15 access with no external claimant enters Undefined |
 | `cp14_dcc` | Public CP14/JTAG bidirectional c0/c1 DCC ownership, rev-4 status, pins, CLKEN, and DBGEN gating |
-| `vector_catch` | preliminary vector-catch/halt path |
+| `debug_reserved_regs` | public-JTAG RAZ/WI checks for every reserved EmbeddedICE-RT address |
 | `abort` | DABT during LDR — Rd preserved, vector entry |
 | `pabt` | PABT propagation via `fd_q.pabort` |
 | `ldm_abort` | Per-beat load suppression, base writeback/restoration, and r15 protection |
@@ -276,7 +276,7 @@ evidence.
 ## Documentation
 
 - [`docs/PIPELINE.md`](docs/PIPELINE.md) — 3-stage F/D/E pipeline, 12-state E substate FSM, bus-cycle overlap, `issue_fetch` gate, `de_q` staleness latch protocol, branch fast-path flush.
-- [`docs/DEBUG.md`](docs/DEBUG.md) — EmbeddedICE-RT (registers, WP comparators, CHAIN/RANGE, Vector Catch, debug-state FSM), JTAG TAP (16 states, IDCODE, scan chains 1+2), scan-chain-1 instruction-injection runtime, CP14 DCC data flow.
+- [`docs/DEBUG.md`](docs/DEBUG.md) — EmbeddedICE-RT (r4p3 register map, WP comparators, CHAIN/RANGE, debug-state FSM), JTAG TAP (16 states, IDCODE, scan chains 1+2), scan-chain-1 instruction-injection runtime, CP14 DCC data flow.
 - [`docs/MULTIPLY.md`](docs/MULTIPLY.md) — MUL/MLA/UMULL/UMLAL/SMULL/SMLAL, m-parameter cycle shaping, UMLAL/SMLAL 2-cycle accumulator read across S_EXEC + S_MULL_ACC.
 - [`docs/EXCEPTIONS.md`](docs/EXCEPTIONS.md) — all 7 exception types, priority encoder, banked r14, SPSR save, `data_abort_now` vs `data_abort_q` for single-vs-multi-beat memory ops, LDM DABT restart, the two exception-return patterns.
 

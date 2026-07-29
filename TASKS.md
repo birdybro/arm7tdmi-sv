@@ -2569,10 +2569,11 @@ number of cycles spent in an internal FSM state.
 ## 31.7 P0/P1 — EmbeddedICE-RT, JTAG, and ETM-facing behavior
 
 - [ ] **DBG-001:** Replace the scaffold debug FSM with conformant halt and monitor
-  modes. Implement Debug Control bits 5:0, Debug Status bits 4:0, IFEN/INTDIS, Vector
-  Catch, Debug Abort Status, DBGRQ/DBGBREAK priority, and all DBGEN gating. Follow each
-  pin's specified sampling/synchronization behavior rather than applying a blanket
-  two-flop policy.
+  modes. Implement Debug Control bits 5:0, Debug Status bits 4:0, IFEN/INTDIS, Debug
+  Abort Status, DBGRQ/DBGBREAK priority, the exact Table 5-1 register map, and all
+  DBGEN gating. Follow each pin's specified sampling/synchronization behavior rather
+  than applying a blanket two-flop policy. ARM7TDMI-S r4p3 has no Vector Catch
+  register: address `0x02` and every other unlisted slot are reserved.
   Same-edge external DBGBREAK sampling, opcode pipeline tagging/restart, and a
   final-beat LDM data watchpoint are covered by
   `tb/integration/arm7tdmis_debug_external_break_tb.sv`. Synchronous external
@@ -2589,8 +2590,11 @@ number of cycles spent in an internal FSM state.
   `tb/integration/arm7tdmis_debug_breakpoint_interrupt_tb.sv`; DBGRQ with
   Undefined, bounced-coprocessor, Prefetch Abort, and load/store Data Abort
   is covered by `tb/integration/arm7tdmis_debug_dbgrq_exception_tb.sv`.
-  Remaining vector-catch/exception priority cases and the complete DBGEN
-  matrix keep this item open.
+  `tb/integration/arm7tdmis_debug_reserved_regs_tb.sv` writes and reads every
+  reserved register address through public JTAG, requires deterministic RAZ/WI
+  behavior, and proves that address `0x02` cannot create a false vector breakpoint.
+  The remaining exception-priority cases and complete DBGEN matrix keep this item
+  open.
 - [ ] **DBG-002:** Feed Debug Status TRANS from the actual `TRANS[1]`, not PROT.
   Align address/control and read/write data before data-dependent watchpoint comparison.
 - [ ] **DBG-003:** Implement exact WP0/WP1 value/mask, XNOR, size, read/write,

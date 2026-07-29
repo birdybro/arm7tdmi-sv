@@ -191,7 +191,6 @@ Validated by `tb/integration/arm7tdmis_ldm_pc_tb.sv`: handler clears cpsr.F befo
 | `arm7tdmis_pabt_tb` | PABT during fetch → vector 0x0C → handler |
 | `arm7tdmis_ldm_abort_tb` | DABT during LDM → restart-safe Rn |
 | `arm7tdmis_ldm_pc_tb` | LDM ^ PC exception return → CPSR restore |
-| `arm7tdmis_vector_catch_tb` | Vector Catch register → debug halt |
 | `arm7tdmis_tb_top` | SWI (in smoke flow) |
 
 UNDEF currently smoke-only (the smoke test exercises the NV-cond → undef path implicitly through the SWI handler's MOVS PC, LR sequence).
