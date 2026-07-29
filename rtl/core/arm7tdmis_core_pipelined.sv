@@ -752,7 +752,11 @@ module arm7tdmis_core_pipelined
             S_BLOCK_DATA: state_next = block_has_more ? S_BLOCK_DATA
                                      : (block_load_q  ? S_BLOCK_WB : S_EXEC);
             S_BLOCK_WB:   state_next = S_EXEC;
-            S_SWP_RDATA:  state_next = S_SWP_WDATA;
+            // ARM7TDMI-S requires any SWP Data Abort to be signaled on
+            // the read. A failed read terminates the locked sequence;
+            // the write phase must never be issued.
+            S_SWP_RDATA:  state_next = data_abort_now ? S_EXEC
+                                                      : S_SWP_WDATA;
             S_SWP_WDATA:  state_next = S_SWP_WB;
             S_SWP_WB:     state_next = S_EXEC;
             S_MULL_HI:    state_next = S_EXEC;
@@ -1289,7 +1293,7 @@ module arm7tdmis_core_pipelined
                     swp_addr_lo_q <= rf_ra_data[1:0];
                 end
 
-                if (state_q == S_SWP_RDATA) begin
+                if (state_q == S_SWP_RDATA && !data_abort_now) begin
                     swp_loaded_q <= RDATA;
                 end
 
@@ -1528,15 +1532,28 @@ module arm7tdmis_core_pipelined
                 WDATA = block_load_q ? 32'h0 : rf_rc_data;
             end
             S_SWP_RDATA: begin
-                // Drive the SWP write addr-class so the memory commits
-                // the write at posedge entering S_SWP_WDATA. LOCK still
-                // held across the locked read-write window.
-                ADDR  = swp_addr_q;
-                TRANS = 2'(TRANS_N);
-                WRITE = WRITE_WRITE;
-                SIZE  = swp_byte_q ? 2'(SIZE_BYTE) : 2'(SIZE_WORD);
-                PROT  = {is_priv, 1'b1};
-                LOCK  = LOCK_LOCKED;
+                if (data_abort_now) begin
+                    // Cancel the pipelined write address in the same
+                    // enabled cycle that returns the failed read. The
+                    // address value is don't-care for I, but keeping the
+                    // fetch address makes the raw-bus trace deterministic.
+                    ADDR  = fetch_pc_q;
+                    TRANS = 2'(TRANS_I);
+                    WRITE = WRITE_READ;
+                    SIZE  = fetch_size_w;
+                    PROT  = {is_priv, 1'b0};
+                    LOCK  = LOCK_FREE;
+                end else begin
+                    // Drive the SWP write addr-class so the memory commits
+                    // the write at posedge entering S_SWP_WDATA. LOCK stays
+                    // asserted across the locked read-write window.
+                    ADDR  = swp_addr_q;
+                    TRANS = 2'(TRANS_N);
+                    WRITE = WRITE_WRITE;
+                    SIZE  = swp_byte_q ? 2'(SIZE_BYTE) : 2'(SIZE_WORD);
+                    PROT  = {is_priv, 1'b1};
+                    LOCK  = LOCK_LOCKED;
+                end
             end
             S_SWP_WDATA: begin
                 // WDATA drives the write; memory commits at next posedge.
