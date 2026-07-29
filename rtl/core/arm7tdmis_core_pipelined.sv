@@ -102,7 +102,9 @@ module arm7tdmis_core_pipelined
     // frozen state.
     input  logic        dbg_halt_req,
     input  logic        dbg_halted,
-    output logic        dbg_halt_boundary
+    input  logic        dbg_breakpoint_fetch,
+    output logic        dbg_halt_boundary,
+    output logic        dbg_breakpoint_execute
 );
 
     // =====================================================================
@@ -118,6 +120,7 @@ module arm7tdmis_core_pipelined
                                //      reaches execute. Named `pabort` not
                                //      `abort` because Verilator warns on the
                                //      C++ reserved word.
+        logic        breakpoint;
         logic        valid;
     } fd_t;
 
@@ -127,6 +130,7 @@ module arm7tdmis_core_pipelined
         logic [31:0] pc;       // PC of this instruction
         logic        thumb;    // T-bit when fetched
         logic        pabort;   // §17: carried from fd_q
+        logic        breakpoint;
         logic        valid;
     } de_t;
 
@@ -271,7 +275,7 @@ module arm7tdmis_core_pipelined
             inflight_pc_q    <= 32'h0;
             inflight_valid_q <= 1'b0;
             fd_q             <= '{instr:32'h0, pc:32'h0, thumb:1'b0,
-                              pabort:1'b0, valid:1'b0};
+                              pabort:1'b0, breakpoint:1'b0, valid:1'b0};
         end else if (CLKEN) begin
             if (flush) begin
                 if (early_flush_fetch) begin
@@ -304,6 +308,7 @@ module arm7tdmis_core_pipelined
                 fd_q.pc     <= de_q.pc;
                 fd_q.thumb  <= cpsr.t;
                 fd_q.pabort <= 1'b0;
+                fd_q.breakpoint <= 1'b0;
                 fd_q.valid  <= 1'b1;
             end else begin
                 if (issue_fetch) begin
@@ -319,6 +324,7 @@ module arm7tdmis_core_pipelined
                     fd_q.pc    <= inflight_pc_q;
                     fd_q.thumb <= cpsr.t;
                     fd_q.pabort <= ABORT;       // §17: sample at fetch landing
+                    fd_q.breakpoint <= dbg_breakpoint_fetch;
                     fd_q.valid <= 1'b1;
                 end else if (d_advance) begin
                     fd_q.valid <= 1'b0;
@@ -331,7 +337,7 @@ module arm7tdmis_core_pipelined
     always_ff @(posedge CLK) begin
         if (!nRESET) begin
             de_q <= '{dec:'0, instr:32'h0, pc:32'h0, thumb:1'b0,
-                      pabort:1'b0, valid:1'b0};
+                      pabort:1'b0, breakpoint:1'b0, valid:1'b0};
         end else if (CLKEN) begin
             if (flush) begin
                 de_q.valid <= 1'b0;
@@ -342,6 +348,7 @@ module arm7tdmis_core_pipelined
                     de_q.pc    <= fd_q.pc;
                     de_q.thumb <= fd_q.thumb;
                     de_q.pabort <= fd_q.pabort;
+                    de_q.breakpoint <= fd_q.breakpoint;
                     de_q.valid <= 1'b1;
                 end else begin
                     de_q.valid <= 1'b0;
@@ -869,6 +876,7 @@ module arm7tdmis_core_pipelined
 
     // `executing` predicate — only valid de_q during S_EXEC writes back.
     wire executing = (state_q == S_EXEC) && de_q.valid;
+    assign dbg_breakpoint_execute = executing && de_q.breakpoint;
     wire passes_cond = executing && condition_pass && !dec_is_unimplemented_q;
 
     // We need the unimplemented bit latched alongside de_q.dec. Use a

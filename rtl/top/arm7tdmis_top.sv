@@ -130,7 +130,9 @@ module arm7tdmis_top
         .dbg_inject_instr (dbg_inject_instr),
         .dbg_halt_req     (ice_halt_request),
         .dbg_halted       (ice_core_halt),
-        .dbg_halt_boundary(ice_halt_boundary)
+        .dbg_breakpoint_fetch(ice_breakpoint_fetch),
+        .dbg_halt_boundary(ice_halt_boundary),
+        .dbg_breakpoint_execute(ice_breakpoint_execute)
     );
 
     // ---- EmbeddedICE-RT (§22 scaffold) ----
@@ -144,6 +146,8 @@ module arm7tdmis_top
     logic ice_halt_request;
     logic ice_halt_boundary;
     logic ice_core_halt;
+    logic ice_breakpoint_fetch;
+    logic ice_breakpoint_execute;
     logic tap_restart_req;
     logic        core_dcc_we;
     logic        core_dcc_re;
@@ -186,10 +190,12 @@ module arm7tdmis_top
         .watch_priv         (PROT[1]),     // address-phase privilege bit
         .core_trans1        (TRANS[1]),    // live Debug Status[3]
         .core_halt_boundary (ice_halt_boundary),
+        .core_breakpoint_execute(ice_breakpoint_execute),
         .dbg_rq_in          (DBGRQ),       // §22: synchronized inside ICE-RT
         .dbg_break_in       (DBGBREAK),    // §22: synchronized inside ICE-RT
         .tap_restart_req    (tap_restart_req),
         .dbg_break_internal (ice_dbg_break),
+        .breakpoint_fetch   (ice_breakpoint_fetch),
         .dbg_ack            (ice_dbg_ack),
         .ifen               (ice_ifen),
         .halt_request       (ice_halt_request),

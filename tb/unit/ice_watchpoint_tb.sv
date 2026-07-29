@@ -51,6 +51,7 @@ module ice_watchpoint_tb;
     logic watch_priv;
     logic core_trans1;
     logic dbg_break_internal;
+    logic breakpoint_fetch;
     logic dbg_ack;
     logic ifen;
     logic halt_request;
@@ -85,6 +86,7 @@ module ice_watchpoint_tb;
         .watch_priv,
         .core_trans1,
         .core_halt_boundary (1'b1),
+        .core_breakpoint_execute(1'b0),
         .dbg_rq_in          (1'b0),
         .dbg_break_in       (1'b0),
         .tap_restart_req    (1'b0),
@@ -104,6 +106,7 @@ module ice_watchpoint_tb;
         .dbg_inject_we,
         .dbg_inject_instr,
         .dbg_break_internal,
+        .breakpoint_fetch,
         .dbg_ack,
         .ifen,
         .halt_request,
@@ -368,6 +371,7 @@ module ice_watchpoint_tb;
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused = &{1'b0, watch_tbit, dbg_ack, ifen, halt_request,
         core_halt, scan_re, scan_rdata, scan_raddr,
+        breakpoint_fetch,
         core_dcc_control, core_dcc_rdata, core_dbgabt_rdata,
         dcc_tx_empty, dcc_rx_full, dbg_inject_we, dbg_inject_instr,
         WP0_ADDR_MASK, WP0_DATA_VAL, WP0_DATA_MASK, WP0_CTRL_MASK,

@@ -200,6 +200,10 @@ module arm7tdmis_vector_catch_tb
             @(posedge CLK);
             if (u_dut.u_ice.core_halt) break;
         end
+        // A pipelined breakpoint suppresses the core's Execute edge while
+        // the ICE FSM enters HALTED on that same edge. Sample after NBA
+        // updates so dbg_state_q reflects the completed transition.
+        #1;
 
         if (!u_dut.u_ice.core_halt) begin
             $display("[vector_catch] FAIL: core never halted within %0d cycles", CYCLE_LIMIT);

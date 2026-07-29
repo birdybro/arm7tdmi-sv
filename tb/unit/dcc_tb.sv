@@ -32,6 +32,7 @@ module dcc_tb;
     logic [4:0] scan_raddr;
 
     logic dbg_break_internal;
+    logic breakpoint_fetch;
     logic dbg_ack;
     logic ifen;
     logic halt_request;
@@ -55,6 +56,7 @@ module dcc_tb;
         .watch_priv         (1'b1),
         .core_trans1        (1'b0),
         .core_halt_boundary (1'b1),
+        .core_breakpoint_execute(1'b0),
         .dbg_rq_in          (1'b0),
         .dbg_break_in       (1'b0),
         .tap_restart_req    (1'b0),
@@ -74,6 +76,7 @@ module dcc_tb;
         .dbg_inject_we,
         .dbg_inject_instr,
         .dbg_break_internal,
+        .breakpoint_fetch,
         .dbg_ack,
         .ifen,
         .halt_request,
@@ -270,7 +273,8 @@ module dcc_tb;
     end
 
     /* verilator lint_off UNUSEDSIGNAL */
-    wire _unused = &{1'b0, dbg_break_internal, dbg_ack, ifen, halt_request,
+    wire _unused = &{1'b0, dbg_break_internal, breakpoint_fetch,
+                     dbg_ack, ifen, halt_request,
                      core_halt, DBGRNG, dbg_inject_we, dbg_inject_instr,
                      scan_raddr};
     /* verilator lint_on UNUSEDSIGNAL */

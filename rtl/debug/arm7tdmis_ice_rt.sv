@@ -43,6 +43,7 @@ module arm7tdmis_ice_rt
     input  logic        watch_priv,        // address-phase PROT[1] / nTRANS
     input  logic        core_trans1,       // live core TRANS[1] for Debug Status[3]
     input  logic        core_halt_boundary,// current instruction commits this edge
+    input  logic        core_breakpoint_execute,
     input  logic        dbg_rq_in,         // §22: external DBGRQ pin synced
                                             //      (used for Debug Status[1])
     input  logic        dbg_break_in,      // §22: external DBGBREAK pin
@@ -76,6 +77,7 @@ module arm7tdmis_ice_rt
 
     // Outputs
     output logic        dbg_break_internal,
+    output logic        breakpoint_fetch,    // tag for the aligned opcode fetch
     output logic        dbg_ack,             // §22: forced via Debug Control[0],
                                               //      OR set when the debug-state
                                               //      FSM is in HALTED.
@@ -243,11 +245,13 @@ module arm7tdmis_ice_rt
     wire ice_dbgrq_force = regs[5'h00][1];
     wire dbgrqi          = (ice_dbgrq_force || dbg_rq_synced) && DBGEN;
     wire halt_entry_req  = DBGEN
-                         && (dbg_break_internal_pre || dbg_break_synced || dbgrqi);
+                         && (watchpoint_halt_pre || dbg_break_synced || dbgrqi);
 
     // dbg_break_internal_pre exists so we can use it BEFORE the wires
     // below see the FSM output — recursive feedback otherwise.
     logic dbg_break_internal_pre;
+    logic watchpoint_halt_pre;
+    logic breakpoint_fetch_pre;
 
     // §30.22.5: Debug Status Register (addr 0x01) is read-only and
     // exposes live signals — TBIT, TRANS[1], IFEN, synced DBGRQ, synced
@@ -421,16 +425,23 @@ module arm7tdmis_ice_rt
     wire [2:0]  vec_index    = watch_addr_q[4:2];
     wire        vec_catch_hit = is_vec_fetch && vector_catch[vec_index];
 
+    // §5.3: opcode breakpoints are marked in the fetch pipeline and only
+    // stop the core if the marked instruction reaches Execute. A branch,
+    // PC write, or exception therefore cancels a breakpoint by flushing
+    // its tag. Data watchpoints instead request a halt after the current
+    // instruction reaches its architectural completion boundary.
+    wire enabled_wp_match = (wp0_rangeout && wp0_enable)
+                         || (wp1_rangeout && wp1_enable);
+    assign breakpoint_fetch_pre = DBGEN
+                                && ((enabled_wp_match && !watch_nopc_q)
+                                    || vec_catch_hit);
+    assign watchpoint_halt_pre   = DBGEN && enabled_wp_match && watch_nopc_q;
+
     // §30.22.1: DBGEN=0 forces all debug outputs LOW.
-    // dbg_break_internal_pre is the raw watchpoint/vec-catch hit gated by
-    // DBGEN, used by the FSM entry condition above. dbg_break_internal
-    // (the module output) is the same — kept separate to make the
-    // intent-of-feedback explicit.
-    assign dbg_break_internal_pre = DBGEN &&
-                                    ((wp0_rangeout && wp0_enable)
-                                     || (wp1_rangeout && wp1_enable)
-                                     || vec_catch_hit);
+    assign dbg_break_internal_pre = breakpoint_fetch_pre
+                                  || watchpoint_halt_pre;
     assign dbg_break_internal     = dbg_break_internal_pre;
+    assign breakpoint_fetch       = breakpoint_fetch_pre;
 
     // ---- Debug-state FSM body
     always_ff @(posedge CLK or negedge DBGnTRST) begin
@@ -441,6 +452,11 @@ module arm7tdmis_ice_rt
             unique case (dbg_state_q)
                 DBG_RUNNING: begin
                     if (!DBGEN) begin
+                        halt_pending_q <= 1'b0;
+                    end else if (core_breakpoint_execute) begin
+                        // The core suppresses this edge's execution and
+                        // freezes while this FSM enters debug state.
+                        dbg_state_q    <= DBG_HALTED;
                         halt_pending_q <= 1'b0;
                     end else if ((halt_pending_q || halt_entry_req)
                                  && core_halt_boundary) begin
@@ -512,8 +528,14 @@ module arm7tdmis_ice_rt
     end
     wire injecting = (inject_phase_q != 4'h0);
 
+    // A breakpoint instruction must be stopped before its Execute edge.
+    // The ICE FSM itself still advances on raw CLKEN and enters HALTED on
+    // that edge; the top-level gates only the core's clock enable.
+    wire breakpoint_stop = (dbg_state_q == DBG_RUNNING)
+                         && DBGEN && core_breakpoint_execute;
+
     // Core un-halts while injecting.
-    assign core_halt = in_debug_halt && !injecting;
+    assign core_halt = (in_debug_halt || breakpoint_stop) && !injecting;
 
     // Pulse dbg_inject_we to the core on the first cycle of the window
     // (when inject_phase_q just got loaded to INJECT_WINDOW).

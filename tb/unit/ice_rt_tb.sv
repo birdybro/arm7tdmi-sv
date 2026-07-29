@@ -39,6 +39,7 @@ module ice_rt_tb
     logic        core_halt;
 
     logic        dbg_break_internal;
+    logic        breakpoint_fetch;
     logic        dbg_ack;
     logic        ifen;
     logic [1:0]  DBGRNG;
@@ -65,11 +66,13 @@ module ice_rt_tb
         .watch_priv         (watch_priv),
         .core_trans1        (core_trans1),
         .core_halt_boundary (1'b1),
+        .core_breakpoint_execute(1'b0),
         .dbg_rq_in          (dbg_rq_in),
         .dbg_break_in       (dbg_break_in),
         .tap_restart_req    (tap_restart_req),
         .core_halt          (core_halt),
         .dbg_break_internal (dbg_break_internal),
+        .breakpoint_fetch   (breakpoint_fetch),
         .dbg_ack            (dbg_ack),
         .ifen               (ifen),
         .halt_request       (halt_request),
@@ -221,6 +224,7 @@ module ice_rt_tb
 
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused = &{1'b0, DBGRNG[1], dbg_ack, ifen, halt_request,
+                     breakpoint_fetch,
                      core_halt, tb_dcc_rdata,
                      tb_dcc_control, tb_dbgabt_rdata, tb_dcc_tx_empty,
                      tb_dcc_rx_full, tb_inject_we, tb_inject_instr,
