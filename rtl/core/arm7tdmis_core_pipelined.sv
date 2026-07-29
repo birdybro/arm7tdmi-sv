@@ -666,10 +666,19 @@ module arm7tdmis_core_pipelined
     // value directly — the shifter is then a no-op and carry_out =
     // carry_in, matching ARMv4T's Thumb DP semantics (Thumb doesn't
     // affect C from immediates).
+    // ARM register-controlled shifts read Rm one internal cycle later than
+    // ordinary operands, so Rm=r15 exposes the instruction address +12
+    // rather than the regfile's normal +8 view (TRM §7.5.4). Keep this
+    // exception local to Rm: Rn in the same instruction still reads +8.
+    wire [31:0] op2_register_value = (!de_q.thumb
+                                      && dec.shifter_use_rs
+                                      && (dec.rm == 4'd15))
+                                     ? (de_q.pc + 32'd12)
+                                     : rf_rb_data;
     wire [31:0] op2_shifter_in     = dec.dp_use_imm
                                      ? (de_q.thumb ? dec.dp_imm_value
                                                    : {24'h0, de_q.instr[7:0]})
-                                     : rf_rb_data;
+                                     : op2_register_value;
     wire [7:0]  op2_shifter_amount = dec.shifter_use_rs
                                      ? rf_rc_data[7:0]
                                      : dec.shifter_amount;
@@ -1767,7 +1776,15 @@ module arm7tdmis_core_pipelined
                 // L/S micro-op snapshot at end of S_EXEC.
                 if (state_q == S_EXEC && ls_take_data_cycle) begin
                     ls_data_addr_q  <= ls_data_addr_used;
-                    ls_store_data_q <= rf_rc_data;
+                    // ARM stores of r15 expose this instruction's address
+                    // plus 12, not the ordinary register-read value of +8.
+                    // The latch is unused by loads, but gate on store so a
+                    // malformed load encoding cannot affect observability.
+                    ls_store_data_q <= (!de_q.thumb
+                                        && !dec.ls_load
+                                        && (dec.rd == 4'd15))
+                                       ? (de_q.pc + 32'd12)
+                                       : rf_rc_data;
                     ls_rd_q         <= dec.rd;
                     ls_byte_q       <= ls_effective_byte;
                     ls_halfword_q   <= ls_effective_halfword;
@@ -2080,6 +2097,8 @@ module arm7tdmis_core_pipelined
                 // UNPREDICTABLE and retain the deterministic updated-base
                 // behavior.
                 WDATA = block_load_q ? 32'h0
+                      : (block_curr_reg_q == 4'd15)
+                        ? (memory_instr_pc_q + 32'd12)
                       : (block_first_beat_q
                          && block_writeback_q
                          && (block_curr_reg_q == block_rn_q))
