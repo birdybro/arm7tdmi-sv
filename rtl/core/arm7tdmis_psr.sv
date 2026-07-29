@@ -31,7 +31,10 @@
 //   * a selected control byte containing an invalid M[4:0] is rejected as
 //     a field, while an independently selected flags field may still commit;
 //   * CPSR.T writes through MSR are dropped; SPSR.T remains writable because
-//     exception-return software may deliberately select the restored state.
+//     exception-return software may deliberately select the restored state;
+//   * a CPSR restore from an SPSR containing an invalid mode is ignored. This
+//     covers, in particular, an exception return attempted before the
+//     deterministic reset-zero SPSR_svc has been replaced.
 
 module arm7tdmis_psr
     import arm7tdmis_psr_pkg::*, arm7tdmis_types_pkg::*;
@@ -173,7 +176,9 @@ module arm7tdmis_psr
                 // Exception-return restore overrides the field write — if
                 // the same cycle requests both, restore wins (matches the
                 // architectural intent of MOVS/SUBS PC,...).
-                if (cpsr_restore_en && mode_has_spsr(cur_mode)) begin
+                if (cpsr_restore_en
+                    && mode_has_spsr(cur_mode)
+                    && mode_is_valid(spsr_q[cur_spsr_ix][4:0])) begin
                     cpsr_next = spsr_q[cur_spsr_ix];
                 end
 
