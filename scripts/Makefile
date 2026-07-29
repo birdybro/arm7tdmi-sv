@@ -184,12 +184,35 @@ raw-checker-self-test:
 	    -f $(SIM_F) \
 	    ../verification/arm7tdmis_raw_bus_checker.sv \
 	    ../tb/harness/raw_bus_checker_violation_tb.sv
-	@if ./$(OBJ_DIR)/raw_checker_expected_failure/Vraw_bus_checker_violation_tb; then \
-	    echo "[raw-checker-self-test] FAIL: protocol violation returned zero"; \
-	    exit 1; \
-	else \
-	    echo "[raw-checker-self-test] PASS: protocol violation propagated nonzero"; \
-	fi
+	@set -eu; \
+	bin=./$(OBJ_DIR)/raw_checker_expected_failure/Vraw_bus_checker_violation_tb; \
+	"$$bin" +CASE=legal; \
+	for spec in \
+	    "reset_controls:reset must drive TRANS=I" \
+	    "cfg_change:CFGBIGEND changed outside reset" \
+	    "reserved_size:SIZE=2'b11 is reserved" \
+	    "cpnmreq_mirror:CPnMREQ does not mirror TRANS active" \
+	    "cpseq_mirror:CPSEQ does not mirror TRANS[0]" \
+	    "cpnopc_mirror:CPnOPC does not mirror PROT[0]" \
+	    "dmore_class:DMORE outside an unlocked word data address" \
+	    "sequential_history:S address lacks legal burst history" \
+	    "dmore_follower:DMORE promise lacked +4 S follower" \
+	    "stall_mutation:output changed while CLKEN=0" \
+	    "byte_burst:byte burst is forbidden"; do \
+	    case_name=$${spec%%:*}; \
+	    expected=$${spec#*:}; \
+	    log=$(OBJ_DIR)/raw_checker_$${case_name}.log; \
+	    if "$$bin" +CASE=$$case_name >"$$log" 2>&1; then \
+	        echo "[raw-checker-self-test/$$case_name] FAIL: violation returned zero"; \
+	        exit 1; \
+	    fi; \
+	    if ! grep -F "$$expected" "$$log" >/dev/null; then \
+	        echo "[raw-checker-self-test/$$case_name] FAIL: wrong assertion"; \
+	        cat "$$log"; \
+	        exit 1; \
+	    fi; \
+	    echo "[raw-checker-self-test/$$case_name] PASS"; \
+	done
 
 clean:
 	rm -rf $(OBJ_DIR) $(RUN_ARTIFACTS)
