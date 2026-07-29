@@ -764,6 +764,17 @@ module arm7tdmis_core_pipelined
     // cycles. Detected combinationally; defers the commit to S_DP_SHIFT.
     wire dp_shift_take_cycle = passes_cond && instr_is_dp && dec.shifter_use_rs;
 
+    // TRM §4.4.4: an unmasked IRQ/FIQ can abandon an accepted
+    // coprocessor instruction only while it is still busy-waiting. Give
+    // that interrupt priority over a coincident CPB-ready transition so
+    // the coprocessor cannot commit after the exception has won.
+    wire cp_wait_fiq_pending = (state_q == S_CP_WAIT)
+                             && !nFIQ && !cpsr.f;
+    wire cp_wait_irq_pending = (state_q == S_CP_WAIT)
+                             && !nIRQ && !cpsr.i;
+    wire cp_wait_interrupt_pending = cp_wait_fiq_pending
+                                   || cp_wait_irq_pending;
+
     // E-stage substate transitions. Single-cycle "execute" loops back to
     // S_EXEC; multi-cycle ops take the appropriate substate detour.
     // While in S_EXEC, an invalid de_q (bubble) still loops to S_EXEC —
@@ -813,7 +824,8 @@ module arm7tdmis_core_pipelined
                                        : S_MUL_BUSY;
             S_MULL_ACC:   state_next = S_MUL_BUSY;
             S_DP_SHIFT:   state_next = S_EXEC;
-            S_CP_WAIT:    state_next = !cp_wait_ready ? S_CP_WAIT
+            S_CP_WAIT:    state_next = cp_wait_interrupt_pending ? S_EXEC
+                                     : !cp_wait_ready ? S_CP_WAIT
                                      : cp_wait_is_mcr_q ? S_CP_MCR_DATA
                                      : cp_wait_is_mrc_q ? S_CP_MRC_DATA
                                      : cp_wait_is_stc_q ? S_CP_MCR_DATA
@@ -956,8 +968,10 @@ module arm7tdmis_core_pipelined
     wire undef_pending = executing
                        && ((condition_pass && instr_is_undef) || cond_is_nv
                            || cp_undef_trap);
-    wire irq_pending   = executing && !nIRQ && !cpsr.i;
-    wire fiq_pending   = executing && !nFIQ && !cpsr.f;
+    wire irq_pending   = (executing && !nIRQ && !cpsr.i)
+                       || cp_wait_irq_pending;
+    wire fiq_pending   = (executing && !nFIQ && !cpsr.f)
+                       || cp_wait_fiq_pending;
     logic fiq_after_dabt_q;
     wire  fiq_interlock_fires = fiq_after_dabt_q
                               && (state_q == S_EXEC);
@@ -1041,6 +1055,8 @@ module arm7tdmis_core_pipelined
 
     wire any_exc_fires    = swi_fires || undef_fires || irq_fires || fiq_fires
                          || pabt_fires || dabt_fires;
+    wire cp_wait_interrupt_fires = (state_q == S_CP_WAIT)
+                                 && (irq_fires || fiq_fires);
 
     // TRM §2.9.8 exception-link table. Synchronous SWI/UNDEF links use
     // the source instruction width; IRQ/FIQ/PABT always use PC+4; DABT
@@ -1050,6 +1066,8 @@ module arm7tdmis_core_pipelined
     wire [31:0] exception_lr_value =
         fiq_interlock_fires ? 32'h0000_0014
       : dabt_fires          ? (memory_instr_pc_q + 32'd8)
+      : cp_wait_interrupt_fires
+                            ? (cp_instr_pc_q + 32'd4)
       : (swi_fires || undef_fires)
                             ? (de_q.pc + (de_q.thumb ? 32'd2 : 32'd4))
                             : (de_q.pc + 32'd4);
@@ -2019,7 +2037,8 @@ module arm7tdmis_core_pipelined
     assign CPnOPC   =  PROT[PROT_BIT_DATA];   // mirror — opcode fetch → CPnOPC=0
     assign CPTBIT   = cpsr.t;
     assign CPnI     = !((passes_cond && instr_is_cp)
-                      || (state_q == S_CP_WAIT));
+                      || ((state_q == S_CP_WAIT)
+                          && !cp_wait_interrupt_pending));
 
     // =====================================================================
     // §24: ETM-facing pipeline-state outputs
