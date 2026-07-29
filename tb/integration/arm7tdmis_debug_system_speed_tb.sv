@@ -20,7 +20,7 @@ module arm7tdmis_debug_system_speed_tb
     import arm7tdmis_jtag_tb_pkg::*;
 ;
 
-    localparam int CYCLE_LIMIT = 2600;
+    localparam int CYCLE_LIMIT = 5200;
     localparam logic [31:0] DEBUG_NOP = 32'hE1A0_0000;
     localparam logic [31:0] SYSTEM_LDR = 32'hE590_4000; // LDR r4,[r0]
     localparam logic [31:0] DEBUG_LDM_R0_R4 = 32'hE890_001F;
@@ -34,6 +34,14 @@ module arm7tdmis_debug_system_speed_tb
     localparam logic [31:0] ROUNDTRIP_WORD2  = 32'h5566_7788;
     localparam logic [31:0] ROUNDTRIP_WORD3  = 32'h99AA_BBCC;
     localparam logic [31:0] ROUNDTRIP_WORD4  = 32'hDDEE_F00D;
+    localparam logic [31:0] BYTE_BASE        = 32'h0000_0141;
+    localparam logic [31:0] BYTE_SOURCE      = 32'hA1B2_C3D4;
+    localparam logic [31:0] SYSTEM_STRB_R1   = 32'hE4C0_1001;
+    localparam logic [31:0] SYSTEM_LDRB_R2   = 32'hE4D0_2001;
+    localparam logic [31:0] HALF_BASE        = 32'h0000_0142;
+    localparam logic [31:0] HALF_SOURCE      = 32'h1357_ABCD;
+    localparam logic [31:0] SYSTEM_STRH_R1   = 32'hE0C0_10B2;
+    localparam logic [31:0] SYSTEM_LDRH_R3   = 32'hE0D0_30B2;
 
     logic CLK = 1'b0;
     initial forever #5 CLK = ~CLK;
@@ -221,6 +229,108 @@ module arm7tdmis_debug_system_speed_tb
         logic [37:0] captured;
         shift_dr(33, chain1_serial_in(32'h0, 1'b0), captured);
         data = chain1_parallel_data(captured);
+    endtask
+
+    task automatic write_debug_r0(
+        input logic [31:0] base
+    );
+        inject(DEBUG_LDM_R0, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        inject(base, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        wait_for_inject_idle("debug-speed r0 write tail did not retire");
+    endtask
+
+    task automatic write_debug_r0_r1(
+        input logic [31:0] base,
+        input logic [31:0] data
+    );
+        inject(32'hE890_0003, 1'b0); // LDMIA r0,{r0,r1}, no writeback
+        inject(DEBUG_NOP, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        inject(base, 1'b0);
+        inject(data, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        wait_for_inject_idle("debug-speed r0/r1 write tail did not retire");
+    endtask
+
+    task automatic execute_single_system_access(
+        input logic [31:0] instruction,
+        input logic        expected_write,
+        input logic [31:0] expected_addr,
+        input logic [1:0]  expected_size,
+        input string       description
+    );
+        logic reentry_cause;
+        bit   saw_access;
+        bit   reentered;
+
+        inject(DEBUG_NOP, 1'b0);
+        wait_for_inject_idle({description, " setup NOP did not retire"});
+        inject(DEBUG_NOP, 1'b1);
+        wait_for_inject_idle({description, " bit-33 NOP did not retire"});
+        inject(instruction, 1'b0);
+        load_ir(4'(IR_RESTART));
+
+        saw_access = 1'b0;
+        reentered  = 1'b0;
+        for (int i = 0; i < 220; i++) begin
+            @(posedge CLK);
+            #1;
+            if (CLKEN && ((TRANS == 2'(TRANS_N))
+                       || (TRANS == 2'(TRANS_S)))
+                && PROT[0] && (ADDR == expected_addr)) begin
+                if (saw_access)
+                    fail({description, " issued duplicate data transfers"});
+                saw_access = 1'b1;
+                if (WRITE !== expected_write)
+                    fail({description, " used the wrong transfer direction"});
+                if (SIZE !== expected_size)
+                    fail($sformatf(
+                        "%s expected SIZE=%02b got %02b",
+                        description, expected_size, SIZE));
+            end
+            if (DBGACK && u_dut.u_ice.core_halt
+                && (TRANS == 2'(TRANS_I))) begin
+                reentered = 1'b1;
+                break;
+            end
+        end
+        if (!saw_access)
+            fail({description, " did not issue its external data transfer"});
+        if (!reentered)
+            fail({description, " did not automatically re-enter debug"});
+
+        if (reentered) begin
+            capture_reentry_cause(reentry_cause);
+            if (reentry_cause !== 1'b1)
+                fail({description, " re-entry did not report bit 33 HIGH"});
+        end
+        wait_for_inject_idle({description, " post-capture NOP did not retire"});
+    endtask
+
+    task automatic scan_debug_pair(
+        input logic [15:0] register_mask,
+        input logic [31:0] expected_base,
+        input logic [31:0] expected_data,
+        input string       description
+    );
+        logic [31:0] scanned;
+
+        inject(32'hE880_0000 | 32'(register_mask), 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        inject(DEBUG_NOP, 1'b0);
+        capture_data(scanned);
+        if (scanned !== expected_base)
+            fail($sformatf(
+                "%s base expected %08x, scanned %08x",
+                description, expected_base, scanned));
+        capture_data(scanned);
+        if (scanned !== expected_data)
+            fail($sformatf(
+                "%s data expected %08x, scanned %08x",
+                description, expected_data, scanned));
     endtask
 
     initial begin : run_test
@@ -518,6 +628,33 @@ module arm7tdmis_debug_system_speed_tb
             fail($sformatf(
                 "word 3 expected %08x, scanned %08x",
                 ROUNDTRIP_WORD4, scanned_data));
+
+        // OpenOCD's 8-bit path uses one post-indexed transfer per register.
+        // Exercise an unaligned byte address so this cannot alias a word path.
+        write_debug_r0_r1(BYTE_BASE, BYTE_SOURCE);
+        execute_single_system_access(
+            SYSTEM_STRB_R1, 1'b1, BYTE_BASE, 2'(SIZE_BYTE),
+            "system-speed STRB");
+        write_debug_r0(BYTE_BASE);
+        execute_single_system_access(
+            SYSTEM_LDRB_R2, 1'b0, BYTE_BASE, 2'(SIZE_BYTE),
+            "system-speed LDRB");
+        scan_debug_pair(16'h0005, BYTE_BASE + 32'd1,
+                        {24'h0, BYTE_SOURCE[7:0]},
+                        "byte memory round trip");
+
+        // OpenOCD's 16-bit path similarly uses immediate post-index by two.
+        write_debug_r0_r1(HALF_BASE, HALF_SOURCE);
+        execute_single_system_access(
+            SYSTEM_STRH_R1, 1'b1, HALF_BASE, 2'(SIZE_HALFWORD),
+            "system-speed STRH");
+        write_debug_r0(HALF_BASE);
+        execute_single_system_access(
+            SYSTEM_LDRH_R3, 1'b0, HALF_BASE, 2'(SIZE_HALFWORD),
+            "system-speed LDRH");
+        scan_debug_pair(16'h0009, HALF_BASE + 32'd2,
+                        {16'h0, HALF_SOURCE[15:0]},
+                        "halfword memory round trip");
 
         if (u_dut.u_core.u_regfile.regs[13] !== normal_r13)
             fail("normal program instruction retired during memory round trip");
