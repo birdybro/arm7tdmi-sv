@@ -24,8 +24,18 @@ package arm7tdmis_debug_pkg;
 
     // ---- IDCODE (TRM §5.14.2 / §30.23.4).
     // Format: [31:28]=Version, [27:12]=PartNumber, [11:1]=ManufacturerID,
-    // [0]=1 (always per IEEE 1149.1; do not tie low).
-    localparam logic [31:0] IDCODE_VALUE = 32'h7F1F_0F0F;
+    // [0]=1 (always per IEEE 1149.1; do not tie low). These are the
+    // historical ARM7TDMI-S r4p3 macrocell defaults. Product wrappers can
+    // override the three fields, but bit 0 is constructed internally.
+    localparam logic [3:0]  JTAG_DEFAULT_VERSION         = 4'h7;
+    localparam logic [15:0] JTAG_DEFAULT_PART_NUMBER     = 16'hF1F0;
+    localparam logic [10:0] JTAG_DEFAULT_MANUFACTURER_ID = 11'h787;
+    localparam logic [31:0] IDCODE_VALUE = {
+        JTAG_DEFAULT_VERSION,
+        JTAG_DEFAULT_PART_NUMBER,
+        JTAG_DEFAULT_MANUFACTURER_ID,
+        1'b1
+    };
 
     // ---- Scan chain widths (§30.23.5).
     // Chain 0 reserved (returns zeros if selected).

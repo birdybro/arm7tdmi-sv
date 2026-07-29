@@ -22,7 +22,7 @@ module jtag_idcode_config_tb
     initial forever #5 CLK = ~CLK;
 
     logic DBGTCKEN = 1'b1;
-    logic DBGnTRST = 1'b0;
+    logic DBGnTRST = 1'b1;
     logic DBGTMS = 1'b1;
     logic DBGTDI = 1'b0;
     logic DBGTDO;
@@ -82,7 +82,9 @@ module jtag_idcode_config_tb
     initial begin
         logic [31:0] observed;
 
+        #1;
         // Asynchronous TAP reset must select IDCODE without a test clock.
+        DBGnTRST = 1'b0;
         #1;
         if (current_ir != IR_IDCODE)
             $fatal(1, "jtag_idcode_config_tb: reset did not select IDCODE");

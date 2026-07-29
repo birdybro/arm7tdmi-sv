@@ -19,6 +19,13 @@
 
 module arm7tdmis_chip
     import arm7tdmis_bus_pkg::*;
+    import arm7tdmis_debug_pkg::*;
+  #(
+    parameter logic [3:0]  JTAG_VERSION = JTAG_DEFAULT_VERSION,
+    parameter logic [15:0] JTAG_PART_NUMBER = JTAG_DEFAULT_PART_NUMBER,
+    parameter logic [10:0] JTAG_MANUFACTURER_ID =
+        JTAG_DEFAULT_MANUFACTURER_ID
+  )
 (
     // Same pin list as arm7tdmis_top, in the same order
     input  logic        CLK,
@@ -68,7 +75,11 @@ module arm7tdmis_chip
     output logic        SO
 );
 
-    arm7tdmis_top u_top (
+    arm7tdmis_top #(
+        .JTAG_VERSION         (JTAG_VERSION),
+        .JTAG_PART_NUMBER     (JTAG_PART_NUMBER),
+        .JTAG_MANUFACTURER_ID (JTAG_MANUFACTURER_ID)
+    ) u_top (
         .CLK            (CLK),
         .CLKEN          (CLKEN),
         .nRESET         (nRESET),

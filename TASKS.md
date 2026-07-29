@@ -2581,9 +2581,13 @@ number of cycles spent in an internal FSM state.
   `DBGnTRST`, Capture/Shift/Update-IR, fixed `0001` capture, all five public
   instructions, and BYPASS for every other IR encoding. Fail-hard evidence:
   `tb/unit/jtag_tap_tb.sv`.
-- [ ] **JTAG-002:** Verify IDCODE bit fields and configurability. Do not call
-  `0x7F1F0F0F` universally correct without documenting manufacturer/part/revision
-  policy for the synthesized product.
+- [x] **JTAG-002:** Verify IDCODE bit fields and configurability. The r4p3
+  macrocell value `0x7F1F0F0F` is the compatibility default; synthesized
+  products override the version, part, and manufacturer fields through top-level
+  parameters while bit 0 remains fixed HIGH. Policy and ownership are documented
+  in `docs/DEBUG.md`; default fields/serial order are fail-hard checked by
+  `tb/unit/jtag_tap_tb.sv`, and overrides by
+  `tb/unit/jtag_idcode_config_tb.sv`.
 - [ ] **JTAG-003:** Implement and verify SCAN_N selection, chain 0, 33-bit chain 1,
   38-bit chain 2, reserved chains, the TRM-defined physical cell order, update
   atomicity, and chain-1 bit 33's entry-cause/debug-speed/system-speed meanings.

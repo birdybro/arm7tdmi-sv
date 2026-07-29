@@ -21,6 +21,12 @@
 
 module arm7tdmis_jtag_tap
     import arm7tdmis_debug_pkg::*;
+  #(
+    parameter logic [3:0]  JTAG_VERSION = JTAG_DEFAULT_VERSION,
+    parameter logic [15:0] JTAG_PART_NUMBER = JTAG_DEFAULT_PART_NUMBER,
+    parameter logic [10:0] JTAG_MANUFACTURER_ID =
+        JTAG_DEFAULT_MANUFACTURER_ID
+  )
 (
     input  logic        CLK,
     input  logic        DBGTCKEN,        // gates each TAP clock event
@@ -122,6 +128,9 @@ module arm7tdmis_jtag_tap
     // This is intentionally not a generic packed-vector LSB-first shift.
     // It matches the cell order in TRM §5.11.1/§5.14.5.
     logic [37:0] dr_shift_q;
+    localparam logic [31:0] JTAG_IDCODE = {
+        JTAG_VERSION, JTAG_PART_NUMBER, JTAG_MANUFACTURER_ID, 1'b1
+    };
 
     // ---- Scan chain selector (4-bit, set via IR=SCAN_N). Chain numbers
     // per TRM §30.23.5: 0 reserved, 1 = 33-bit (instruction/data + break),
@@ -157,7 +166,7 @@ module arm7tdmis_jtag_tap
                 CDR: begin
                     // Seed the shift register with the selected DR.
                     unique case (ir_hold_q)
-                        4'(IR_IDCODE): dr_shift_q <= {6'h0, IDCODE_VALUE};
+                        4'(IR_IDCODE): dr_shift_q <= {6'h0, JTAG_IDCODE};
                         4'(IR_BYPASS): dr_shift_q <= 38'h0;
                         4'(IR_SCAN_N): dr_shift_q <= {34'h0, 4'b1000};
                         4'(IR_INTEST): begin

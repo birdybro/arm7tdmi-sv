@@ -10,6 +10,12 @@
 module arm7tdmis_top
     import arm7tdmis_bus_pkg::*;
     import arm7tdmis_debug_pkg::*;
+  #(
+    parameter logic [3:0]  JTAG_VERSION = JTAG_DEFAULT_VERSION,
+    parameter logic [15:0] JTAG_PART_NUMBER = JTAG_DEFAULT_PART_NUMBER,
+    parameter logic [10:0] JTAG_MANUFACTURER_ID =
+        JTAG_DEFAULT_MANUFACTURER_ID
+  )
 (
     // Clock, clock-enable, reset, endianness configuration
     input  logic        CLK,
@@ -282,7 +288,11 @@ module arm7tdmis_top
     assign DBGTDO    = DBGEN ? tap_tdo : 1'b0;
     assign DBGnTDOEN = !DBGEN || tap_ntdoen;
 
-    arm7tdmis_jtag_tap u_tap (
+    arm7tdmis_jtag_tap #(
+        .JTAG_VERSION         (JTAG_VERSION),
+        .JTAG_PART_NUMBER     (JTAG_PART_NUMBER),
+        .JTAG_MANUFACTURER_ID (JTAG_MANUFACTURER_ID)
+    ) u_tap (
         .CLK              (CLK),
         .DBGTCKEN         (tap_tcken),
         .DBGnTRST         (DBGnTRST),
