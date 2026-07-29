@@ -1,10 +1,10 @@
 // ISA-011 / ISA-016 block-transfer banking and operand-policy matrix.
 //
-// Cases 1-8 cover defined base-in-list behavior, the implementation's
-// deterministic STM non-lowest-base result, privileged User-bank transfers,
-// and both writeback forms of LDM^ with PC/CPSR restore. Cases 9-21 require
-// a precise Undefined trap for every statically or dynamically detectable
-// ARMv4T UNPREDICTABLE block-transfer operand class.
+// Cases 1-8 and 13 cover defined behavior plus the implementation's
+// deterministic base-in-list policies, privileged User-bank transfers, and
+// both writeback forms of LDM^ with PC/CPSR restore. Cases 9-12 and 14-21
+// require a precise Undefined trap for the remaining statically or
+// dynamically detectable ARMv4T UNPREDICTABLE operand classes.
 
 `timescale 1ns/1ps
 
@@ -14,7 +14,6 @@ module arm7tdmis_block_ls_policy_tb
 ;
 
     localparam int CASE_COUNT      = 21;
-    localparam int FIRST_TRAP_CASE = 9;
     localparam logic [31:0] TEST_PC = 32'h0000_0060;
     localparam logic [31:0] DATA_BASE = 32'h0000_0200;
 
@@ -88,6 +87,11 @@ module arm7tdmis_block_ls_policy_tb
         return opcode;
     endfunction
 
+    function automatic logic is_trap_case(input int case_id);
+        return ((case_id >= 9) && (case_id <= 12))
+            || (case_id >= 14);
+    endfunction
+
     task automatic setup_case(
         input  int          case_id,
         output string       label,
@@ -123,7 +127,7 @@ module arm7tdmis_block_ls_policy_tb
         u_mem.mem[128] = 32'hC001_C0DE;
         u_mem.mem[129] = 32'hC001_C0DE;
         opcode = 32'hE7F0_00F0;
-        expected_data_cycles = (case_id < FIRST_TRAP_CASE) ? 2 : 0;
+        expected_data_cycles = is_trap_case(case_id) ? 0 : 2;
         expected_spsr = 32'h0000_00D3;
 
         unique case (case_id)
@@ -203,9 +207,14 @@ module arm7tdmis_block_ls_policy_tb
                     1'b0, 1'b0, 1'b1, 4'd15, 16'h0001);
             end
             13: begin
-                label = "policy trap LDM writeback base in list";
+                // ARM leaves the final base value UNPREDICTABLE. Preserve
+                // the r4p3-compatible Base Updated result, which also
+                // permits the dedicated per-beat abort regression.
+                label = "policy LDM writeback base in list";
                 opcode = block_opcode(
                     1'b0, 1'b1, 1'b1, 4'd4, 16'h0030);
+                u_mem.mem[128] = 32'h1111_1111;
+                u_mem.mem[129] = 32'h2222_2222;
             end
             14: begin
                 label = "policy trap LDM user bank with writeback";
@@ -283,7 +292,7 @@ module arm7tdmis_block_ls_policy_tb
                 "%s data-cycle count expected %0d got %0d",
                 label, expected_data_cycles, data_cycles));
 
-        if (case_id >= FIRST_TRAP_CASE) begin
+        if (is_trap_case(case_id)) begin
             if (u_dut.u_core.cpsr.m !== 5'(MODE_UNDEFINED)
                 || u_dut.u_core.cpsr.t || !u_dut.u_core.cpsr.i)
                 fail(case_id, {label, " did not enter ARM Undefined mode"});
@@ -375,6 +384,14 @@ module arm7tdmis_block_ls_policy_tb
                         fail(case_id, $sformatf(
                             "%s stored wrong user/PC data: %08x/%08x",
                             label, u_mem.mem[128], u_mem.mem[129]));
+                end
+                13: begin
+                    if ((u_dut.u_core.u_regfile.regs[4]
+                         !== 32'h0000_0208)
+                        || (u_dut.u_core.u_regfile.regs[5]
+                            !== 32'h2222_2222))
+                        fail(case_id, {label,
+                            " deterministic Base Updated result mismatch"});
                 end
                 default: ;
             endcase
