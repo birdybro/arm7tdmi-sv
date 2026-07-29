@@ -45,6 +45,27 @@ def _commands(path: pathlib.Path) -> str:
 
 
 class SdcContractTest(unittest.TestCase):
+    def test_wrapper_uses_quartus_portable_synchronizer_attributes(self) -> None:
+        wrapper = (
+            REPO_ROOT / "rtl" / "top" / "arm7tdmi_mister.sv"
+        ).read_text(encoding="utf-8")
+        attribute = (
+            '-name SYNCHRONIZER_IDENTIFICATION '
+            'FORCED_IF_ASYNCHRONOUS'
+        )
+        self.assertEqual(
+            wrapper.count(attribute),
+            12,
+            "both stages of all six event synchronizers must use the "
+            "Quartus-supported conditional attribute",
+        )
+        self.assertNotIn(
+            '-name SYNCHRONIZER_IDENTIFICATION FORCED"',
+            wrapper,
+            "unconditional FORCED crashes the Quartus 17 PowerPlay "
+            "metastability pass when optional synchronizers are trimmed",
+        )
+
     def test_raw_top_sdc_uses_only_the_real_clock_and_ports(self) -> None:
         text = RAW_SDC.read_text(encoding="utf-8")
         commands = _commands(RAW_SDC)
