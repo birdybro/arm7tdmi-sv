@@ -2359,12 +2359,17 @@ conformance evidence.
 
 No functional claim can become VERIFIED until every item here is complete.
 
-- [ ] **VER-001:** Replace every error-counter-only test ending with `$finish` with
+- [x] **VER-001:** Replace every error-counter-only test ending with `$finish` with
   `$fatal(1, ...)` on any error and `$finish` only on success. This includes every
-  integration bench, the smoke bench, `ice_rt_tb`, and `jtag_tap_tb`.
-- [ ] **VER-002:** Add a bounded timeout that fails nonzero to every bench.
-- [ ] **VER-003:** Make one `regress` target run RTL lint, TB lint, all unit tests, all
-  directed integration tests, and the smoke test from a clean build.
+  integration bench, the smoke bench, `ice_rt_tb`, and `jtag_tap_tb`. Every
+  manifest-listed unit, integration, and smoke top now has a fatal failure path.
+- [x] **VER-002:** Add a bounded timeout that fails nonzero to every bench.
+  Every manifest-listed bench has an independent `$fatal` timeout.
+- [x] **VER-003:** Make one `regress` target run RTL lint, TB lint, all unit tests, all
+  directed integration tests, and the smoke test from a clean build. The
+  `scripts/Makefile` manifests exactly match every unit and directed integration
+  test top, and `make -C scripts regress` orders clean, both lint passes, unit,
+  integration, and smoke execution.
 - [ ] **VER-004:** Make stale cached binaries impossible to mistake for a new result;
   record the RTL git hash, tool versions, build variant, seed, and test manifest in the
   regression output.
@@ -2373,18 +2378,25 @@ No functional claim can become VERIFIED until every item here is complete.
   writeback, flag, exception, and bus controls.
 - [ ] **VER-006:** Treat assertions and simulator errors as fatal. Remove unsupported
   warning suppressions or give each one an owner, rationale, and expiry.
-- [ ] **VER-007:** Stop treating `ABORT` during I/C as illegal testbench stimulus.
+- [x] **VER-007:** Stop treating `ABORT` during I/C as illegal testbench stimulus.
   Assert that the core ignores it there, as the TRM requires.
+  `tb/integration/arm7tdmis_abort_inactive_tb.sv` injects ABORT during I/C
+  phases, while `tb/integration/arm7tdmis_abort_clken_tb.sv` covers an inactive
+  assertion overlapping a stopped clock-enable interval.
 - [ ] **VER-008:** Publish machine-readable regression and coverage reports as release
   artifacts. A console line containing `PASS` is not release evidence.
 - [ ] **VER-009:** Expose a verification-only architectural retirement interface
   (instruction PC/opcode/state/condition result/register and CPSR effects/exception)
   instead of making all scoreboards depend on private hierarchy.
-- [ ] **VER-010:** Minimize and resolve both currently failing smoke checks. The SWPB
+- [x] **VER-010:** Minimize and resolve both currently failing smoke checks. The SWPB
   check may itself be stale because later test code writes r12=13; decide RTL versus
   expectation only from an instruction trace and cited architecture behavior. Likewise,
   explain/fix the final `pc_q=0x96` versus expected `0x9c`. Preserve each real defect as
-  a small fail-hard regression.
+  a small fail-hard regression. `tb/integration/arm7tdmis_swpb_data_tb.sv`
+  isolates SWPB read data, lane placement, and LOCK lifetime and proved the old
+  r12 expectation stale. `tb/integration/arm7tdmis_bx_interwork_tb.sv`
+  isolated the odd-address Thumb-to-ARM return defect; destination-state refill
+  fixed the final self-loop PC. The original smoke bench now passes fail-hard.
 
 ## 31.3 P0 — ARMv4T architectural correctness
 
