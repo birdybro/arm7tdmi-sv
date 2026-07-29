@@ -158,7 +158,7 @@ PC writes flush the pipeline. Triggers (combinational, fire for one cycle):
 | DP to PC | `passes_cond && instr_is_dp && (dec.rd == 15)` |
 | B / BL / BX | `passes_cond && (instr_is_branch || instr_is_bx)` |
 | Exception | `any_exc_fires` (SWI/UNDEF/IRQ/FIQ/PABT/DABT) |
-| LDR to PC | `(state_q == S_DDATA) && ls_load_q && (ls_rd_q == 15)` |
+| LDR to PC | `(state_q == S_LOAD_WB) && (ls_rd_q == 15)` |
 | LDM with PC in list | `(state_q == S_BLOCK_DATA) && block_load_q && (block_curr_reg_q == 15)` |
 
 On `flush`:
@@ -168,6 +168,15 @@ On `flush`:
 - `de_q.valid := 0` (kill in-execute instr — but its writeback already fired this cycle)
 
 `flush_target_pc` priority: `ddata_writes_pc → load_value`, `block_writes_pc → RDATA`, else `pc_target_exec`.
+
+Every raw target is aligned before that priority mux: ARM destinations clear
+bits `[1:0]`, while Thumb destinations clear bit `[0]`. BX obtains the destination
+state from its source bit 0. `MOVS/SUBS pc` and `LDM ... pc^` obtain it from SPSR.T,
+so the same restored state controls target masking, the first refill's SIZE, and the
+subsequent fetch increment. Register-controlled DP writes carry their latched ALU
+result and restore intent into `S_DP_SHIFT`; they never consult the next instruction's
+live datapath. The 11-family pin-level proof is
+`tb/integration/arm7tdmis_pc_write_alignment_tb.sv`.
 
 ## Stall mechanism
 

@@ -2457,9 +2457,19 @@ and defined boundary value. Each row links ARM ARM text to RTL and at least one 
   NZCV-only semantics. Public-scan debug PC accounting, including DBGRQ,
   breakpoint/watchpoint, exception, debug-speed, system-speed, scan-loaded r15, and
   RESTART, remains exact in the DBG-007/JTAG-005 regressions.
-- [ ] **ISA-006:** Align every PC write according to the destination state. Cover BX
+- [x] **ISA-006:** Align every PC write according to the destination state. Cover BX
   both directions, data-processing-to-PC, LDR/LDM-to-PC, POP PC, and exception return.
   A CPSR-restoring PC write must use the restored T bit for its first refill.
+  `tb/integration/arm7tdmis_pc_write_alignment_tb.sv` is an 11-row reset-per-case
+  matrix with deliberately nonzero discarded address bits. It checks the public
+  first-target fetch address and SIZE plus the Execute PC/state for ordinary and
+  register-shift ARM DP writes, Thumb DP writes, LDR, LDM, POP, both BX directions,
+  MOVS-to-PC restoring ARM and Thumb, and LDM^-to-PC restoring Thumb. PC values are
+  masked before reaching the raw address pins; restored SPSR.T selects both that mask
+  and the first-refill width. The register-shift path latches its result and restore
+  intent through `S_DP_SHIFT`, eliminating its former next-instruction datapath
+  dependency. Existing interworking, LDM return, exception, timing, and debug-PC
+  regressions pass unchanged.
 - [ ] **ISA-007:** Treat Thumb conditional-branch condition `1110` as Undefined, not
   AL. Treat ARM condition `1111` according to ARMv4T (not later unconditional
   encodings). Exhaustively test all Thumb reserved encodings and all ARM
