@@ -622,11 +622,12 @@ module arm7tdmis_core_pipelined
     wire [4:0] regfile_mode_eff = any_exc_fires ? exc_mode_target : cpsr.m;
 
     // LDM/STM with S=1 forces the user-bank registers for r8-r14
-    // regardless of the current mode (TRM §12.4). The variant with PC
-    // in the list uses the *current* bank for r0-r14 (it's an exception
-    // return, not a user-mode read), so block_has_pc_q gates this off.
+    // regardless of the current privileged mode (TRM §12.4). Only LDM
+    // with PC in the list uses the current bank for r0-r14 because that
+    // form is an exception return. STM^ remains a User-bank transfer even
+    // when its list contains the implementation-defined r15 store value.
     wire force_user_bank_eff = block_active && block_user_mode_q
-                            && !block_has_pc_q;
+                            && !(block_load_q && block_has_pc_q);
 
     arm7tdmis_regfile u_regfile (
         .CLK             (CLK),
@@ -801,12 +802,27 @@ module arm7tdmis_core_pipelined
     // (TRM §12.4): on the cycle r15 loads, CPSR atomically := SPSR-of-
     // current-mode. For this variant we must NOT force user-bank for the
     // other registers in the list (TRM: "if r15 in list, current bank
-    // is used"). Plain LDM/STM ^ without PC just routes user-bank reads
-    // via force_user_bank_eff. Distinction handled by latching
-    // block_has_pc_q at S_EXEC and gating force_user_bank_eff with it.
+    // is used"). STM ^ still transfers User-bank registers when r15 is
+    // present; the PC exception-return distinction applies only to LDM.
+    //
+    // ARMv4T marks the operand combinations below UNPREDICTABLE. Give all
+    // cases detectable before the first beat the repository-wide precise
+    // Undefined policy, including S forms executed in User/System mode.
+    wire block_static_undef =
+           (dec.instr_class == INSTR_LDM_STM)
+        && ((dec.block_reg_list == 16'h0000)
+         || (dec.rn == 4'd15)
+         || (dec.block_user_mode && dec.block_writeback
+          && (!dec.block_load || !dec.block_reg_list[15])));
+    wire block_mode_undef =
+           (dec.instr_class == INSTR_LDM_STM)
+        && dec.block_user_mode
+        && ((cpsr.m == MODE_USER) || (cpsr.m == MODE_SYSTEM));
+    wire block_policy_undef = block_static_undef || block_mode_undef;
+
     wire block_take_cycle = passes_cond
                           && (dec.instr_class == INSTR_LDM_STM)
-                          && (dec.block_reg_list != 16'h0);
+                          && !block_policy_undef;
 
     function automatic logic [4:0] popcount16(input logic [15:0] mask);
         logic [4:0] sum;
@@ -1124,7 +1140,9 @@ module arm7tdmis_core_pipelined
     wire bx_writes_pc       = passes_cond && instr_is_bx;
     wire swi_pending   = passes_cond && instr_is_swi;
     wire undef_pending = executing
-                       && ((condition_pass && instr_is_undef) || cond_is_nv
+                       && ((condition_pass
+                         && (instr_is_undef || block_policy_undef))
+                           || cond_is_nv
                            || cp_undef_trap);
     // A halt-mode watchpoint or DBGRQ has priority over an interrupt, but
     // §5.19.2 requires the core to remember the interrupt and enter debug
