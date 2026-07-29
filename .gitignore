@@ -21,6 +21,8 @@ __pycache__/
 /fpga/output_files/
 /fpga/conformance_output_files/
 /fpga/arm7tdmis_conformance.qpf
+/fpga/arm7tdmi_option_*.qpf
+/fpga/option_output/
 
 # Editor / OS
 .vscode/

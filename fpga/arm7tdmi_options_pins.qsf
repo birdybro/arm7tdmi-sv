@@ -1,0 +1,20 @@
+# Common virtual boundary for like-for-like option-cost characterization.
+# CLK alone uses a representative global-clock pin; all public integration
+# pins are virtual so package placement cannot distort the comparison.
+
+set_location_assignment PIN_V11 -to CLK
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to CLK
+
+foreach option_pin {
+    RESET_N CPU_CE IRQ_ASYNC FIQ_ASYNC
+    MEM_VALID MEM_READY {MEM_ADDR[*]} MEM_WRITE {MEM_WDATA[*]}
+    {MEM_BYTE_ENABLE[*]} MEM_CODE MEM_PRIVILEGED MEM_LOCK
+    MEM_SEQUENTIAL MEM_MORE {MEM_RDATA[*]} MEM_ERROR
+    CPnMREQ CPSEQ CPnTRANS CPnOPC CPTBIT CPnI CPA CPB
+    DEBUG_ENABLE_ASYNC DBGRQ_ASYNC DBGBREAK_ASYNC {DBGEXT_ASYNC[*]}
+    DBG_STEP_VALID DBG_STEP_READY DBG_STEP_TMS DBG_STEP_TDI
+    DBG_STEP_RSP_VALID DBG_STEP_RSP_READY DBG_STEP_TDO DBG_STEP_TDO_OE
+    DBGACK DBGnEXEC DBGINSTRVALID {DBGRNG[*]} DBGCOMMTX DBGCOMMRX
+} {
+    set_instance_assignment -name VIRTUAL_PIN ON -to $option_pin
+}

@@ -1,0 +1,13 @@
+set_global_assignment -name FAMILY "Cyclone V"
+set_global_assignment -name DEVICE 5CSEBA6U23I7
+set_global_assignment -name TOP_LEVEL_ENTITY arm7tdmi_mister
+set_global_assignment -name QIP_FILE arm7tdmi_mister.qip
+set_global_assignment -name SDC_FILE arm7tdmi_options.sdc
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY option_output/coprocessor
+set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
+set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
+set_parameter -name BIG_ENDIAN 0
+set_parameter -name ENABLE_DEBUG 0
+set_parameter -name ENABLE_COPROCESSOR 1
+source arm7tdmi_options_pins.qsf
+set_global_assignment -name LAST_QUARTUS_VERSION "17.0.2 Lite Edition"

@@ -1,7 +1,7 @@
 # FPGA performance and integration budget
 
 This is the checked version `0.9.0-dev` characterization, not a guarantee
-for an enclosing MiSTer project. Both profiles target Cyclone V
+for an enclosing MiSTer project. All profiles target Cyclone V
 `5CSEBA6U23I7` with Quartus Lite 17.0.2 and the supplied standalone
 constraints. A framework build must repeat fit, timing, and power analysis
 with its own clocks, placement, I/O, memory, and activity.
@@ -52,9 +52,34 @@ synthesis registers in the trimmed profile and 3,099 of 3,146 in the raw
 profile.
 
 The two rows are different integration surfaces and must not be subtracted
-to claim an isolated optional-feature cost. Independent fitted deltas for
-`ENABLE_DEBUG` and `ENABLE_COPROCESSOR` remain the last open
-characterization part of MIST-011.
+to claim an isolated optional-feature cost.
+
+## Optional-feature costs
+
+Four additional fits select the same `arm7tdmi_mister` top, device, source
+manifest, 25 MHz clock constraint, virtual boundary pins, and little-endian
+setting. Only `ENABLE_DEBUG` and `ENABLE_COPROCESSOR` vary:
+
+| Profile | Debug | Coprocessor | Fitted ALMs | Registers | CE registers | Memory bits | DSPs | Worst slow-model Fmax | Core dynamic power |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `none` | 0 | 0 | 3,565 | 2,501 | 2,109 | 0 | 6 | 27.31 MHz | 26.61 mW |
+| `debug` | 1 | 0 | 4,806 | 3,162 | 3,037 | 0 | 6 | 28.32 MHz | 37.04 mW |
+| `coprocessor` | 0 | 1 | 3,711 | 2,697 | 2,283 | 0 | 6 | 27.29 MHz | 30.34 mW |
+| `both` | 1 | 1 | 4,989 | 3,349 | 3,221 | 0 | 6 | 27.51 MHz | 36.48 mW |
+
+The isolated fitted deltas from `none` are:
+
+| Enabled option set | ALM delta | Register delta | Memory-bit delta | DSP delta | Fmax delta | Core-dynamic-power delta |
+|---|---:|---:|---:|---:|---:|---:|
+| `debug` | +1,241 | +661 | 0 | 0 | +1.01 MHz | +10.43 mW |
+| `coprocessor` | +146 | +196 | 0 | 0 | -0.02 MHz | +3.73 mW |
+| `both` | +1,424 | +848 | 0 | 0 | +0.20 MHz | +9.87 mW |
+
+Fitter variation means the combined delta need not equal the sum of the two
+single-option deltas, and a positive Fmax delta is not an architectural
+speedup. These are like-for-like implementation measurements, not an
+additive cost model. The machine-readable source is
+`reports/generated/quartus-options.json`.
 
 ## Power estimate
 
@@ -91,10 +116,13 @@ Run both complete checked flows from the repository root:
 ```sh
 make -C scripts quartus-compile
 make -C scripts quartus-conformance-compile
+make -C scripts quartus-option-characterization
 ```
 
-Each target runs synthesis, fit, assembly, four-corner TimeQuest, vectorless
-PowerPlay, and `scripts/quartus_report_check.py`. The checker fails on
-missing stages or images, unexpected top/device, resource-budget overruns,
-missing clock-enable/Fmax/power evidence, negative slack, unconstrained
-setup/hold paths, and unapproved critical warnings.
+Each target runs synthesis, fit, assembly, four-corner TimeQuest, and
+vectorless PowerPlay. The first two call `scripts/quartus_report_check.py`
+directly; the option target applies the same checker to all four fits through
+`scripts/quartus_option_characterization.py`. The checks fail on missing
+stages or images, unexpected top/device, resource-budget overruns, missing
+clock-enable/Fmax/power evidence, negative slack, unconstrained setup/hold
+paths, and unapproved critical warnings.

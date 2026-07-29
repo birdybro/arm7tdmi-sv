@@ -129,6 +129,7 @@ def collect_metadata(
                     "quartus-conformance-analysis",
                     "quartus-compile",
                     "quartus-conformance-compile",
+                    "quartus-option-characterization",
                 ]
                 if include_fpga
                 else []
@@ -239,6 +240,10 @@ def _phases(
             yield _make_phase("quartus-compile", "quartus-compile")
             yield _make_phase(
                 "quartus-conformance-compile", "quartus-conformance-compile"
+            )
+            yield _make_phase(
+                "quartus-option-characterization",
+                "quartus-option-characterization",
             )
     yield _make_phase("lint-testbench", "lint-tb")
     yield _make_phase("harness-unit", "harness-unit")

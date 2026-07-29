@@ -3228,14 +3228,17 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
 - [ ] **MIST-010:** Add a second, generic SoC integration example (ROM/RAM/timer/UART)
   so the API is not accidentally PocketStation-specific. Compile it with at least two
   supported open-source FPGA tool/simulator flows where practical.
-- [ ] **MIST-011:** Publish maximum CPU rate, master-clock/CE ratios, latency rules,
+- [x] **MIST-011:** Publish maximum CPU rate, master-clock/CE ratios, latency rules,
   resource budget, required memories/DSPs, reset duration, endian configuration, and
   optional-feature costs.
-  `docs/PERFORMANCE.md` now publishes every requested clock, latency,
-  resource, power, reset, and endian property from checked reports.
-  This remains open only because fitted debug-only and coprocessor-only
-  deltas have not yet been measured; the trimmed/full top difference is not
-  mislabeled as an isolated option cost.
+  `docs/PERFORMANCE.md` publishes every requested clock, latency, resource,
+  power, reset, and endian property from checked reports. Four like-for-like
+  `arm7tdmi_mister` fits isolate `none`, `debug`, `coprocessor`, and `both`
+  settings on the same device and constraints.
+  `scripts/quartus_option_characterization.py` validates the reports and emits
+  `reports/generated/quartus-options.json`; the mandatory regression phase and
+  `scripts/tests/test_option_characterization.py` freeze the configurations,
+  delta schema, documentation, and evidence path.
 - [x] **MIST-012:** Test coexistence with DMA/bus arbitration, including SWP LOCK,
   LDM/STM DMORE, stalls, and abort/error responses.
   `arm7tdmis_mister_dma_arbitration_tb` runs a real ARM program against a

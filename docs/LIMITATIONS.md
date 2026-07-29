@@ -9,8 +9,7 @@ and may be stricter than this summary.
 - No real MiSTer framework, PocketStation subsystem, copyrighted BIOS or
   software image, hardware run, or long system soak is included
   (MIST-007 through MIST-009, FPGA-002, and FPGA-007).
-- A second generic SoC integration and independently fitted debug/coprocessor
-  option-cost characterization remain open (MIST-010/011).
+- A second generic SoC integration remains open (MIST-010).
 - Real debugger interoperability has not been demonstrated (JTAG-006).
 - Independent differential comparison, constrained-random generation,
   third-party ARMv4T suites, complete cross/functional coverage, formal

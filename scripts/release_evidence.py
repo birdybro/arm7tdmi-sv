@@ -147,6 +147,12 @@ def _validated_files(
         for path in coverage_path.parent.rglob("*")
         if path.is_file()
     )
+    phase_names = {str(result.get("name")) for result in results}
+    option_report = REPORT_ROOT / "quartus-options.json"
+    if "quartus-option-characterization" in phase_names:
+        if not option_report.is_file():
+            raise ValueError("option characterization report is missing")
+        candidates.append(option_report.resolve())
     return sorted(set(candidates))
 
 

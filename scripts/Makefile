@@ -22,6 +22,8 @@ SIM_F     := sim.f
 TB_F      := tb.f
 FPGA_F    := ../fpga/arm7tdmi_mister.f
 FPGA_EXAMPLE := ../fpga/example/arm7tdmi_mister_example_top.sv
+OPTION_PROJECTS := arm7tdmi_option_none arm7tdmi_option_debug \
+	arm7tdmi_option_coprocessor arm7tdmi_option_both
 
 TOP_RTL   := arm7tdmis_top
 TOP_TB    := arm7tdmis_tb_top
@@ -73,6 +75,7 @@ INTEG_EXTRA_FLAGS_retire_interface := -DARM7TDMIS_VERIFICATION
 .PHONY: all lint lint-mister lint-example lint-tb \
         quartus-analysis quartus-compile \
         quartus-conformance-analysis quartus-conformance-compile \
+        quartus-option-characterization \
         sim run wave clean help regress regress-quick regress-ci \
         coverage release-evidence \
         harness-unit harness-self-test raw-checker-self-test mutation-self-test \
@@ -126,6 +129,18 @@ quartus-conformance-compile:
 	    --max-dsp 8 \
 	    --max-memory-bit 0 \
 	    ../fpga/conformance_output_files
+
+quartus-option-characterization:
+	@set -eu; \
+	for project in $(OPTION_PROJECTS); do \
+	    cd ../fpga; \
+	    $(QUARTUS_SH) --flow compile $$project; \
+	    $(QUARTUS_POW) $$project \
+	        --read_settings_files=on --write_settings_files=off \
+	        --use_vectorless_estimation=on; \
+	    cd ../scripts; \
+	done
+	PYTHONPATH=. $(PYTHON) quartus_option_characterization.py
 
 lint-tb:
 	$(VERILATOR) --lint-only $(VFLAGS_LINT) --top-module $(TOP_TB) -f $(SIM_F) -f $(TB_F)
@@ -311,6 +326,7 @@ help:
 	@echo "  quartus-compile Full Quartus synth/fit/timing/assembly/power flow"
 	@echo "  quartus-conformance-analysis Quartus analysis of the raw/full profile"
 	@echo "  quartus-conformance-compile Full Quartus/power raw/full profile"
+	@echo "  quartus-option-characterization Fit/power all four option profiles"
 	@echo "  lint-tb      Verilator --lint-only including the integration TB"
 	@echo "  sim          build the integration testbench binary"
 	@echo "  run          build and run; emits cycle.csv + waves.fst"
