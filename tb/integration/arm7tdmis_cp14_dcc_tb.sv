@@ -66,6 +66,7 @@ module arm7tdmis_cp14_dcc_tb
     logic [37:0] scan_ignored;
     logic [37:0] captured;
     logic [37:0] tx_response;
+    logic [37:0] empty_tx_response;
     logic [37:0] control_response;
 
     arm7tdmis_top u_dut (
@@ -210,7 +211,22 @@ module arm7tdmis_cp14_dcc_tb
                      CPU_TX_DATA, tx_response[31:0]);
             errors = errors + 1;
         end
+        if (tx_response[37:32] !== {1'b0, 5'b00101}) begin
+            $display("[cp14_dcc] FAIL full TX response header expected 05, got %02x",
+                     tx_response[37:32]);
+            errors = errors + 1;
+        end
         await_pin(1'b1, 1'b0, "DBGCOMMTX HIGH after host TX read");
+
+        // Rev-4 single-access optimization: with no pending TX, the same
+        // data-register read returns W=0 in address bit 0 (0010W).
+        chain2_request(1'b0, 5'h05, 32'h0, captured);
+        chain2_request(1'b0, 5'h04, 32'h0, empty_tx_response);
+        if (empty_tx_response[37:32] !== {1'b0, 5'b00100}) begin
+            $display("[cp14_dcc] FAIL empty TX response header expected 04, got %02x",
+                     empty_tx_response[37:32]);
+            errors = errors + 1;
+        end
 
         // Deposit one debugger-to-processor word. This sets R and the core
         // polling loop reads/consumes it.
@@ -240,6 +256,11 @@ module arm7tdmis_cp14_dcc_tb
                      DCC_IDLE_CTRL, control_response[31:0]);
             errors = errors + 1;
         end
+        if (control_response[37:32] !== {1'b0, 5'h04}) begin
+            $display("[cp14_dcc] FAIL JTAG control header expected 04, got %02x",
+                     control_response[37:32]);
+            errors = errors + 1;
+        end
 
         if (errors != 0)
             $fatal(1, "[cp14_dcc] FAIL (%0d errors)", errors);
@@ -255,7 +276,7 @@ module arm7tdmis_cp14_dcc_tb
     /* verilator lint_off UNUSEDSIGNAL */
     wire _unused = &{1'b0, CPnMREQ, CPSEQ, CPnTRANS, CPnOPC, CPTBIT, CPnI,
         DBGACK, DBGnEXEC, DBGINSTRVALID, DBGRNG, DBGnTDOEN, DMORE,
-        scan_ignored, captured, tx_response[37:32], control_response[37:32]};
+        scan_ignored, captured, empty_tx_response[31:0]};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule
