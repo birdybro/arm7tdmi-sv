@@ -478,6 +478,7 @@ module arm7tdmis_core_pipelined
     logic [31:0]  block_writeback_addr_q;
     logic [31:0]  block_base_value_q;
     logic [3:0]   block_rn_q;
+    logic [4:0]   block_mode_q;
 
     // §18 DP shift-by-reg: TRM Table 7-3 says these take 1S+1I = 2 cycles
     // because reading Rs for the shift amount adds an internal cycle.
@@ -619,7 +620,14 @@ module arm7tdmis_core_pipelined
                                  instr_is_mull_accum_decoder)        ? dec.rd
                               :                                        dec.rn;
 
-    wire [4:0] regfile_mode_eff = any_exc_fires ? exc_mode_target : cpsr.m;
+    // LDM ... {pc}^ restores CPSR on the final data beat, one cycle before
+    // the dedicated LDM base-writeback state. Retain the instruction's
+    // source mode so a banked r13/r14 base is updated in the exception
+    // bank rather than the newly restored destination bank.
+    wire [4:0] regfile_mode_eff =
+        any_exc_fires ? exc_mode_target
+        : (state_q == S_BLOCK_WB) ? block_mode_q
+                                  : cpsr.m;
 
     // LDM/STM with S=1 forces the user-bank registers for r8-r14
     // regardless of the current privileged mode (TRM §12.4). Only LDM
@@ -1729,6 +1737,13 @@ module arm7tdmis_core_pipelined
     // value isn't bus-stable in time) and block_writes_pc (LDM with PC).
     wire early_flush_fetch = writes_pc_exec && !any_exc_fires;
     wire early_flush_t = pc_exec_target_t;
+    // A data-processing exception return restores CPSR at the same edge
+    // that captures this fast-path address. Classify that target fetch
+    // using the restored mode, rather than the still-live handler mode.
+    // Branches, BX, and ordinary DP writes retain the current privilege.
+    wire early_flush_priv = dp_pc_restores_state
+                          ? mode_is_privileged(spsr_value.m)
+                          : mode_is_privileged(cpsr.m);
     wire block_pc_target_t = (block_ldm_pc_restore && spsr_valid)
                            ? spsr_value.t : cpsr.t;
     wire [31:0] ddata_pc_target =
@@ -1789,6 +1804,7 @@ module arm7tdmis_core_pipelined
                 block_writeback_addr_q <= 32'h0;
                 block_base_value_q     <= 32'h0;
                 block_rn_q             <= 4'h0;
+                block_mode_q           <= 5'h0;
                 swp_addr_q          <= 32'h0;
                 swp_store_q         <= 32'h0;
                 swp_loaded_q        <= 32'h0;
@@ -1916,6 +1932,7 @@ module arm7tdmis_core_pipelined
                     block_writeback_addr_q <= block_writeback_addr;
                     block_base_value_q     <= rf_ra_data;
                     block_rn_q             <= dec.rn;
+                    block_mode_q           <= cpsr.m;
                 end
 
                 if (state_q == S_BLOCK_DATA) begin
@@ -2376,7 +2393,7 @@ module arm7tdmis_core_pipelined
             ADDR  = flush_target_pc;
             TRANS = 2'(TRANS_N);
             SIZE  = early_flush_t ? 2'(SIZE_HALFWORD) : 2'(SIZE_WORD);
-            PROT  = {is_priv, 1'b0};
+            PROT  = {early_flush_priv, 1'b0};
             WRITE = WRITE_READ;
         end
 
