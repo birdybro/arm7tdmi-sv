@@ -2,7 +2,8 @@
 // workload against the immediately preceding address-class phase. An S-cycle
 // is legal only as an incrementing continuation of an active word/halfword
 // burst, as the committing half of a merged I-S cycle at the same address,
-// or as Table 7-16's explicit exception-vector S discontinuity.
+// as the S target of a Table 7-3/7-5/7-6 redirect, or as Table 7-16's
+// explicit exception-vector S discontinuity.
 
 module arm7tdmis_bus_burst_tb
     import arm7tdmis_bus_pkg::*;
@@ -41,6 +42,8 @@ module arm7tdmis_bus_burst_tb
     logic seen_data_to_code_n;
     logic seen_thumb_s;
     logic seen_illegal_s;
+    logic seen_redirect_s;
+    logic seen_bad_redirect;
     logic prev_exception_entry;
     logic [31:0] prev_exception_vector;
 
@@ -69,6 +72,17 @@ module arm7tdmis_bus_burst_tb
                            && (u_fixture.SIZE == SIZE_WORD)
                            && (u_fixture.PROT == PROT_OPC_PRIV)
                            && (u_fixture.LOCK == LOCK_FREE);
+    wire redirect_target_s =
+        u_fixture.u_dut.u_core.early_flush_fetch
+        && (u_fixture.ADDR
+            == u_fixture.u_dut.u_core.flush_target_pc)
+        && (u_fixture.WRITE == WRITE_READ)
+        && (u_fixture.SIZE
+            == (u_fixture.u_dut.u_core.early_flush_t
+                ? SIZE_HALFWORD : SIZE_WORD))
+        && (u_fixture.PROT
+            == {u_fixture.u_dut.u_core.early_flush_priv, 1'b0})
+        && (u_fixture.LOCK == LOCK_FREE);
 
     always_ff @(posedge CLK or negedge nRESET) begin
         if (!nRESET) begin
@@ -86,6 +100,8 @@ module arm7tdmis_bus_burst_tb
             seen_data_to_code_n <= 1'b0;
             seen_thumb_s       <= 1'b0;
             seen_illegal_s     <= 1'b0;
+            seen_redirect_s    <= 1'b0;
+            seen_bad_redirect  <= 1'b0;
             prev_exception_entry <= 1'b0;
             prev_exception_vector <= 32'h0;
         end else if (!u_fixture.u_dut.core_nreset) begin
@@ -106,7 +122,7 @@ module arm7tdmis_bus_burst_tb
                     if (merged_is)
                         seen_merged_is <= 1'b1;
                     if (!(active_continuation || merged_is
-                          || exception_vector_s)) begin
+                          || exception_vector_s || redirect_target_s)) begin
                         seen_illegal_s <= 1'b1;
                         $display("[bus_burst] illegal S: prev T/A/W/S/P/L=%b/%08x/%b/%b/%b/%b current=%b/%08x/%b/%b/%b/%b",
                                  prev_trans, prev_addr, prev_write, prev_size,
@@ -115,6 +131,13 @@ module arm7tdmis_bus_burst_tb
                                  u_fixture.SIZE, u_fixture.PROT,
                                  u_fixture.LOCK);
                     end
+                end
+
+                if (redirect_target_s) begin
+                    if (u_fixture.TRANS == TRANS_S)
+                        seen_redirect_s <= 1'b1;
+                    else
+                        seen_bad_redirect <= 1'b1;
                 end
 
                 if (prev_valid && active_prev
@@ -171,6 +194,10 @@ module arm7tdmis_bus_burst_tb
         end
         if (!seen_thumb_s) begin
             $display("[bus_burst] FAIL no sequential Thumb fetch observed");
+            errors = errors + 1;
+        end
+        if (!seen_redirect_s || seen_bad_redirect) begin
+            $display("[bus_burst] FAIL redirect target was not an explicit S cycle");
             errors = errors + 1;
         end
 
