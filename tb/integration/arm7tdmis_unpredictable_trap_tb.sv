@@ -13,7 +13,7 @@ module arm7tdmis_unpredictable_trap_tb
     import arm7tdmis_types_pkg::*;
 ;
 
-    localparam int CASE_COUNT = 18;
+    localparam int CASE_COUNT = 24;
     localparam logic [31:0] DATA_SENTINEL = 32'hCAFE_BABE;
 
     logic CLK;
@@ -112,7 +112,7 @@ module arm7tdmis_unpredictable_trap_tb
         u_mem.mem[33] = 32'hEAFF_FFFE;
         u_mem.mem[64] = DATA_SENTINEL;
 
-        thumb_case    = (case_id >= 13);
+        thumb_case    = (case_id >= 19);
         expected_lr   = thumb_case ? 32'h0000_0042 : 32'h0000_0030;
         expected_spsr = thumb_case ? 32'h0000_00F3 : 32'h0000_00D3;
         arm_opcode    = 32'hE7F0_00F0;
@@ -168,22 +168,46 @@ module arm7tdmis_unpredictable_trap_tb
                 arm_opcode = 32'hECAF_1104;
             end
             13: begin
+                label = "ARM MRS nonzero SBZ";
+                arm_opcode = 32'hE10F_1001;
+            end
+            14: begin
+                label = "ARM MSR register nonzero SBZ";
+                arm_opcode = 32'hE128_F801;
+            end
+            15: begin
+                label = "ARM MSR immediate invalid SBO";
+                arm_opcode = 32'hE328_E001;
+            end
+            16: begin
+                label = "ARM BX invalid SBO";
+                arm_opcode = 32'hE12F_FE11;
+            end
+            17: begin
+                label = "ARM SWP nonzero SBZ";
+                arm_opcode = 32'hE101_2193;
+            end
+            18: begin
+                label = "ARM LDRH register nonzero SBZ";
+                arm_opcode = 32'hE191_21B3;
+            end
+            19: begin
                 label = "Thumb high-ADD low/low operands";
                 thumb_opcode = 16'h4408;
             end
-            14: begin
+            20: begin
                 label = "Thumb high-CMP low/low operands";
                 thumb_opcode = 16'h4508;
             end
-            15: begin
+            21: begin
                 label = "Thumb high-MOV low/low operands";
                 thumb_opcode = 16'h4608;
             end
-            16: begin
+            22: begin
                 label = "Thumb high-CMP Rn=pc";
                 thumb_opcode = 16'h4587;
             end
-            17: begin
+            23: begin
                 label = "Thumb pre-v5 BLX-register spelling";
                 thumb_opcode = 16'h4780;
             end
@@ -256,7 +280,7 @@ module arm7tdmis_unpredictable_trap_tb
             fail(case_id, $sformatf("%s handler marker missing", label));
         if (u_mem.mem[64] !== DATA_SENTINEL)
             fail(case_id, $sformatf("%s changed memory", label));
-        if (data_cycles != (case_id >= 13 ? 1 : 0))
+        if (data_cycles != (case_id >= 19 ? 1 : 0))
             fail(case_id, $sformatf(
                 "%s issued unexpected data cycles (%0d)", label, data_cycles));
         if (cp_request_seen)

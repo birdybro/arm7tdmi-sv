@@ -89,12 +89,71 @@ module unpredictable_decode_tb
                 4'hF, 8'h00, rm};
     endfunction
 
+    function automatic logic [31:0] mrs_word(
+        input logic       spsr,
+        input logic [3:0] sbo,
+        input logic [3:0] rd,
+        input logic [3:0] sbz_hi,
+        input logic [3:0] sbz_lo
+    );
+        return {4'hE, 5'b00010, spsr, 2'b00, sbo, rd,
+                sbz_hi, 4'h0, sbz_lo};
+    endfunction
+
+    function automatic logic [31:0] msr_reg_fields_word(
+        input logic       spsr,
+        input logic [3:0] field_mask,
+        input logic [3:0] sbo,
+        input logic [3:0] sbz,
+        input logic [3:0] rm
+    );
+        return {4'hE, 5'b00010, spsr, 2'b10, field_mask,
+                sbo, sbz, 4'h0, rm};
+    endfunction
+
     function automatic logic [31:0] msr_imm_word(
         input logic       spsr,
         input logic [3:0] field_mask
     );
         return {4'hE, 5'b00110, spsr, 2'b10, field_mask,
                 4'hF, 4'h0, 8'h01};
+    endfunction
+
+    function automatic logic [31:0] msr_imm_fields_word(
+        input logic       spsr,
+        input logic [3:0] field_mask,
+        input logic [3:0] sbo
+    );
+        return {4'hE, 5'b00110, spsr, 2'b10, field_mask,
+                sbo, 4'h0, 8'h01};
+    endfunction
+
+    function automatic logic [31:0] bx_fields_word(
+        input logic [3:0] sbo_19_16,
+        input logic [3:0] sbo_15_12,
+        input logic [3:0] sbo_11_8
+    );
+        return {4'hE, 8'h12, sbo_19_16, sbo_15_12,
+                sbo_11_8, 4'h1, 4'd1};
+    endfunction
+
+    function automatic logic [31:0] swp_fields_word(
+        input logic       byte_access,
+        input logic [3:0] sbz
+    );
+        return {4'hE, 5'b00010, byte_access, 2'b00,
+                4'd1, 4'd2, sbz, 4'h9, 4'd3};
+    endfunction
+
+    function automatic logic [31:0] extra_reg_fields_word(
+        input logic       load,
+        input logic       signed_access,
+        input logic       halfword,
+        input logic [3:0] sbz
+    );
+        return {4'hE, 3'b000, 1'b1, 1'b1, 1'b0, 1'b0, load,
+                4'd1, 4'd2, sbz, 1'b1, signed_access,
+                halfword, 1'b1, 4'd3};
     endfunction
 
     function automatic logic [31:0] cp_ls_word(
@@ -235,6 +294,48 @@ module unpredictable_decode_tb
         expect_arm_trap(msr_reg_word(1'b0, 4'h8, 4'd15));
         expect_arm_trap(msr_reg_word(1'b1, 4'h8, 4'd15));
 
+        // Exhaust the non-decode SBZ/SBO fields in every ARMv4T
+        // miscellaneous instruction. Each field value is varied while
+        // every other field remains canonical, so no violation can hide
+        // behind a second malformed field.
+        for (int r = 0; r < 2; r++) begin
+            for (int field = 0; field < 15; field++) begin
+                expect_arm_trap(mrs_word(
+                    r[0], field[3:0], 4'd1, 4'h0, 4'h0));
+                expect_arm_trap(msr_reg_fields_word(
+                    r[0], 4'h8, field[3:0], 4'h0, 4'd1));
+                expect_arm_trap(msr_imm_fields_word(
+                    r[0], 4'h8, field[3:0]));
+            end
+            for (int sbz = 1; sbz < 256; sbz++)
+                expect_arm_trap(mrs_word(
+                    r[0], 4'hF, 4'd1, sbz[7:4], sbz[3:0]));
+            for (int sbz = 1; sbz < 16; sbz++)
+                expect_arm_trap(msr_reg_fields_word(
+                    r[0], 4'h8, 4'hF, sbz[3:0], 4'd1));
+        end
+
+        for (int field = 0; field < 15; field++) begin
+            expect_arm_trap(bx_fields_word(
+                field[3:0], 4'hF, 4'hF));
+            expect_arm_trap(bx_fields_word(
+                4'hF, field[3:0], 4'hF));
+            expect_arm_trap(bx_fields_word(
+                4'hF, 4'hF, field[3:0]));
+        end
+
+        for (int byte_access = 0; byte_access < 2; byte_access++)
+            for (int sbz = 1; sbz < 16; sbz++)
+                expect_arm_trap(swp_fields_word(
+                    byte_access[0], sbz[3:0]));
+
+        // Register-offset STRH/LDRH/LDRSB/LDRSH all share an SBZ nibble.
+        // Cover every nonzero value in every allocated form.
+        for (int form = 0; form < 4; form++)
+            for (int sbz = 1; sbz < 16; sbz++)
+                expect_arm_trap(extra_reg_fields_word(
+                    form != 0, form >= 2, (form != 2), sbz[3:0]));
+
         // Coprocessor offset/unindexed pc bases remain defined. Any W=1
         // form with Rn=pc is the statically unsafe writeback case.
         for (int p = 0; p < 2; p++)
@@ -279,8 +380,8 @@ module unpredictable_decode_tb
                 6'b010000, 4'b1101, reg_idx[2:0], reg_idx[2:0]},
                 INSTR_MUL);
 
-        if (arm_trap_rows != 301) begin
-            $display("FAIL [ARM policy row count]: expected 301 got %0d",
+        if (arm_trap_rows != 1066) begin
+            $display("FAIL [ARM policy row count]: expected 1066 got %0d",
                      arm_trap_rows);
             errors++;
         end
@@ -297,7 +398,7 @@ module unpredictable_decode_tb
 
         if (errors != 0)
             $fatal(1, "unpredictable_decode_tb: FAIL (%0d errors)", errors);
-        $display("unpredictable_decode_tb: PASS (301 ARM traps, 448 Thumb traps, 12 deterministic rows)");
+        $display("unpredictable_decode_tb: PASS (1066 ARM traps, 448 Thumb traps, 12 deterministic rows)");
         $finish;
     end
 
