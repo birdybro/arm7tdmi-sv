@@ -16,7 +16,7 @@ landed since that baseline: the ARM/Thumb, exception/abort, coprocessor/CP14,
 EmbeddedICE-RT, and ETM-facing directed requirements are checked; regressions fail
 hard and publish evidence; and both FPGA characterization profiles pass checked
 Quartus flows. Current open categories are the unchecked §31 items:
-framework/PocketStation integration, functional/formal validation,
+framework/PocketStation integration, formal validation,
 remaining FPGA/reproducibility/hardware work, and final release
 review/freezing. Consult each checkbox and its attached evidence before making
 a narrower claim.

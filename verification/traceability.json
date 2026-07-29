@@ -133,6 +133,11 @@
       "tests": ["verification/random_events.py", "tb/integration/arm7tdmis_random_event_matrix_tb.sv", "scripts/tests/test_random_event_contract.py"],
       "source_sections": ["ARM DDI 0234B external event sampling and TASKS.md section 31.10 VAL-005"]
     },
+    "VAL-006": {
+      "rtl": ["rtl/decode/", "rtl/core/", "rtl/top/arm7tdmis_top.sv"],
+      "tests": ["verification/functional_coverage.py", "verification/functional_coverage.json", "tb/unit/reserved_decode_tb.sv", "tb/unit/unpredictable_decode_tb.sv", "scripts/tests/test_functional_coverage_contract.py"],
+      "source_sections": ["ARM DDI 0100I ARMv4T encoding maps and TASKS.md section 31.10 VAL-006"]
+    },
     "VAL-009": {
       "rtl": ["rtl/core/", "rtl/top/arm7tdmis_top.sv"],
       "tests": ["verification/compiler/", "tb/integration/arm7tdmis_compiler_tb.sv"],
@@ -179,6 +184,9 @@
     {"glob": "verification/random_events.py", "requirements": ["VAL-005"]},
     {"glob": "tb/integration/arm7tdmis_random_event_matrix_tb.sv", "requirements": ["VAL-005"]},
     {"glob": "scripts/tests/test_random_event_contract.py", "requirements": ["VAL-005"]},
+    {"glob": "verification/functional_coverage.py", "requirements": ["VAL-006"]},
+    {"glob": "verification/functional_coverage.json", "requirements": ["VAL-006"]},
+    {"glob": "scripts/tests/test_functional_coverage_contract.py", "requirements": ["VAL-006"]},
     {"glob": "verification/compiler/*", "requirements": ["VAL-009"]},
     {"glob": "verification/intel_cyclonev_postfit_primitives.sv", "requirements": ["FPGA-006"]},
     {"glob": "tb/postfit/*.sv", "requirements": ["FPGA-006"]},

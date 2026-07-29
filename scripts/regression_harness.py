@@ -161,6 +161,7 @@ def collect_metadata(
             "integration": list(integration_tests),
             "public_suite": ["pinned-gba-suite-arm-thumb"],
             "cycle_cross": [],
+            "functional_coverage": [],
             "constrained_random": [],
             "random_events": [],
             "soak": [],
@@ -302,6 +303,7 @@ def _phases(
         yield _make_phase(f"integration-{test}", f"integ-{test}")
     if not quick:
         yield _make_phase("table7-cross", "table7-cross")
+        yield _make_phase("functional-coverage", "functional-coverage")
     yield _make_phase("public-suite", "public-suite")
     if quick:
         yield _make_phase(
@@ -379,6 +381,9 @@ def main() -> int:
     )
     report["manifest"]["cycle_cross"] = (
         [] if args.quick else ["chapter7-required-crosses"]
+    )
+    report["manifest"]["functional_coverage"] = (
+        [] if args.quick else ["armv4t-required-encoding-policy-bins"]
     )
     report["status"] = "running"
     report["results"] = []

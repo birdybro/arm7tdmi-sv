@@ -3405,9 +3405,28 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   the clean same-commit campaign; mutation tests reject reduced masks,
   shortened/duplicate seeds, stale evidence, missing logs, or a weakened
   decision floor.
-- [ ] **VAL-006:** Add functional coverage for every valid encoding family and every
+- [x] **VAL-006:** Add functional coverage for every valid encoding family and every
   specified exceptional/reserved path. Release has zero uncovered required bins; all
   exclusions cite specification text.
+  `verification/functional_coverage.json` defines 234 nonduplicated required
+  bins across every ARM class/condition/data-processing opcode/shifter/
+  multiply/PSR/branch/memory/block/swap/coprocessor family, all 19 Thumb
+  formats and their operation subfamilies, and the reserved plus selected
+  UNPREDICTABLE-policy paths. `functional_coverage.py` independently
+  enumerates all 4,096 ARM decode rows, all 4,096 `cond=1111` policy rows,
+  and all 65,536 Thumb halfwords. The already exhaustive
+  `reserved_decode_tb.sv` and `unpredictable_decode_tb.sv` prove the RTL
+  agrees over those complete domains (including 1,066 ARM and 448 Thumb
+  static-policy rows), while 13 execution matrices close condition,
+  reserved-execution, PC/SPSR, memory, block, swap, CP15, and Thumb BL policy
+  bins.
+  The full-regression aggregate accepts only hashed PASS logs and owning
+  sources from the same clean commit, reports zero uncovered bins, and is
+  independently revalidated for release. All three exclusions name their
+  ARM DDI/ARMv4T source and retain overlapping reserved or project-policy
+  behavior as required bins; mutation tests reject a removed group/bin,
+  shortened domain, missing phase, uncited exclusion, stale result, or
+  nonzero uncovered set.
 - [ ] **VAL-007:** Add formal properties for no ghost commits, condition suppression,
   mode/bank isolation, PC alignment, flag preservation, bus stability under CLKEN,
   one completion per request, LOCK lifetime, exception priority, abort suppression,

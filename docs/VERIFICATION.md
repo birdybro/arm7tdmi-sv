@@ -282,6 +282,35 @@ full regression and release archive require a clean same-commit 32-seed
 report. `test_random_event_contract.py` mutation-tests the masks, seed
 strength, decision floor, status, and provenance.
 
+## ARMv4T required-bin functional coverage
+
+`make -C scripts functional-coverage` is a full-regression aggregate rather
+than simulator line coverage. `functional_coverage.py` independently
+enumerates all 4,096 ARM `[27:20] × [7:4]` decode rows, all 4,096
+`cond=1111` policy rows, and every one of the 65,536 original Thumb
+halfwords. The complete-domain RTL comparisons in `reserved_decode_tb.sv`
+and `unpredictable_decode_tb.sv` must have passed in the same regression:
+they freeze all 16 ARM allocation totals, 60,416 non-reserved versus 5,120
+reserved Thumb words, 1,066 ARM static policy traps, 448 Thumb static policy
+traps, and 12 deliberately defined policy rows.
+
+`verification/functional_coverage.json` expands to 234 required bins. It
+names every ARM condition, data-processing opcode, shifter form, multiply,
+PSR transfer, branch, addressing/transfer, swap, and coprocessor family; all
+19 Thumb formats, 16 format-4 ALU operations, 14 conditions, and format
+subfamilies; plus reserved and selected UNPREDICTABLE-policy execution paths.
+Conditions, register-list semantics, and exceptional policies close only
+when their 13 directed execution phases also pass. Thus exhaustive static
+allocation cannot substitute for execution behavior, and a passing directed
+test cannot hide an omitted encoding family.
+
+Schema `arm7tdmis-functional-coverage-v1` records all domain totals, required
+and covered bin lists, zero uncovered bins, cited exclusions, exact evidence
+markers, and SHA-256 values for every owning log/source. Full regression and
+release evidence require a clean same-commit report.
+`test_functional_coverage_contract.py` independently mutates domains, groups,
+bins, evidence, exclusions, status, and provenance.
+
 ## Public ARMv4T suite
 
 `make -C scripts public-suite` fetches the MIT-licensed

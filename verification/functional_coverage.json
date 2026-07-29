@@ -1,0 +1,202 @@
+{
+  "schema": "arm7tdmis-functional-coverage-map-v1",
+  "model": "Required bins describe ARMv4T encoding families, not arbitrary Cartesian products of fields. The independent enumerator covers all 4,096 ARM decode-bit rows, all 4,096 cond=1111 policy rows, and all 65,536 Thumb halfwords; hashed exhaustive-decoder logs prove that the RTL agrees. Evidence-only bins cover conditions and implementation policies whose meaning is architectural execution rather than static allocation.",
+  "domains": {
+    "arm_decode_rows": 4096,
+    "arm_nv_rows": 4096,
+    "thumb_words": 65536,
+    "arm_static_policy_rows": 1066,
+    "thumb_static_policy_rows": 448
+  },
+  "required_bin_groups": [
+    {
+      "id": "arm.class",
+      "kind": "encoding-family",
+      "coverage": "enumerated",
+      "members": ["undef", "dp", "msr", "mrs", "mul", "mull", "branch", "bx", "ldr_str", "ldrh_strh", "ldm_stm", "swp", "swi", "cdp", "mcr_mrc", "ldc_stc"],
+      "citation": "ARM DDI 0100I section A3.16 ARM instruction set encoding",
+      "evidence": ["unit-reserved_decode"]
+    },
+    {
+      "id": "arm.condition",
+      "kind": "encoding-family",
+      "coverage": "evidence",
+      "members": ["eq", "ne", "cs", "cc", "mi", "pl", "vs", "vc", "hi", "ls", "ge", "lt", "gt", "le", "al"],
+      "citation": "ARM DDI 0100I section A3.2 condition field",
+      "evidence": ["integration-cond_fail_matrix", "unit-reserved_decode"]
+    },
+    {
+      "id": "arm.dp_opcode",
+      "kind": "encoding-family",
+      "coverage": "enumerated",
+      "members": ["and", "eor", "sub", "rsb", "add", "adc", "sbc", "rsc", "tst", "teq", "cmp", "cmn", "orr", "mov", "bic", "mvn"],
+      "citation": "ARM DDI 0100I section A3.3 data-processing instructions",
+      "evidence": ["unit-reserved_decode"]
+    },
+    {
+      "id": "arm.shifter",
+      "kind": "encoding-family",
+      "coverage": "enumerated",
+      "members": ["immediate_rotate", "lsl_immediate", "lsr_immediate", "asr_immediate", "ror_immediate", "rrx", "lsl_register", "lsr_register", "asr_register", "ror_register"],
+      "citation": "ARM DDI 0100I section A5.1 addressing mode 1",
+      "evidence": ["unit-reserved_decode"]
+    },
+    {
+      "id": "arm.multiply",
+      "kind": "encoding-family",
+      "coverage": "enumerated",
+      "members": ["mul", "mla", "umull", "umlal", "smull", "smlal"],
+      "citation": "ARM DDI 0100I sections A3.5 and A3.6 multiply encodings",
+      "evidence": ["unit-reserved_decode"]
+    },
+    {
+      "id": "arm.psr",
+      "kind": "encoding-family",
+      "coverage": "enumerated",
+      "members": ["mrs_cpsr", "mrs_spsr", "msr_register_cpsr", "msr_register_spsr", "msr_immediate_cpsr", "msr_immediate_spsr"],
+      "citation": "ARM DDI 0100I section A3.9 PSR transfer encodings",
+      "evidence": ["unit-reserved_decode"]
+    },
+    {
+      "id": "arm.branch",
+      "kind": "encoding-family",
+      "coverage": "enumerated",
+      "members": ["b", "bl", "bx"],
+      "citation": "ARM DDI 0100I sections A3.4 and A3.8 branch encodings",
+      "evidence": ["unit-reserved_decode"]
+    },
+    {
+      "id": "arm.single_transfer",
+      "kind": "encoding-family",
+      "coverage": "enumerated",
+      "members": ["ldr", "str", "ldrb", "strb", "immediate_offset", "register_offset", "pre_index", "post_index", "up", "down", "writeback", "no_writeback", "translated_load", "translated_store"],
+      "citation": "ARM DDI 0100I section A5.2 addressing mode 2",
+      "evidence": ["unit-reserved_decode"]
+    },
+    {
+      "id": "arm.extra_transfer",
+      "kind": "encoding-family",
+      "coverage": "enumerated",
+      "members": ["ldrh", "strh", "ldrsb", "ldrsh", "immediate_offset", "register_offset", "pre_index", "post_index", "up", "down", "writeback", "no_writeback"],
+      "citation": "ARM DDI 0100I section A5.3 addressing mode 3",
+      "evidence": ["unit-reserved_decode"]
+    },
+    {
+      "id": "arm.block_transfer",
+      "kind": "encoding-family",
+      "coverage": "enumerated",
+      "members": ["ldm", "stm", "ia", "ib", "da", "db", "writeback", "no_writeback"],
+      "citation": "ARM DDI 0100I section A5.4 addressing mode 4",
+      "evidence": ["unit-reserved_decode"]
+    },
+    {
+      "id": "arm.block_operands",
+      "kind": "encoding-family",
+      "coverage": "evidence",
+      "members": ["user_bank", "restore_cpsr", "pc_in_list", "pc_excluded"],
+      "citation": "ARM DDI 0100I section A5.4 addressing mode 4 S bit and register-list semantics",
+      "evidence": ["unit-reserved_decode", "integration-block_ls_policy"]
+    },
+    {
+      "id": "arm.swap",
+      "kind": "encoding-family",
+      "coverage": "enumerated",
+      "members": ["swp", "swpb"],
+      "citation": "ARM DDI 0100I section A3.12 swap encoding",
+      "evidence": ["unit-reserved_decode"]
+    },
+    {
+      "id": "arm.coprocessor",
+      "kind": "encoding-family",
+      "coverage": "enumerated",
+      "members": ["cdp", "mcr", "mrc", "ldc", "stc"],
+      "citation": "ARM DDI 0100I sections A3.13 through A3.15 coprocessor encodings",
+      "evidence": ["unit-reserved_decode"]
+    },
+    {
+      "id": "thumb.format",
+      "kind": "encoding-family",
+      "coverage": "enumerated",
+      "members": ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"],
+      "citation": "ARM DDI 0100I section A6 Thumb instruction set encoding formats 1 through 19",
+      "evidence": ["unit-reserved_decode"]
+    },
+    {
+      "id": "thumb.alu",
+      "kind": "encoding-family",
+      "coverage": "enumerated",
+      "members": ["and", "eor", "lsl", "lsr", "asr", "adc", "sbc", "ror", "tst", "neg", "cmp", "cmn", "orr", "mul", "bic", "mvn"],
+      "citation": "ARM DDI 0100I section A6.4 Thumb format 4 ALU operations",
+      "evidence": ["unit-reserved_decode"]
+    },
+    {
+      "id": "thumb.condition",
+      "kind": "encoding-family",
+      "coverage": "enumerated",
+      "members": ["eq", "ne", "cs", "cc", "mi", "pl", "vs", "vc", "hi", "ls", "ge", "lt", "gt", "le"],
+      "citation": "ARM DDI 0100I section A6.16 Thumb conditional branch",
+      "evidence": ["unit-reserved_decode"]
+    },
+    {
+      "id": "thumb.subfamily",
+      "kind": "encoding-family",
+      "coverage": "enumerated",
+      "members": ["fmt1_lsl", "fmt1_lsr", "fmt1_asr", "fmt2_add_register", "fmt2_sub_register", "fmt2_add_immediate", "fmt2_sub_immediate", "fmt3_mov", "fmt3_cmp", "fmt3_add", "fmt3_sub", "fmt5_add_high", "fmt5_cmp_high", "fmt5_mov_high", "fmt5_bx", "fmt6_ldr_literal", "fmt7_str", "fmt7_strb", "fmt7_ldr", "fmt7_ldrb", "fmt8_strh", "fmt8_ldrsb", "fmt8_ldrh", "fmt8_ldrsh", "fmt9_str", "fmt9_ldr", "fmt9_strb", "fmt9_ldrb", "fmt10_strh", "fmt10_ldrh", "fmt11_str_sp", "fmt11_ldr_sp", "fmt12_add_pc", "fmt12_add_sp", "fmt13_add_sp", "fmt13_sub_sp", "fmt14_push", "fmt14_push_lr", "fmt14_pop", "fmt14_pop_pc", "fmt15_stmia", "fmt15_ldmia", "fmt17_swi", "fmt18_b", "fmt19_bl_prefix", "fmt19_bl_suffix"],
+      "citation": "ARM DDI 0100I section A6 Thumb formats and operation subfields",
+      "evidence": ["unit-reserved_decode"]
+    },
+    {
+      "id": "exception.reserved",
+      "kind": "exceptional-reserved",
+      "coverage": "evidence",
+      "members": ["arm_decode_holes", "arm_nv_condition", "thumb_b1_b3", "thumb_b6_bb", "thumb_be_bf", "thumb_condition_e", "thumb_e8_ef", "cp15_internal", "illegal_cpsr_mode", "missing_spsr"],
+      "citation": "ARM DDI 0100I sections A3.16 and A6 reserved spaces; ARM DDI 0234B sections 2.8 and 4.1",
+      "evidence": ["unit-reserved_decode", "integration-reserved_execute", "integration-cp15_undef", "integration-invalid_spsr_return_policy"]
+    },
+    {
+      "id": "exception.policy",
+      "kind": "exceptional-reserved",
+      "coverage": "evidence",
+      "members": ["arm_static_fields", "thumb_format5_operands", "dp_pc_without_spsr", "invalid_spsr_return", "single_transfer_alias", "extra_transfer_alignment", "block_empty_list", "block_base_in_list", "swp_operands", "cp_ls_pc_writeback", "thumb_bl_orphan_prefix", "thumb_bl_orphan_suffix"],
+      "citation": "ARMv4T UNPREDICTABLE cases catalogued by ARM DDI 0100I instruction pseudocode and operand restrictions",
+      "evidence": ["unit-unpredictable_decode", "integration-unpredictable_runtime", "integration-unpredictable_trap", "integration-dp_pc_no_spsr_policy", "integration-single_ls_policy", "integration-extra_ls_matrix", "integration-block_ls_policy", "integration-swp_policy", "integration-thumb_bl_pair_policy", "integration-thumb_bl_boundary"]
+    }
+  ],
+  "exclusions": [
+    {
+      "id": "later_architecture_encodings",
+      "pattern": "ARMv5T and later BLX, BKPT, CLZ, saturating/media, and extended coprocessor encodings",
+      "citation": "ARM DDI 0100I architecture-version annotations; ARM7TDMI-S implements ARMv4T",
+      "rationale": "These are outside ARMv4T. Their overlapping ARM7 reserved spaces are required exception.reserved bins rather than valid-family bins."
+    },
+    {
+      "id": "unpredictable_architectural_result",
+      "pattern": "Architecturally UNPREDICTABLE operand and SBZ/SBO violations",
+      "citation": "ARM DDI 0100I instruction-specific UNPREDICTABLE clauses",
+      "rationale": "No portable result is required. Every repository-selected deterministic policy remains a required exception.policy bin."
+    },
+    {
+      "id": "illegal_coprocessor_handshake",
+      "pattern": "{CPA,CPB}=2'b10",
+      "citation": "ARM DDI 0234B section 4.4 coprocessor handshake state table",
+      "rationale": "The pair is not a legal coprocessor response and is excluded from functional encoding bins; legal handshakes are closed by VAL-005."
+    }
+  ],
+  "evidence": [
+    {"phase": "unit-reserved_decode", "source": "tb/unit/reserved_decode_tb.sv", "marker": "reserved_decode_tb: PASS \\(4096 ARM decode rows, 65536 Thumb words, 448 policy traps\\)"},
+    {"phase": "unit-unpredictable_decode", "source": "tb/unit/unpredictable_decode_tb.sv", "marker": "unpredictable_decode_tb: PASS \\(1066 ARM traps, 448 Thumb traps, 12 deterministic rows\\)"},
+    {"phase": "integration-cond_fail_matrix", "source": "tb/integration/arm7tdmis_cond_fail_matrix_tb.sv", "marker": "\\[cond_fail_matrix\\] PASS \\(2 modes x 14 conditions x 39 paths = 1092 rows\\)"},
+    {"phase": "integration-reserved_execute", "source": "tb/integration/arm7tdmis_reserved_execute_tb.sv", "marker": "\\[reserved_execute\\] PASS \\(12 reset-per-case rows\\)"},
+    {"phase": "integration-cp15_undef", "source": "tb/integration/arm7tdmis_cp15_undef_tb.sv", "marker": "\\[cp15_undef\\] PASS"},
+    {"phase": "integration-invalid_spsr_return_policy", "source": "tb/integration/arm7tdmis_invalid_spsr_return_policy_tb.sv", "marker": "\\[invalid_spsr_return_policy\\] PASS"},
+    {"phase": "integration-unpredictable_runtime", "source": "tb/integration/arm7tdmis_unpredictable_runtime_tb.sv", "marker": "\\[unpredictable_runtime\\] PASS \\(8 reset-per-case policies\\)"},
+    {"phase": "integration-unpredictable_trap", "source": "tb/integration/arm7tdmis_unpredictable_trap_tb.sv", "marker": "\\[unpredictable_trap\\] PASS \\(24 reset-per-case policies\\)"},
+    {"phase": "integration-dp_pc_no_spsr_policy", "source": "tb/integration/arm7tdmis_dp_pc_no_spsr_policy_tb.sv", "marker": "\\[dp_pc_no_spsr_policy\\] PASS \\(24 reset-per-case rows\\)"},
+    {"phase": "integration-single_ls_policy", "source": "tb/integration/arm7tdmis_single_ls_policy_tb.sv", "marker": "\\[single_ls_policy\\] PASS \\(26 reset-per-case rows\\)"},
+    {"phase": "integration-extra_ls_matrix", "source": "tb/integration/arm7tdmis_extra_ls_matrix_tb.sv", "marker": "\\[extra_ls_matrix\\] PASS \\(64 reset-per-case rows\\)"},
+    {"phase": "integration-block_ls_policy", "source": "tb/integration/arm7tdmis_block_ls_policy_tb.sv", "marker": "\\[block_ls_policy\\] PASS \\(21 reset-per-case rows\\)"},
+    {"phase": "integration-swp_policy", "source": "tb/integration/arm7tdmis_swp_policy_tb.sv", "marker": "\\[swp_policy\\] PASS \\(18 reset-per-case rows\\)"},
+    {"phase": "integration-thumb_bl_pair_policy", "source": "tb/integration/arm7tdmis_thumb_bl_pair_policy_tb.sv", "marker": "\\[thumb_bl_pair_policy\\] PASS \\(orphan-prefix policy\\)"},
+    {"phase": "integration-thumb_bl_boundary", "source": "tb/integration/arm7tdmis_thumb_bl_boundary_tb.sv", "marker": "\\[thumb_bl_boundary\\] PASS \\(IRQ, PABT, orphan suffix\\)"}
+  ]
+}

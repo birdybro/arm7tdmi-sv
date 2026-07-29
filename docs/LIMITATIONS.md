@@ -7,9 +7,9 @@ and may be stricter than this summary.
 - No real MiSTer framework, PocketStation subsystem, copyrighted BIOS or
   software image, hardware run, or long system soak is included
   (MIST-007 through MIST-009, FPGA-002, and FPGA-007).
-- Encoding-level required-bin functional coverage, formal proof, and
-  independent review remain open (VAL-006 through VAL-008 and VAL-011).
-  The 32-seed all-class randomized external-event campaign closes VAL-005.
+- Formal proof and independent review remain open (VAL-007, VAL-008, and
+  VAL-011). The 32-seed all-class randomized external-event campaign closes
+  VAL-005, and exhaustive 234-bin ARMv4T functional coverage closes VAL-006.
   Exact deterministic Chapter 7
   legal-equivalence cycle crosses close VAL-004; they do not substitute for
   those broader gates. The checked public ARM/Thumb exercisers close VAL-003,

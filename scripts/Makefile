@@ -137,7 +137,7 @@ INTEG_RUN_ARGS_compiler = \
         traceability random-validation-build random-validation \
         random-validation-quick random-events-build random-events \
         public-suite-build public-suite \
-        table7-cross \
+        table7-cross functional-coverage \
         soak-build soak \
         harness-unit harness-self-test raw-checker-self-test mutation-self-test \
         $(addprefix unit-, $(UNIT_TESTS)) unit \
@@ -323,6 +323,15 @@ table7-cross:
 	    --manifest verification/table7_cross.json \
 	    --regression reports/generated/regression.json \
 	    --output reports/generated/table7-cross-report.json
+
+# VAL-006 consumes the exhaustive decoder/policy phases from the current
+# clean full regression and closes the independently enumerated required bins.
+functional-coverage:
+	PYTHONPATH=../verification $(PYTHON) \
+	    ../verification/functional_coverage.py \
+	    --manifest verification/functional_coverage.json \
+	    --regression reports/generated/regression.json \
+	    --output reports/generated/functional-coverage-report.json
 
 # VAL-002 builds the scoreboards once, then generates fresh source/reference
 # images and executes every deterministic seed through both oracle lanes.
@@ -562,6 +571,7 @@ help:
 	@echo "  errata       run the complete 15-entry r4p3 errata evidence matrix"
 	@echo "  public-suite run pinned MIT ARM and Thumb instruction exercisers"
 	@echo "  table7-cross validate all required Chapter 7 cross evidence in a full regression"
+	@echo "  functional-coverage close all ARMv4T encoding/policy bins"
 	@echo "  random-validation run 32 x 256-instruction constrained-random seeds"
 	@echo "  random-events run 32 all-class external-event seeds"
 	@echo "  soak         run 256 deterministic sanitizer/X-propagation seeds"

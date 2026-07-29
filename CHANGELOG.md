@@ -37,6 +37,9 @@ sign-off gate in `TASKS.md` §31.13.
 - Add a 32-seed constrained-random external-event gate that stalls every
   normalized instruction class and closes legal ABORT, IRQ, FIQ, reset,
   DBGRQ, and coprocessor-response bins independently per seed.
+- Close 234 ARMv4T encoding, Thumb-format, reserved, and implementation-policy
+  bins using complete-domain enumeration plus hashed execution evidence, with
+  zero uncovered release bins and specification-cited exclusions.
 - Complete the remaining independent validation, formal, toolchain,
   MiSTer-framework, PocketStation, and hardware requirements in `TASKS.md`.
 - Freeze v1.0 only after every release-gate statement has durable evidence.

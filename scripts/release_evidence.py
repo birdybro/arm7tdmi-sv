@@ -65,6 +65,34 @@ RANDOM_EVENT_BINS = (
     "cp_busy",
     "cp_absent",
 )
+FUNCTIONAL_COVERAGE_GROUPS = {
+    "arm.class",
+    "arm.condition",
+    "arm.dp_opcode",
+    "arm.shifter",
+    "arm.multiply",
+    "arm.psr",
+    "arm.branch",
+    "arm.single_transfer",
+    "arm.extra_transfer",
+    "arm.block_transfer",
+    "arm.block_operands",
+    "arm.swap",
+    "arm.coprocessor",
+    "thumb.format",
+    "thumb.alu",
+    "thumb.condition",
+    "thumb.subfamily",
+    "exception.reserved",
+    "exception.policy",
+}
+FUNCTIONAL_COVERAGE_DOMAINS = {
+    "arm_decode_rows": 4096,
+    "arm_nv_rows": 4096,
+    "thumb_words": 65536,
+    "arm_static_policy_rows": 1066,
+    "thumb_static_policy_rows": 448,
+}
 
 
 def validate_evidence(
@@ -222,6 +250,173 @@ def validate_random_event_evidence(
     )
     if report.get("total_decision_count") != total_decisions:
         raise ValueError("random-event decision total is inconsistent")
+
+
+def _functional_required_bins(
+    manifest: dict[str, Any],
+) -> tuple[list[str], set[str]]:
+    if manifest.get("schema") != "arm7tdmis-functional-coverage-map-v1":
+        raise ValueError("functional-coverage manifest has wrong schema")
+    if manifest.get("domains") != FUNCTIONAL_COVERAGE_DOMAINS:
+        raise ValueError("functional-coverage domains were weakened")
+    groups = manifest.get("required_bin_groups")
+    if (
+        not isinstance(groups, list)
+        or any(not isinstance(group, dict) for group in groups)
+        or {group.get("id") for group in groups}
+        != FUNCTIONAL_COVERAGE_GROUPS
+    ):
+        raise ValueError("functional-coverage groups are incomplete")
+    evidence_entries = manifest.get("evidence")
+    if (
+        not isinstance(evidence_entries, list)
+        or any(not isinstance(entry, dict) for entry in evidence_entries)
+    ):
+        raise ValueError("functional-coverage evidence map is malformed")
+    evidence_phases = {entry.get("phase") for entry in evidence_entries}
+    if None in evidence_phases or len(evidence_phases) != len(
+        evidence_entries
+    ):
+        raise ValueError("functional-coverage evidence phases are ambiguous")
+
+    required: list[str] = []
+    for group in groups:
+        members = group.get("members")
+        if (
+            group.get("kind")
+            not in {"encoding-family", "exceptional-reserved"}
+            or group.get("coverage") not in {"enumerated", "evidence"}
+            or not isinstance(members, list)
+            or not members
+            or len(members) != len(set(members))
+            or not re.search(
+                r"(ARM DDI 0100|ARM DDI 0234|ARMv4T)",
+                str(group.get("citation", "")),
+            )
+            or not isinstance(group.get("evidence"), list)
+            or not group["evidence"]
+            or not set(group["evidence"]) <= evidence_phases
+        ):
+            raise ValueError(
+                f"functional-coverage group is malformed: {group.get('id')}"
+            )
+        required.extend(
+            f"{group['id']}.{member}" for member in members
+        )
+    if len(required) != 234 or len(required) != len(set(required)):
+        raise ValueError("functional-coverage required-bin count changed")
+
+    by_group = {
+        group["id"]: set(group["members"]) for group in groups
+    }
+    foundations = {
+        "arm.class": {
+            "undef",
+            "dp",
+            "msr",
+            "mrs",
+            "mul",
+            "mull",
+            "branch",
+            "bx",
+            "ldr_str",
+            "ldrh_strh",
+            "ldm_stm",
+            "swp",
+            "swi",
+            "cdp",
+            "mcr_mrc",
+            "ldc_stc",
+        },
+        "arm.dp_opcode": {
+            "and",
+            "eor",
+            "sub",
+            "rsb",
+            "add",
+            "adc",
+            "sbc",
+            "rsc",
+            "tst",
+            "teq",
+            "cmp",
+            "cmn",
+            "orr",
+            "mov",
+            "bic",
+            "mvn",
+        },
+        "thumb.format": {f"{number:02d}" for number in range(1, 20)},
+    }
+    if any(by_group.get(group) != values for group, values in foundations.items()):
+        raise ValueError("functional-coverage foundational bins changed")
+
+    exclusions = manifest.get("exclusions")
+    if not isinstance(exclusions, list) or not exclusions:
+        raise ValueError("functional-coverage exclusions are missing")
+    for exclusion in exclusions:
+        if (
+            not isinstance(exclusion, dict)
+            or not exclusion.get("id")
+            or not exclusion.get("pattern")
+            or not exclusion.get("rationale")
+            or not re.search(
+                r"(ARM DDI 0100|ARM DDI 0234|ARMv4T)",
+                str(exclusion.get("citation", "")),
+            )
+        ):
+            raise ValueError("functional-coverage exclusion is uncited")
+    return sorted(required), evidence_phases
+
+
+def validate_functional_coverage_evidence(
+    report: dict[str, Any],
+    manifest: dict[str, Any],
+    *,
+    expected_commit: str,
+) -> None:
+    """Reject stale or weakened VAL-006 required-bin closure."""
+    required, evidence_phases = _functional_required_bins(manifest)
+    if report.get("schema") != "arm7tdmis-functional-coverage-v1":
+        raise ValueError("functional-coverage report has wrong schema")
+    if report.get("status") != "passed":
+        raise ValueError("functional-coverage report is not passed")
+    if report.get("git", {}).get("dirty"):
+        raise ValueError(
+            "functional-coverage report describes a dirty source tree"
+        )
+    if report.get("git", {}).get("commit") != expected_commit:
+        raise ValueError(
+            "functional-coverage report commit does not match regression"
+        )
+
+    domains = report.get("domains")
+    expected_domains = {
+        name: {"expected": count, "observed": count}
+        for name, count in FUNCTIONAL_COVERAGE_DOMAINS.items()
+    }
+    if domains != expected_domains:
+        raise ValueError("functional-coverage exhaustive domains are incomplete")
+    if (
+        report.get("required_bin_count") != len(required)
+        or report.get("required_bins") != required
+        or report.get("covered_bin_count") != len(required)
+        or report.get("covered_bins") != required
+        or report.get("uncovered_bins") != []
+    ):
+        raise ValueError("functional-coverage required bins are incomplete")
+    if report.get("exclusions") != manifest.get("exclusions"):
+        raise ValueError("functional-coverage exclusions do not match")
+    evidence = report.get("evidence")
+    if (
+        not isinstance(evidence, dict)
+        or set(evidence) != evidence_phases
+        or any(
+            not isinstance(entry, dict) or entry.get("status") != "passed"
+            for entry in evidence.values()
+        )
+    ):
+        raise ValueError("functional-coverage evidence is incomplete")
 
 
 def validate_constrained_random_evidence(
@@ -737,6 +932,13 @@ def _validated_files(
         raise ValueError(
             "full regression is missing mandatory randomized-event evidence"
         )
+    if (
+        regression.get("mode") == "full"
+        and "functional-coverage" not in phase_names
+    ):
+        raise ValueError(
+            "full regression is missing mandatory functional coverage"
+        )
     traceability_report = REPORT_ROOT / "traceability-report.json"
     if "traceability" not in phase_names:
         raise ValueError("regression did not run mandatory traceability")
@@ -1092,6 +1294,94 @@ def _validated_files(
                 candidates.extend((log_path, source_path))
         candidates.extend(
             (cross_report_path.resolve(), cross_manifest_path.resolve())
+        )
+    if "functional-coverage" in phase_names:
+        functional_report_path = (
+            REPORT_ROOT / "functional-coverage-report.json"
+        )
+        functional_manifest_path = (
+            REPO_ROOT / "verification/functional_coverage.json"
+        )
+        if not functional_report_path.is_file():
+            raise ValueError("functional-coverage report is missing")
+        if not functional_manifest_path.is_file():
+            raise ValueError("functional-coverage manifest is missing")
+        functional_report = json.loads(
+            functional_report_path.read_text(encoding="utf-8")
+        )
+        functional_manifest = json.loads(
+            functional_manifest_path.read_text(encoding="utf-8")
+        )
+        validate_functional_coverage_evidence(
+            functional_report,
+            functional_manifest,
+            expected_commit=str(
+                regression.get("git", {}).get("commit", "")
+            ),
+        )
+        expected_inputs = {
+            "verification/functional_coverage.json",
+            "verification/functional_coverage.py",
+        }
+        inputs = functional_report.get("inputs")
+        if not isinstance(inputs, dict) or set(inputs) != expected_inputs:
+            raise ValueError(
+                "functional-coverage input manifest is incomplete"
+            )
+        for path_text, entry in inputs.items():
+            if not isinstance(entry, dict) or entry.get("path") != path_text:
+                raise ValueError(
+                    "functional-coverage input entry is malformed"
+                )
+            input_path = _repo_path(path_text)
+            if (
+                input_path.stat().st_size != entry.get("bytes")
+                or _sha256(input_path) != entry.get("sha256")
+            ):
+                raise ValueError("functional-coverage input hash mismatch")
+            candidates.append(input_path)
+
+        result_by_name = {
+            str(result.get("name")): result for result in results
+        }
+        for phase, evidence in functional_report["evidence"].items():
+            result = result_by_name.get(phase)
+            log_entry = evidence.get("log", {})
+            source_entry = evidence.get("source", {})
+            if (
+                result is None
+                or result.get("status") != "passed"
+                or result.get("exit_code") != 0
+                or result.get("log") != log_entry.get("path")
+                or result.get("log_sha256") != log_entry.get("sha256")
+            ):
+                raise ValueError(
+                    f"functional-coverage phase mismatch: {phase}"
+                )
+            log_path = _repo_path(str(log_entry.get("path", "")))
+            source_path = _repo_path(str(source_entry.get("path", "")))
+            if (
+                log_path.stat().st_size != log_entry.get("bytes")
+                or _sha256(log_path) != log_entry.get("sha256")
+                or source_path.stat().st_size != source_entry.get("bytes")
+                or _sha256(source_path) != source_entry.get("sha256")
+                or re.search(
+                    str(evidence.get("marker", "")),
+                    log_path.read_text(
+                        encoding="utf-8", errors="replace"
+                    ),
+                )
+                is None
+            ):
+                raise ValueError(
+                    f"functional-coverage evidence mismatch: {phase}"
+                )
+            candidates.extend((log_path, source_path))
+        candidates.extend(
+            (
+                functional_report_path.resolve(),
+                functional_manifest_path.resolve(),
+            )
         )
     quality_phases = {"lint-independent", "cdc-rdc"}
     present_quality_phases = quality_phases & phase_names
