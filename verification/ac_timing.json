@@ -25,9 +25,9 @@
     "tool": "Quartus Lite 17.0.2",
     "sdc": "fpga/arm7tdmis_conformance.sdc",
     "clock_port": "CLK",
-    "clock_period_ns": 40.0,
-    "clock_mhz": 25.0,
-    "input_translation": "max input delay = period - source setup fraction; min input delay = 0 ns for a source 0% maximum hold",
+    "clock_period_ns": 62.5,
+    "clock_mhz": 16.0,
+    "input_translation": "max input delay = negative source setup fraction relative to the rising capture edge; min input delay = 0.25 ns target clock-skew margin for a source 0% hold",
     "output_translation": "max output delay = period - source clock-to-valid fraction; min output delay = 0 ns and routed hold slack must remain positive for source >0% holds"
   },
   "figure_groups": [
@@ -70,7 +70,7 @@
       "source_max": "-",
       "figure": "8-1",
       "signals": ["CLK"],
-      "target_sdc": {"kind": "clock", "period_ns": 40.0, "ports": ["CLK"]}
+      "target_sdc": {"kind": "clock", "period_ns": 62.5, "ports": ["CLK"]}
     },
     {
       "symbol": "tisclken",
@@ -79,7 +79,7 @@
       "source_max": "-",
       "figure": "8-1",
       "signals": ["CLKEN"],
-      "target_sdc": {"kind": "input-max", "delay_ns": 24.0, "ports": ["CLKEN"]}
+      "target_sdc": {"kind": "input-max", "delay_ns": -25.0, "ports": ["CLKEN"]}
     },
     {
       "symbol": "tihclken",
@@ -88,7 +88,7 @@
       "source_max": "0%",
       "figure": "8-1",
       "signals": ["CLKEN"],
-      "target_sdc": {"kind": "input-min", "delay_ns": 0.0, "ports": ["CLKEN"]}
+      "target_sdc": {"kind": "input-min", "delay_ns": 0.25, "ports": ["CLKEN"]}
     },
     {
       "symbol": "tisabort",
@@ -97,7 +97,7 @@
       "source_max": "-",
       "figure": "8-1",
       "signals": ["ABORT"],
-      "target_sdc": {"kind": "input-max", "delay_ns": 34.0, "ports": ["ABORT"]}
+      "target_sdc": {"kind": "input-max", "delay_ns": -9.375, "ports": ["ABORT"]}
     },
     {
       "symbol": "tihabort",
@@ -106,7 +106,7 @@
       "source_max": "0%",
       "figure": "8-1",
       "signals": ["ABORT"],
-      "target_sdc": {"kind": "input-min", "delay_ns": 0.0, "ports": ["ABORT"]}
+      "target_sdc": {"kind": "input-min", "delay_ns": 0.25, "ports": ["ABORT"]}
     },
     {
       "symbol": "tisrdata",
@@ -115,7 +115,7 @@
       "source_max": "-",
       "figure": "8-1",
       "signals": ["RDATA[31:0]"],
-      "target_sdc": {"kind": "input-max", "delay_ns": 36.0, "ports": ["RDATA[*]"]}
+      "target_sdc": {"kind": "input-max", "delay_ns": -6.25, "ports": ["RDATA[*]"]}
     },
     {
       "symbol": "tihrdata",
@@ -124,7 +124,7 @@
       "source_max": "0%",
       "figure": "8-1",
       "signals": ["RDATA[31:0]"],
-      "target_sdc": {"kind": "input-min", "delay_ns": 0.0, "ports": ["RDATA[*]"]}
+      "target_sdc": {"kind": "input-min", "delay_ns": 0.25, "ports": ["RDATA[*]"]}
     },
     {
       "symbol": "tovaddr",
@@ -133,7 +133,7 @@
       "source_max": "90%",
       "figure": "8-1",
       "signals": ["ADDR[31:0]"],
-      "target_sdc": {"kind": "output-max", "delay_ns": 4.0, "ports": ["ADDR[*]"]}
+      "target_sdc": {"kind": "output-max", "delay_ns": 6.25, "ports": ["ADDR[*]"]}
     },
     {
       "symbol": "tohaddr",
@@ -151,7 +151,7 @@
       "source_max": "90%",
       "figure": "8-1",
       "signals": ["WRITE", "SIZE[1:0]", "PROT[1:0]", "LOCK"],
-      "target_sdc": {"kind": "output-max", "delay_ns": 4.0, "ports": ["WRITE", "SIZE[*]", "PROT[*]", "LOCK"]}
+      "target_sdc": {"kind": "output-max", "delay_ns": 6.25, "ports": ["WRITE", "SIZE[*]", "PROT[*]", "LOCK"]}
     },
     {
       "symbol": "tohctl",
@@ -169,7 +169,7 @@
       "source_max": "50%",
       "figure": "8-1",
       "signals": ["TRANS[1:0]"],
-      "target_sdc": {"kind": "output-max", "delay_ns": 20.0, "ports": ["TRANS[*]"]}
+      "target_sdc": {"kind": "output-max", "delay_ns": 31.25, "ports": ["TRANS[*]"]}
     },
     {
       "symbol": "tohtrans",
@@ -187,7 +187,7 @@
       "source_max": "40%",
       "figure": "8-1",
       "signals": ["WDATA[31:0]"],
-      "target_sdc": {"kind": "output-max", "delay_ns": 24.0, "ports": ["WDATA[*]"]}
+      "target_sdc": {"kind": "output-max", "delay_ns": 37.5, "ports": ["WDATA[*]"]}
     },
     {
       "symbol": "tohwdata",
@@ -205,7 +205,7 @@
       "source_max": "-",
       "figure": "8-2",
       "signals": ["CPA", "CPB"],
-      "target_sdc": {"kind": "input-max", "delay_ns": 32.0, "ports": ["CPA", "CPB"]}
+      "target_sdc": {"kind": "input-max", "delay_ns": -12.5, "ports": ["CPA", "CPB"]}
     },
     {
       "symbol": "tihcpstat",
@@ -214,7 +214,7 @@
       "source_max": "0%",
       "figure": "8-2",
       "signals": ["CPA", "CPB"],
-      "target_sdc": {"kind": "input-min", "delay_ns": 0.0, "ports": ["CPA", "CPB"]}
+      "target_sdc": {"kind": "input-min", "delay_ns": 0.25, "ports": ["CPA", "CPB"]}
     },
     {
       "symbol": "tovcpctl",
@@ -223,7 +223,7 @@
       "source_max": "80%",
       "figure": "8-2",
       "signals": ["CPnMREQ", "CPSEQ", "CPnOPC", "CPnTRANS", "CPTBIT"],
-      "target_sdc": {"kind": "output-max", "delay_ns": 8.0, "ports": ["CPnMREQ", "CPSEQ", "CPnOPC", "CPnTRANS", "CPTBIT"]}
+      "target_sdc": {"kind": "output-max", "delay_ns": 12.5, "ports": ["CPnMREQ", "CPSEQ", "CPnOPC", "CPnTRANS", "CPTBIT"]}
     },
     {
       "symbol": "tohcpctl",
@@ -241,7 +241,7 @@
       "source_max": "40%",
       "figure": "8-2",
       "signals": ["CPnI"],
-      "target_sdc": {"kind": "output-max", "delay_ns": 24.0, "ports": ["CPnI"]}
+      "target_sdc": {"kind": "output-max", "delay_ns": 37.5, "ports": ["CPnI"]}
     },
     {
       "symbol": "tohcpni",
@@ -259,7 +259,7 @@
       "source_max": "-",
       "figure": "8-3",
       "signals": ["nFIQ", "nIRQ", "nRESET"],
-      "target_sdc": {"kind": "input-max", "delay_ns": 36.0, "ports": ["nFIQ", "nIRQ"]},
+      "target_sdc": {"kind": "input-max", "delay_ns": -6.25, "ports": ["nFIQ", "nIRQ"]},
       "replaced_signals": [{"signal": "nRESET", "owner": "architectural asynchronous-assert/synchronous-release reset contract", "sdc_marker": "AC-OWN:reset"}]
     },
     {
@@ -269,7 +269,7 @@
       "source_max": "0%",
       "figure": "8-3",
       "signals": ["nFIQ", "nIRQ", "nRESET"],
-      "target_sdc": {"kind": "input-min", "delay_ns": 0.0, "ports": ["nFIQ", "nIRQ"]},
+      "target_sdc": {"kind": "input-min", "delay_ns": 0.25, "ports": ["nFIQ", "nIRQ"]},
       "replaced_signals": [{"signal": "nRESET", "owner": "architectural asynchronous-assert/synchronous-release reset contract", "sdc_marker": "AC-OWN:reset"}]
     },
     {
@@ -279,7 +279,7 @@
       "source_max": "-",
       "figure": "8-3",
       "signals": ["CFGBIGEND"],
-      "target_sdc": {"kind": "input-max", "delay_ns": 36.0, "ports": ["CFGBIGEND"]}
+      "target_sdc": {"kind": "input-max", "delay_ns": -6.25, "ports": ["CFGBIGEND"]}
     },
     {
       "symbol": "tihcfg",
@@ -288,7 +288,7 @@
       "source_max": "0%",
       "figure": "8-3",
       "signals": ["CFGBIGEND"],
-      "target_sdc": {"kind": "input-min", "delay_ns": 0.0, "ports": ["CFGBIGEND"]}
+      "target_sdc": {"kind": "input-min", "delay_ns": 0.25, "ports": ["CFGBIGEND"]}
     },
     {
       "symbol": "tisdbgstat",
@@ -298,7 +298,7 @@
       "figure": "8-4",
       "figure_symbol": "tisdbgctl",
       "signals": ["DBGRQ", "DBGBREAK", "DBGEXT[1:0]"],
-      "target_sdc": {"kind": "input-max", "delay_ns": 36.0, "ports": ["DBGRQ", "DBGBREAK", "DBGEXT[*]"]}
+      "target_sdc": {"kind": "input-max", "delay_ns": -6.25, "ports": ["DBGRQ", "DBGBREAK", "DBGEXT[*]"]}
     },
     {
       "symbol": "tihdbgstat",
@@ -308,7 +308,7 @@
       "figure": "8-4",
       "figure_symbol": "tihdbgctl",
       "signals": ["DBGRQ", "DBGBREAK", "DBGEXT[1:0]"],
-      "target_sdc": {"kind": "input-min", "delay_ns": 0.0, "ports": ["DBGRQ", "DBGBREAK", "DBGEXT[*]"]}
+      "target_sdc": {"kind": "input-min", "delay_ns": 0.25, "ports": ["DBGRQ", "DBGBREAK", "DBGEXT[*]"]}
     },
     {
       "symbol": "tovdbgctl",
@@ -318,7 +318,7 @@
       "figure": "8-4",
       "figure_symbol": "tovdbgstat",
       "signals": ["DBGACK", "DBGCOMMTX", "DBGCOMMRX"],
-      "target_sdc": {"kind": "output-max", "delay_ns": 24.0, "ports": ["DBGACK", "DBGCOMMTX", "DBGCOMMRX"]}
+      "target_sdc": {"kind": "output-max", "delay_ns": 37.5, "ports": ["DBGACK", "DBGCOMMTX", "DBGCOMMRX"]}
     },
     {
       "symbol": "tohdbctl",
@@ -337,7 +337,7 @@
       "source_max": "-",
       "figure": "8-5",
       "signals": ["DBGTCKEN"],
-      "target_sdc": {"kind": "input-max", "delay_ns": 24.0, "ports": ["DBGTCKEN"]}
+      "target_sdc": {"kind": "input-max", "delay_ns": -25.0, "ports": ["DBGTCKEN"]}
     },
     {
       "symbol": "tihtcken",
@@ -346,7 +346,7 @@
       "source_max": "0%",
       "figure": "8-5",
       "signals": ["DBGTCKEN"],
-      "target_sdc": {"kind": "input-min", "delay_ns": 0.0, "ports": ["DBGTCKEN"]}
+      "target_sdc": {"kind": "input-min", "delay_ns": 0.25, "ports": ["DBGTCKEN"]}
     },
     {
       "symbol": "tistctl",
@@ -355,7 +355,7 @@
       "source_max": "-",
       "figure": "8-5",
       "signals": ["DBGTDI", "DBGTMS"],
-      "target_sdc": {"kind": "input-max", "delay_ns": 26.0, "ports": ["DBGTDI", "DBGTMS"]}
+      "target_sdc": {"kind": "input-max", "delay_ns": -21.875, "ports": ["DBGTDI", "DBGTMS"]}
     },
     {
       "symbol": "tihtctl",
@@ -364,7 +364,7 @@
       "source_max": "0%",
       "figure": "8-5",
       "signals": ["DBGTDI", "DBGTMS"],
-      "target_sdc": {"kind": "input-min", "delay_ns": 0.0, "ports": ["DBGTDI", "DBGTMS"]}
+      "target_sdc": {"kind": "input-min", "delay_ns": 0.25, "ports": ["DBGTDI", "DBGTMS"]}
     },
     {
       "symbol": "tovtdo",
@@ -373,7 +373,7 @@
       "source_max": "20%",
       "figure": "8-5",
       "signals": ["DBGTDO"],
-      "target_sdc": {"kind": "output-max", "delay_ns": 32.0, "ports": ["DBGTDO"]}
+      "target_sdc": {"kind": "output-max", "delay_ns": 50.0, "ports": ["DBGTDO"]}
     },
     {
       "symbol": "tohtdo",
@@ -392,7 +392,7 @@
       "figure": "8-4",
       "figure_symbol": "tovdbgstat",
       "signals": ["DBGRNG[1:0]"],
-      "target_sdc": {"kind": "output-max", "delay_ns": 24.0, "ports": ["DBGRNG[*]"]}
+      "target_sdc": {"kind": "output-max", "delay_ns": 37.5, "ports": ["DBGRNG[*]"]}
     },
     {
       "symbol": "tohdbgstat",
@@ -409,7 +409,7 @@
     {
       "id": "clock",
       "signals": ["CLK"],
-      "disposition": "The containing FPGA design supplies the primary clock. This profile selects one 40 ns target and creates no generated or gated clock."
+      "disposition": "The containing FPGA design supplies the primary clock. This profile selects one 62.5 ns target and creates no generated or gated clock."
     },
     {
       "id": "reset",
@@ -433,9 +433,9 @@
     }
   ],
   "non_table_raw_ports": {
-    "inputs": {
+    "static": {
       "ports": ["DBGEN"],
-      "disposition": "Target-specific 0..5 ns synchronous input window; Table 8-1 defines no percentage."
+      "disposition": "Appendix A directs an integrator to tie DBGEN HIGH when debug is used and LOW otherwise. The raw profile false-paths this integration-owned static strap; Table 8-1 defines no cycle-level setup/hold percentage."
     },
     "outputs": {
       "ports": ["DBGnEXEC", "DBGINSTRVALID", "DBGnTDOEN", "DMORE"],

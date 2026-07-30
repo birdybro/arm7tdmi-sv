@@ -87,9 +87,9 @@ class AcTimingContractTest(unittest.TestCase):
             )
 
         weakened = self.sdc.replace(
-            "set_output_delay -clock CLK -max 20.000 "
+            "set_output_delay -clock CLK -max 31.250 "
             "[get_ports {TRANS[*]}]",
-            "set_output_delay -clock CLK -max 21.000 "
+            "set_output_delay -clock CLK -max 32.250 "
             "[get_ports {TRANS[*]}]",
             1,
         )
@@ -102,6 +102,16 @@ class AcTimingContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "DBGnTRST"):
             ac_timing.validate_contract(
                 self.contract, sdc_text=reset, verify_source=False
+            )
+
+        dbgen = self.sdc.replace(
+            "set_false_path -from [get_ports {DBGEN}]",
+            "",
+            1,
+        )
+        with self.assertRaisesRegex(ValueError, "DBGEN static"):
+            ac_timing.validate_contract(
+                self.contract, sdc_text=dbgen, verify_source=False
             )
 
     def test_report_regression_release_and_documentation_wiring(self) -> None:

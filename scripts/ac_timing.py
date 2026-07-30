@@ -38,11 +38,12 @@ TARGET_IDENTITY = {
     "tool": "Quartus Lite 17.0.2",
     "sdc": "fpga/arm7tdmis_conformance.sdc",
     "clock_port": "CLK",
-    "clock_period_ns": 40.0,
-    "clock_mhz": 25.0,
+    "clock_period_ns": 62.5,
+    "clock_mhz": 16.0,
     "input_translation": (
-        "max input delay = period - source setup fraction; min input delay "
-        "= 0 ns for a source 0% maximum hold"
+        "max input delay = negative source setup fraction relative to the "
+        "rising capture edge; min input delay = 0.25 ns target clock-skew "
+        "margin for a source 0% hold"
     ),
     "output_translation": (
         "max output delay = period - source clock-to-valid fraction; min "
@@ -55,88 +56,88 @@ TARGET_IDENTITY = {
 # SDC kind, target delay/period, SDC port collection.
 EXPECTED_ROWS = (
     ("tcyc", "CLK cycle time", "100%", "-", "8-1", ("CLK",),
-     "clock", 40.0, ("CLK",)),
+     "clock", 62.5, ("CLK",)),
     ("tisclken", "CLKEN input setup to rising CLK", "40%", "-", "8-1",
-     ("CLKEN",), "input-max", 24.0, ("CLKEN",)),
+     ("CLKEN",), "input-max", -25.0, ("CLKEN",)),
     ("tihclken", "CLKEN input hold from rising CLK", "-", "0%", "8-1",
-     ("CLKEN",), "input-min", 0.0, ("CLKEN",)),
+     ("CLKEN",), "input-min", 0.25, ("CLKEN",)),
     ("tisabort", "ABORT input setup to rising CLK", "15%", "-", "8-1",
-     ("ABORT",), "input-max", 34.0, ("ABORT",)),
+     ("ABORT",), "input-max", -9.375, ("ABORT",)),
     ("tihabort", "ABORT input hold from rising CLK", "-", "0%", "8-1",
-     ("ABORT",), "input-min", 0.0, ("ABORT",)),
+     ("ABORT",), "input-min", 0.25, ("ABORT",)),
     ("tisrdata", "RDATA input setup to rising CLK", "10%", "-", "8-1",
-     ("RDATA[31:0]",), "input-max", 36.0, ("RDATA[*]",)),
+     ("RDATA[31:0]",), "input-max", -6.25, ("RDATA[*]",)),
     ("tihrdata", "RDATA input hold from rising CLK", "-", "0%", "8-1",
-     ("RDATA[31:0]",), "input-min", 0.0, ("RDATA[*]",)),
+     ("RDATA[31:0]",), "input-min", 0.25, ("RDATA[*]",)),
     ("tovaddr", "Rising CLK to ADDR valid", "-", "90%", "8-1",
-     ("ADDR[31:0]",), "output-max", 4.0, ("ADDR[*]",)),
+     ("ADDR[31:0]",), "output-max", 6.25, ("ADDR[*]",)),
     ("tohaddr", "ADDR hold time from rising CLK", ">0%", "-", "8-1",
      ("ADDR[31:0]",), "output-min", 0.0, ("ADDR[*]",)),
     ("tovctl", "Rising CLK to control valid", "-", "90%", "8-1",
-     ("WRITE", "SIZE[1:0]", "PROT[1:0]", "LOCK"), "output-max", 4.0,
+     ("WRITE", "SIZE[1:0]", "PROT[1:0]", "LOCK"), "output-max", 6.25,
      ("WRITE", "SIZE[*]", "PROT[*]", "LOCK")),
     ("tohctl", "Control hold time from rising CLK", ">0%", "-", "8-1",
      ("WRITE", "SIZE[1:0]", "PROT[1:0]", "LOCK"), "output-min", 0.0,
      ("WRITE", "SIZE[*]", "PROT[*]", "LOCK")),
     ("tovtrans", "Rising CLK to transaction type valid", "-", "50%", "8-1",
-     ("TRANS[1:0]",), "output-max", 20.0, ("TRANS[*]",)),
+     ("TRANS[1:0]",), "output-max", 31.25, ("TRANS[*]",)),
     ("tohtrans", "Transaction type hold time from rising CLK", ">0%", "-",
      "8-1", ("TRANS[1:0]",), "output-min", 0.0, ("TRANS[*]",)),
     ("tovwdata", "Rising CLK to WDATA valid", "-", "40%", "8-1",
-     ("WDATA[31:0]",), "output-max", 24.0, ("WDATA[*]",)),
+     ("WDATA[31:0]",), "output-max", 37.5, ("WDATA[*]",)),
     ("tohwdata", "WDATA hold time from rising CLK", ">0%", "-", "8-1",
      ("WDATA[31:0]",), "output-min", 0.0, ("WDATA[*]",)),
     ("tiscpstat", "CPA, CPB input setup to rising CLK", "20%", "-", "8-2",
-     ("CPA", "CPB"), "input-max", 32.0, ("CPA", "CPB")),
+     ("CPA", "CPB"), "input-max", -12.5, ("CPA", "CPB")),
     ("tihcpstat", "CPA, CPB input hold from rising CLK", "-", "0%", "8-2",
-     ("CPA", "CPB"), "input-min", 0.0, ("CPA", "CPB")),
+     ("CPA", "CPB"), "input-min", 0.25, ("CPA", "CPB")),
     ("tovcpctl", "Rising CLK to coprocessor control valid", "-", "80%",
      "8-2", ("CPnMREQ", "CPSEQ", "CPnOPC", "CPnTRANS", "CPTBIT"),
-     "output-max", 8.0,
+     "output-max", 12.5,
      ("CPnMREQ", "CPSEQ", "CPnOPC", "CPnTRANS", "CPTBIT")),
     ("tohcpctl", "Coprocessor control hold time from rising CLK", ">0%", "-",
      "8-2", ("CPnMREQ", "CPSEQ", "CPnOPC", "CPnTRANS", "CPTBIT"),
      "output-min", 0.0,
      ("CPnMREQ", "CPSEQ", "CPnOPC", "CPnTRANS", "CPTBIT")),
     ("tovcpni", "Rising CLK to coprocessor CPnI valid", "-", "40%", "8-2",
-     ("CPnI",), "output-max", 24.0, ("CPnI",)),
+     ("CPnI",), "output-max", 37.5, ("CPnI",)),
     ("tohcpni", "Coprocessor CPnI hold time from rising CLK", ">0%", "-",
      "8-2", ("CPnI",), "output-min", 0.0, ("CPnI",)),
     ("tisexc", "nFIQ, nIRQ, nRESET setup to rising CLK", "10%", "-", "8-3",
-     ("nFIQ", "nIRQ", "nRESET"), "input-max", 36.0, ("nFIQ", "nIRQ")),
+     ("nFIQ", "nIRQ", "nRESET"), "input-max", -6.25, ("nFIQ", "nIRQ")),
     ("tihexc", "nFIQ, nIRQ, nRESET hold from rising CLK", "-", "0%", "8-3",
-     ("nFIQ", "nIRQ", "nRESET"), "input-min", 0.0, ("nFIQ", "nIRQ")),
+     ("nFIQ", "nIRQ", "nRESET"), "input-min", 0.25, ("nFIQ", "nIRQ")),
     ("tiscfg", "CFGBIGEND setup to rising CLK", "10%", "-", "8-3",
-     ("CFGBIGEND",), "input-max", 36.0, ("CFGBIGEND",)),
+     ("CFGBIGEND",), "input-max", -6.25, ("CFGBIGEND",)),
     ("tihcfg", "CFGBIGEND hold from rising CLK", "-", "0%", "8-3",
-     ("CFGBIGEND",), "input-min", 0.0, ("CFGBIGEND",)),
+     ("CFGBIGEND",), "input-min", 0.25, ("CFGBIGEND",)),
     ("tisdbgstat", "Debug status inputs setup to rising CLK", "10%", "-",
-     "8-4", ("DBGRQ", "DBGBREAK", "DBGEXT[1:0]"), "input-max", 36.0,
+     "8-4", ("DBGRQ", "DBGBREAK", "DBGEXT[1:0]"), "input-max", -6.25,
      ("DBGRQ", "DBGBREAK", "DBGEXT[*]")),
     ("tihdbgstat", "Debug status inputs hold from rising CLK", "-", "0%",
-     "8-4", ("DBGRQ", "DBGBREAK", "DBGEXT[1:0]"), "input-min", 0.0,
+     "8-4", ("DBGRQ", "DBGBREAK", "DBGEXT[1:0]"), "input-min", 0.25,
      ("DBGRQ", "DBGBREAK", "DBGEXT[*]")),
     ("tovdbgctl", "Rising CLK to debug control valid", "-", "40%", "8-4",
-     ("DBGACK", "DBGCOMMTX", "DBGCOMMRX"), "output-max", 24.0,
+     ("DBGACK", "DBGCOMMTX", "DBGCOMMRX"), "output-max", 37.5,
      ("DBGACK", "DBGCOMMTX", "DBGCOMMRX")),
     ("tohdbctl", "Debug control hold time from rising CLK", ">0%", "-", "8-4",
      ("DBGACK", "DBGCOMMTX", "DBGCOMMRX"), "output-min", 0.0,
      ("DBGACK", "DBGCOMMTX", "DBGCOMMRX")),
     ("tistcken", "DBGTCKEN input setup to rising CLK", "40%", "-", "8-5",
-     ("DBGTCKEN",), "input-max", 24.0, ("DBGTCKEN",)),
+     ("DBGTCKEN",), "input-max", -25.0, ("DBGTCKEN",)),
     ("tihtcken", "DBGTCKEN input hold from rising CLK", "-", "0%", "8-5",
-     ("DBGTCKEN",), "input-min", 0.0, ("DBGTCKEN",)),
+     ("DBGTCKEN",), "input-min", 0.25, ("DBGTCKEN",)),
     ("tistctl", "DBGTDI, DBGTMS input setup to rising CLK", "35%", "-", "8-5",
-     ("DBGTDI", "DBGTMS"), "input-max", 26.0, ("DBGTDI", "DBGTMS")),
+     ("DBGTDI", "DBGTMS"), "input-max", -21.875, ("DBGTDI", "DBGTMS")),
     ("tihtctl", "DBGTDI, DBGTMS input hold from rising CLK", "-", "0%",
-     "8-5", ("DBGTDI", "DBGTMS"), "input-min", 0.0,
+     "8-5", ("DBGTDI", "DBGTMS"), "input-min", 0.25,
      ("DBGTDI", "DBGTMS")),
     ("tovtdo", "Rising CLK to DBGTDO valid", "-", "20%", "8-5",
-     ("DBGTDO",), "output-max", 32.0, ("DBGTDO",)),
+     ("DBGTDO",), "output-max", 50.0, ("DBGTDO",)),
     ("tohtdo", "DBGTDO hold time from rising CLK", ">0%", "-", "8-5",
      ("DBGTDO",), "output-min", 0.0, ("DBGTDO",)),
     ("tovdbgstat", "Rising CLK to debug status valid", "-", "40%", "8-4",
-     ("DBGRNG[1:0]",), "output-max", 24.0, ("DBGRNG[*]",)),
+     ("DBGRNG[1:0]",), "output-max", 37.5, ("DBGRNG[*]",)),
     ("tohdbgstat", "Debug status hold time", ">0%", "-", "8-4",
      ("DBGRNG[1:0]",), "output-min", 0.0, ("DBGRNG[*]",)),
 )
@@ -173,7 +174,7 @@ EXPECTED_INTEGRATION_OWNERS = {
     "power": ("VDD", "VSS"),
 }
 EXPECTED_NON_TABLE_PORTS = {
-    "inputs": ("DBGEN",),
+    "static": ("DBGEN",),
     "outputs": ("DBGnEXEC", "DBGINSTRVALID", "DBGnTDOEN", "DMORE"),
     "asynchronous": ("DBGnTRST",),
 }
@@ -207,7 +208,7 @@ def _delay_constraints(text: str) -> dict[tuple[str, str, tuple[str, ...]], floa
     result: dict[tuple[str, str, tuple[str, ...]], float] = {}
     pattern = re.compile(
         r"^set_(input|output)_delay -clock CLK -(min|max) "
-        r"([0-9]+(?:\.[0-9]+)?) \[get_ports \{([^}]*)\}\]$"
+        r"(-?[0-9]+(?:\.[0-9]+)?) \[get_ports \{([^}]*)\}\]$"
     )
     for command in _commands(text):
         match = pattern.match(command)
@@ -397,7 +398,7 @@ def validate_contract(
             raise ValueError(f"SDC must contain exactly one {marker} marker")
         if kind == "clock":
             clock_pattern = re.compile(
-                r"create_clock -name CLK -period 40\.000 "
+                r"create_clock -name CLK -period 62\.500 "
                 r"\[get_ports \{CLK\}\]"
             )
             if not clock_pattern.search(sdc_text):
@@ -419,7 +420,9 @@ def validate_contract(
     for reset in ("nRESET", "DBGnTRST"):
         if reset not in false_paths:
             raise ValueError(f"asynchronous reset is not false-pathed: {reset}")
-    for marker in ("AC-NONTABLE:input", "AC-NONTABLE:output"):
+    if "DBGEN" not in false_paths:
+        raise ValueError("DBGEN static integration strap is not false-pathed")
+    for marker in ("AC-NONTABLE:static", "AC-NONTABLE:output"):
         if sdc_text.count(marker) != 1:
             raise ValueError(f"non-Table-8 target marker changed: {marker}")
 

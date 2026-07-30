@@ -15,18 +15,18 @@ The values are therefore provisional synthesized-macrocell/silicon targets,
 not immutable timing guarantees at arbitrary FPGA pins.
 
 The raw conformance profile makes one explicit target choice: Cyclone V
-`5CSEBA6U23I7`, Quartus Lite 17.0.2, 25 MHz, and a 40 ns `CLK`. For applicable
+`5CSEBA6U23I7`, Quartus Lite 17.0.2, 16 MHz, and a 62.5 ns `CLK`. For applicable
 synchronous inputs it uses:
 
 ```text
-max input delay = 40 ns - Table 8-1 setup fraction
-min input delay = 0 ns for a Table 8-1 0% maximum hold
+max input delay = negative Table 8-1 setup fraction, relative to capture edge
+min input delay = 0.25 ns target clock-skew margin for a Table 8-1 0% hold
 ```
 
 For applicable synchronous outputs it uses:
 
 ```text
-max output delay = 40 ns - Table 8-1 clock-to-valid fraction
+max output delay = 62.5 ns - Table 8-1 clock-to-valid fraction
 min output delay = 0 ns; the fitted design must report positive hold slack
 ```
 
@@ -35,55 +35,60 @@ port-to-register or register-to-port path. It is a checked target constraint,
 not a claim that the original percentage applies to every containing MiSTer
 core. A containing design must replace the virtual boundary with constraints
 for its real clocks, bridges, memories, pins, and receiver requirements.
+The full raw profile includes the combinational EmbeddedICE-RT range
+comparators and is deliberately characterized below the separate 25 MHz
+trimmed MiSTer profile; no extra architectural cycle is inserted merely to
+inflate the raw-profile timing number.
 
 ## Complete Table 8-1 mapping
 
 The source spelling is preserved, including `tohdbctl`.
 
-| Symbol | Source parameter | Min | Max | Figure / raw mapping | 25 MHz SDC disposition |
+| Symbol | Source parameter | Min | Max | Figure / raw mapping | 16 MHz SDC disposition |
 |---|---|---:|---:|---|---|
-| `tcyc` | CLK cycle time | 100% | – | primary `CLK` | 40.000 ns clock |
-| `tisclken` | CLKEN setup | 40% | – | Fig. 8-1 `CLKEN` | input max 24 ns |
-| `tihclken` | CLKEN hold | – | 0% | Fig. 8-1 `CLKEN` | input min 0 ns |
-| `tisabort` | ABORT setup | 15% | – | Fig. 8-1 `ABORT` | input max 34 ns |
-| `tihabort` | ABORT hold | – | 0% | Fig. 8-1 `ABORT` | input min 0 ns |
-| `tisrdata` | RDATA setup | 10% | – | Fig. 8-1 `RDATA[*]` | input max 36 ns |
-| `tihrdata` | RDATA hold | – | 0% | Fig. 8-1 `RDATA[*]` | input min 0 ns |
-| `tovaddr` | CLK to ADDR valid | – | 90% | Fig. 8-1 `ADDR[*]` | output max 4 ns |
+| `tcyc` | CLK cycle time | 100% | – | primary `CLK` | 62.500 ns clock |
+| `tisclken` | CLKEN setup | 40% | – | Fig. 8-1 `CLKEN` | input max −25 ns |
+| `tihclken` | CLKEN hold | – | 0% | Fig. 8-1 `CLKEN` | input min 0.25 ns |
+| `tisabort` | ABORT setup | 15% | – | Fig. 8-1 `ABORT` | input max −9.375 ns |
+| `tihabort` | ABORT hold | – | 0% | Fig. 8-1 `ABORT` | input min 0.25 ns |
+| `tisrdata` | RDATA setup | 10% | – | Fig. 8-1 `RDATA[*]` | input max −6.25 ns |
+| `tihrdata` | RDATA hold | – | 0% | Fig. 8-1 `RDATA[*]` | input min 0.25 ns |
+| `tovaddr` | CLK to ADDR valid | – | 90% | Fig. 8-1 `ADDR[*]` | output max 6.25 ns |
 | `tohaddr` | ADDR hold | >0% | – | Fig. 8-1 `ADDR[*]` | output min 0 ns + positive fitted hold slack |
-| `tovctl` | CLK to control valid | – | 90% | Fig. 8-1 / App. B.3 `WRITE`, `SIZE`, `PROT`, `LOCK` | output max 4 ns |
+| `tovctl` | CLK to control valid | – | 90% | Fig. 8-1 / App. B.3 `WRITE`, `SIZE`, `PROT`, `LOCK` | output max 6.25 ns |
 | `tohctl` | Control hold | >0% | – | same control group | output min 0 ns + positive fitted hold slack |
-| `tovtrans` | CLK to TRANS valid | – | 50% | Fig. 8-1 `TRANS[*]` | output max 20 ns |
+| `tovtrans` | CLK to TRANS valid | – | 50% | Fig. 8-1 `TRANS[*]` | output max 31.25 ns |
 | `tohtrans` | TRANS hold | >0% | – | Fig. 8-1 `TRANS[*]` | output min 0 ns + positive fitted hold slack |
-| `tovwdata` | CLK to WDATA valid | – | 40% | Fig. 8-1 `WDATA[*]` | output max 24 ns |
+| `tovwdata` | CLK to WDATA valid | – | 40% | Fig. 8-1 `WDATA[*]` | output max 37.5 ns |
 | `tohwdata` | WDATA hold | >0% | – | Fig. 8-1 `WDATA[*]` | output min 0 ns + positive fitted hold slack |
-| `tiscpstat` | CPA/CPB setup | 20% | – | Fig. 8-2 `CPA`, `CPB` | input max 32 ns |
-| `tihcpstat` | CPA/CPB hold | – | 0% | Fig. 8-2 `CPA`, `CPB` | input min 0 ns |
-| `tovcpctl` | CLK to coprocessor control valid | – | 80% | Fig. 8-2 `CPnMREQ`, `CPSEQ`, `CPnOPC`, `CPnTRANS`, `CPTBIT` | output max 8 ns |
+| `tiscpstat` | CPA/CPB setup | 20% | – | Fig. 8-2 `CPA`, `CPB` | input max −12.5 ns |
+| `tihcpstat` | CPA/CPB hold | – | 0% | Fig. 8-2 `CPA`, `CPB` | input min 0.25 ns |
+| `tovcpctl` | CLK to coprocessor control valid | – | 80% | Fig. 8-2 `CPnMREQ`, `CPSEQ`, `CPnOPC`, `CPnTRANS`, `CPTBIT` | output max 12.5 ns |
 | `tohcpctl` | Coprocessor control hold | >0% | – | same coprocessor group | output min 0 ns + positive fitted hold slack |
-| `tovcpni` | CLK to CPnI valid | – | 40% | Fig. 8-2 `CPnI` | output max 24 ns |
+| `tovcpni` | CLK to CPnI valid | – | 40% | Fig. 8-2 `CPnI` | output max 37.5 ns |
 | `tohcpni` | CPnI hold | >0% | – | Fig. 8-2 `CPnI` | output min 0 ns + positive fitted hold slack |
-| `tisexc` | nFIQ/nIRQ/nRESET setup | 10% | – | Fig. 8-3 `nFIQ`, `nIRQ`; reset replacement below | input max 36 ns |
-| `tihexc` | nFIQ/nIRQ/nRESET hold | – | 0% | Fig. 8-3 `nFIQ`, `nIRQ`; reset replacement below | input min 0 ns |
-| `tiscfg` | CFGBIGEND setup | 10% | – | Fig. 8-3 `CFGBIGEND` | input max 36 ns |
-| `tihcfg` | CFGBIGEND hold | – | 0% | Fig. 8-3 `CFGBIGEND` | input min 0 ns |
-| `tisdbgstat` | Debug-status inputs setup | 10% | – | Fig. 8-4 `DBGRQ`, `DBGBREAK`, `DBGEXT[*]` | input max 36 ns |
-| `tihdbgstat` | Debug-status inputs hold | – | 0% | same debug-input group | input min 0 ns |
-| `tovdbgctl` | CLK to debug-control valid | – | 40% | Fig. 8-4 `DBGACK`, `DBGCOMMTX`, `DBGCOMMRX` | output max 24 ns |
+| `tisexc` | nFIQ/nIRQ/nRESET setup | 10% | – | Fig. 8-3 `nFIQ`, `nIRQ`; reset replacement below | input max −6.25 ns |
+| `tihexc` | nFIQ/nIRQ/nRESET hold | – | 0% | Fig. 8-3 `nFIQ`, `nIRQ`; reset replacement below | input min 0.25 ns |
+| `tiscfg` | CFGBIGEND setup | 10% | – | Fig. 8-3 `CFGBIGEND` | input max −6.25 ns |
+| `tihcfg` | CFGBIGEND hold | – | 0% | Fig. 8-3 `CFGBIGEND` | input min 0.25 ns |
+| `tisdbgstat` | Debug-status inputs setup | 10% | – | Fig. 8-4 `DBGRQ`, `DBGBREAK`, `DBGEXT[*]` | input max −6.25 ns |
+| `tihdbgstat` | Debug-status inputs hold | – | 0% | same debug-input group | input min 0.25 ns |
+| `tovdbgctl` | CLK to debug-control valid | – | 40% | Fig. 8-4 `DBGACK`, `DBGCOMMTX`, `DBGCOMMRX` | output max 37.5 ns |
 | `tohdbctl` | Debug-control hold | >0% | – | same first debug-output group | output min 0 ns + positive fitted hold slack |
-| `tistcken` | DBGTCKEN setup | 40% | – | Fig. 8-5 `DBGTCKEN` | input max 24 ns |
-| `tihtcken` | DBGTCKEN hold | – | 0% | Fig. 8-5 `DBGTCKEN` | input min 0 ns |
-| `tistctl` | DBGTDI/DBGTMS setup | 35% | – | Fig. 8-5 `DBGTDI`, `DBGTMS` | input max 26 ns |
-| `tihtctl` | DBGTDI/DBGTMS hold | – | 0% | same scan-control group | input min 0 ns |
-| `tovtdo` | CLK to DBGTDO valid | – | 20% | Fig. 8-5 `DBGTDO` | output max 32 ns |
+| `tistcken` | DBGTCKEN setup | 40% | – | Fig. 8-5 `DBGTCKEN` | input max −25 ns |
+| `tihtcken` | DBGTCKEN hold | – | 0% | Fig. 8-5 `DBGTCKEN` | input min 0.25 ns |
+| `tistctl` | DBGTDI/DBGTMS setup | 35% | – | Fig. 8-5 `DBGTDI`, `DBGTMS` | input max −21.875 ns |
+| `tihtctl` | DBGTDI/DBGTMS hold | – | 0% | same scan-control group | input min 0.25 ns |
+| `tovtdo` | CLK to DBGTDO valid | – | 20% | Fig. 8-5 `DBGTDO` | output max 50 ns |
 | `tohtdo` | DBGTDO hold | >0% | – | Fig. 8-5 `DBGTDO` | output min 0 ns + positive fitted hold slack |
-| `tovdbgstat` | CLK to debug-status valid | – | 40% | Fig. 8-4 `DBGRNG[*]` | output max 24 ns |
+| `tovdbgstat` | CLK to debug-status valid | – | 40% | Fig. 8-4 `DBGRNG[*]` | output max 37.5 ns |
 | `tohdbgstat` | Debug-status hold | >0% | – | Fig. 8-4 `DBGRNG[*]` | output min 0 ns + positive fitted hold slack |
 
 Table 8-1 says that a displayed 0% includes hold to the active edge plus
 maximum internal clock-buffer skew. The FPGA translation therefore does not
-advertise “zero physical delay”; it supplies a portable zero external-hold
-boundary and relies on fail-hard fitted hold analysis to prove positive slack.
+advertise “zero physical delay”: source 0% input rows receive a 0.25 ns
+target clock-skew margin, while source >0% output rows use a 0 ns external
+boundary and rely on fail-hard fitted hold analysis to prove positive slack.
 
 ## Figure 8-4 naming conflict
 
@@ -111,7 +116,9 @@ weaken either group.
   insertion signals. The FPGA profile excludes them and supplies
   `arm7tdmis_no_dft` only as an explicit compatibility tie-off.
 - Power: `VDD` and `VSS` are FPGA-device/board rails, not RTL timing ports.
-- Non-table raw ports: `DBGEN` retains a target-specific 0–5 ns input window;
+- Non-table raw ports: Appendix A defines `DBGEN` as a static tie HIGH when
+  debug is used or LOW otherwise, so the raw profile false-paths this
+  integration-owned strap rather than inventing cycle-level timing.
   `DBGnEXEC`, `DBGINSTRVALID`, `DBGnTDOEN`, and `DMORE` retain a
   target-specific 0–5 ns output window. No ARM percentage is invented for
   signals absent from Table 8-1.
