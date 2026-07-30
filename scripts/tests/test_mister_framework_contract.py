@@ -111,6 +111,7 @@ class MisterFrameworkContractTest(unittest.TestCase):
         self.assertIn("derive_pll_clocks", sdc)
         self.assertIn("derive_clock_uncertainty", sdc)
         self.assertIn("TIMEQUEST_MULTICORNER_ANALYSIS ON", qip)
+        self.assertNotIn("$::quartus(qip_path)", qip)
 
     def test_report_parser_requires_fit_timing_constraints_and_bitstream(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

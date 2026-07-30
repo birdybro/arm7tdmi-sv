@@ -149,7 +149,7 @@ def local_inputs() -> list[pathlib.Path]:
 def _qip_line(relative: pathlib.PurePath) -> str:
     return (
         "set_global_assignment -name SYSTEMVERILOG_FILE "
-        f'[file join $::quartus(qip_path) "{relative.as_posix()}"]'
+        f'"{relative.as_posix()}"'
     )
 
 
@@ -183,10 +183,7 @@ def install_overlay(framework_root: pathlib.Path) -> dict[str, str]:
     qip_lines.extend(
         (
             _qip_line(pathlib.PurePosixPath("Template.sv")),
-            (
-                "set_global_assignment -name SDC_FILE "
-                '[file join $::quartus(qip_path) "Template.sdc"]'
-            ),
+            'set_global_assignment -name SDC_FILE "Template.sdc"',
             "",
         )
     )
