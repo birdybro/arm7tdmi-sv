@@ -142,7 +142,7 @@ layers these constraints on the framework's own SDC:
   non-clocked board/status outputs, with no catch-all port wildcard.
 
 A clean Quartus Lite 17.0.2 four-corner fit at fitter seed 4 reports
-+0.312 ns minimum setup and +0.075 ns minimum hold slack. All five TimeQuest
++0.031 ns minimum setup and +0.060 ns minimum hold slack. All five TimeQuest
 unconstrained categories—clocks, input ports, input-port paths, output ports,
 and output-port paths—are zero for setup and hold. The checked parser permits
 only the four exact optional-filter diagnostics already present in the pinned

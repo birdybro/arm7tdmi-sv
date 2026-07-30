@@ -3297,12 +3297,12 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   `make -C scripts mister-framework` invokes
   `quartus_sh --flow compile Template` with Quartus Lite 17.0.2, top
   `sys_top`, device `5CSEBA6U23I7`, exact 12.500 MHz core clock, and pinned
-  fitter seed 4. The checked fit uses 14,001 ALMs, 21,480 registers,
-  384,521 memory bits, 39 DSP blocks, and three PLLs; four-corner TimeQuest
-  reports +0.312 ns minimum setup, +0.075 ns minimum hold, and zero in every
-  unconstrained setup/hold category. The 2,665,604-byte `Template.rbf` has
+  fitter seed 4. The checked fit uses 14,188 ALMs, 21,415 registers,
+  384,488 memory bits, 39 DSP blocks, and three PLLs; four-corner TimeQuest
+  reports +0.031 ns minimum setup, +0.060 ns minimum hold, and zero in every
+  unconstrained setup/hold category. The 2,665,704-byte `Template.rbf` has
   SHA-256
-  `b071a4bcff9779bc8b6973e55fff0cc4297ab88806855865cf6cf931ffd0429b`.
+  `9405e30c869cd9190603f71434e20093ba584a535b5a61792b3a2602f874068a`.
   Schema `arm7tdmis-mister-framework-v1` records the exact source commit,
   source hash, upstream identity, tool, command, timing/resources, reviewed
   upstream constraint diagnostics, and hashes the build log, map/fit/STA/
@@ -3592,7 +3592,7 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   ADV7513 video and audio setup/hold requirements. It enumerates each genuinely
   asynchronous open-drain/status input and each non-clocked board/status output
   instead of using a wildcard waiver. The clean Quartus Lite 17.0.2 four-corner
-  fit at fitter seed 4 reports +0.312 ns minimum setup and +0.075 ns minimum
+  fit at fitter seed 4 reports +0.031 ns minimum setup and +0.060 ns minimum
   hold slack, with zero unconstrained clocks, input ports, input-port paths,
   output ports, and output-port paths. `scripts/mister_framework_build.py`
   rejects a wrong core clock hierarchy/frequency, wrong seed, negative slack,
