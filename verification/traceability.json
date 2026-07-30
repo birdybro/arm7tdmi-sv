@@ -114,8 +114,8 @@
       "source_sections": ["ARM DDI 0234B Chapter 8, Table 8-1, Figures 8-1 through 8-5, and Appendix B.3"]
     },
     "MIST-007": {
-      "rtl": ["rtl/top/arm7tdmi_mister.sv", "fpga/"],
-      "tests": ["OPEN - real MiSTer framework build evidence required"],
+      "rtl": ["rtl/top/arm7tdmi_mister.sv", "examples/mister_framework/arm7tdmi_mister_emu.sv"],
+      "tests": ["scripts/mister_framework_build.py", "scripts/tests/test_mister_framework_contract.py"],
       "source_sections": ["TASKS.md section 31.9 MIST-007"]
     },
     "MIST-008": {
@@ -209,6 +209,9 @@
     {"glob": "verification/public_suite.py", "requirements": ["VAL-003"]},
     {"glob": "tb/integration/arm7tdmis_public_suite_tb.sv", "requirements": ["VAL-003"]},
     {"glob": "verification/table7_cross.py", "requirements": ["VAL-004"]},
+    {"glob": "scripts/mister_framework_build.py", "requirements": ["MIST-007", "FPGA-002"]},
+    {"glob": "scripts/tests/test_mister_framework_contract.py", "requirements": ["MIST-007", "FPGA-002"]},
+    {"glob": "examples/mister_framework/*", "requirements": ["MIST-007", "FPGA-002"]},
     {"glob": "tb/integration/arm7tdmis_table7_core_phase_matrix_tb.sv", "requirements": ["VAL-004", "BUS-002", "BUS-003"]},
     {"glob": "scripts/tests/test_table7_cross_*.py", "requirements": ["VAL-004"]},
     {"glob": "verification/random_events.py", "requirements": ["VAL-005"]},

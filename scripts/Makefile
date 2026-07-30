@@ -61,6 +61,8 @@ AC_TIMING_REPORT := ../reports/generated/ac-timing-report.json
 INDEPENDENT_LINT_REPORT := ../reports/generated/independent-lint.json
 CDC_RDC_REPORT := ../reports/generated/cdc-rdc.json
 POSTFIT_REPORT := ../reports/generated/postfit-report.json
+MISTER_FRAMEWORK_REPORT := ../reports/generated/mister-framework-report.json
+MISTER_FRAMEWORK_ARTIFACT_DIR := ../reports/generated/mister-framework
 RANDOM_SEEDS ?= 32
 RANDOM_INSTRUCTIONS ?= 256
 RANDOM_OBJ_DIR := $(OBJ_DIR)/constrained_random
@@ -139,7 +141,7 @@ INTEG_RUN_ARGS_compiler = \
         cdc-rdc fpga-quality sim-generic-soc lint-tb \
         quartus-analysis quartus-compile \
         quartus-conformance-analysis quartus-conformance-compile \
-        quartus-option-characterization postfit-sim \
+        quartus-option-characterization postfit-sim mister-framework \
         sim run wave clean help regress regress-quick regress-ci \
         coverage release-evidence \
         formal \
@@ -249,6 +251,12 @@ postfit-sim:
 	    --quartus-fit $(QUARTUS_FIT) \
 	    --quartus-eda $(QUARTUS_EDA) \
 	    --verilator $(VERILATOR)
+
+mister-framework:
+	PYTHONPATH=. $(PYTHON) mister_framework_build.py \
+	    --quartus-sh $(QUARTUS_SH) \
+	    --output $(MISTER_FRAMEWORK_REPORT) \
+	    --artifact-dir $(MISTER_FRAMEWORK_ARTIFACT_DIR)
 
 lint-tb:
 	$(VERILATOR) --lint-only $(VFLAGS_LINT) --top-module $(TOP_TB) -f $(SIM_F) -f $(TB_F)
@@ -598,6 +606,7 @@ help:
 	@echo "  functional-coverage close all ARMv4T encoding/policy bins"
 	@echo "  trm-coverage validate every r4p3 section, table, figure, and signal"
 	@echo "  ac-timing validate every Chapter 8/Table 8-1 FPGA disposition"
+	@echo "  mister-framework build the CPU in the pinned official MiSTer project"
 	@echo "  formal       prove VAL-007 and reach every VAL-008 cover obligation"
 	@echo "  random-validation run 32 x 256-instruction constrained-random seeds"
 	@echo "  random-events run 32 all-class external-event seeds"

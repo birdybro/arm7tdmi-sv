@@ -1037,6 +1037,13 @@ def _validated_files(
     phase_names = {str(result.get("name")) for result in results}
     if (
         regression.get("mode") == "full"
+        and "mister-framework" not in phase_names
+    ):
+        raise ValueError(
+            "full regression is missing mandatory MiSTer framework evidence"
+        )
+    if (
+        regression.get("mode") == "full"
         and "table7-cross" not in phase_names
     ):
         raise ValueError(
@@ -1807,6 +1814,25 @@ def _validated_files(
             ):
                 raise ValueError("post-fit input hash mismatch")
         candidates.append(postfit_path.resolve())
+    if "mister-framework" in phase_names:
+        framework_path = REPORT_ROOT / "mister-framework-report.json"
+        if not framework_path.is_file():
+            raise ValueError("MiSTer framework report is missing")
+        framework_report = json.loads(
+            framework_path.read_text(encoding="utf-8")
+        )
+        import mister_framework_build
+
+        candidates.extend(
+            mister_framework_build.validate_evidence(
+                framework_report,
+                expected_commit=str(
+                    regression.get("git", {}).get("commit", "")
+                ),
+                require_clean=True,
+            )
+        )
+        candidates.append(framework_path.resolve())
     return sorted(set(candidates))
 
 
