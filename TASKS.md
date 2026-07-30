@@ -3058,13 +3058,21 @@ number of cycles spent in an internal FSM state.
   contract. `tb/integration/arm7tdmis_debug_pc_modify_dbgrq_tb.sv` covers the
   synchronous boundaries before, during, and after `MOV pc` and during the
   execute, data, and writeback phases of `LDR pc`.
-- [ ] **DBG-008:** Implement and verify an external Data Abort during a
+- [x] **DBG-008:** Implement and verify an external Data Abort during a
   debugger-issued system-speed memory instruction (§5.18.5). The aborted
   access must complete with the ordinary architectural abort effects, enter
   Abort mode before returning to debug state, preserve the debug context and
   system-speed re-entry cause, and neither execute a following normal
   instruction nor lose a pending interrupt. Also prove that an unrelated
   external `ABORT` while the processor is halted on an I-cycle is ignored.
+  `arm7tdmis_debug_system_speed_abort_tb.sv` drives the complete public
+  NOP/0, NOP/1, LDR/0, RESTART sequence and holds ABORT across the pipelined
+  response edge. It scans CPSR/SPSR_abt and r4 to require Abort mode before
+  DBGACK, exact pre-abort status save, destination suppression, and bit-33
+  re-entry. It separately forces ABORT during halted I-cycles and holds an
+  IRQ through the aborted access, enabling it only before a real RESTART and
+  requiring the IRQ vector/mode afterward. No RTL change was needed; the
+  previously untested ordinary abort path already met §5.18.5.
 - [ ] **DBG-009:** Resolve the contradictory prose in §5.25 about writes to
   Debug Status against its live Figure 5-17/status-source definition. Freeze
   the release behavior as a live read-only, write-ignored resource unless

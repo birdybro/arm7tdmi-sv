@@ -83,6 +83,11 @@
       "tests": ["scripts/trm_coverage.py", "scripts/tests/test_trm_coverage_contract.py"],
       "source_sections": ["ARM DDI 0234B complete 242-page inventory; TASKS.md section 31.12 DOC-008"]
     },
+    "DBG-008": {
+      "rtl": ["rtl/core/arm7tdmis_core_pipelined.sv", "rtl/debug/arm7tdmis_ice_rt.sv"],
+      "tests": ["tb/integration/arm7tdmis_debug_system_speed_abort_tb.sv"],
+      "source_sections": ["ARM DDI 0234B section 5.18.5 system-speed abort behavior"]
+    },
     "JTAG-006": {
       "rtl": ["rtl/jtag/arm7tdmis_sync_debug_port.sv"],
       "tests": ["tb/unit/sync_debug_port_tb.sv"],
@@ -198,6 +203,7 @@
     {"glob": "scripts/tests/test_table7_cross_*.py", "requirements": ["VAL-004"]},
     {"glob": "verification/random_events.py", "requirements": ["VAL-005"]},
     {"glob": "tb/integration/arm7tdmis_random_event_matrix_tb.sv", "requirements": ["VAL-005"]},
+    {"glob": "tb/integration/arm7tdmis_debug_system_speed_abort_tb.sv", "requirements": ["DBG-008"]},
     {"glob": "scripts/tests/test_random_event_contract.py", "requirements": ["VAL-005"]},
     {"glob": "verification/functional_coverage.py", "requirements": ["VAL-006"]},
     {"glob": "verification/functional_coverage.json", "requirements": ["VAL-006"]},

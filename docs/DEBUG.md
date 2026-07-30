@@ -468,6 +468,17 @@ accepted/retired handshake completes. The first chain-1 capture after that
 return reports bit 33 high. A stalled LDR exercises the complete sequence in
 `tb/integration/arm7tdmis_debug_system_speed_tb.sv`.
 
+The at-speed instruction still uses the ordinary external memory response.
+If that response asserts `ABORT`, the failed load destination is suppressed,
+the pre-abort CPSR is saved in `SPSR_abt`, and CPSR enters ARM Abort mode
+before `DBGACK` returns. The first chain-1 capture still reports bit 33 high.
+An IRQ held during that transaction remains hidden by IFEN until the debugger
+performs a real exit, at which point the level is serviced normally. In
+contrast, `ABORT` asserted while halt already forces `TRANS=I` is ignored and
+cannot alter CPSR or leave debug state. The complete public scan/bus sequence
+is checked by
+`tb/integration/arm7tdmis_debug_system_speed_abort_tb.sv`.
+
 The scan adapter retains a session-local PC advance alongside that execution.
 Every retired debug-speed instruction contributes one ARM address, every
 retired system-speed instruction contributes three, and an internally consumed

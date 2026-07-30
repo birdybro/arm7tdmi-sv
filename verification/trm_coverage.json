@@ -176,13 +176,13 @@
     },
     {
       "id": "chapter-5-system-speed-abort",
-      "disposition": "open-requirement",
+      "disposition": "implemented-and-tested",
       "selectors": [
         {"category": "sections", "items": ["5.18.5"]}
       ],
       "requirements": ["DBG-008"],
-      "evidence": ["TASKS.md", "tb/integration/arm7tdmis_debug_system_speed_tb.sv"],
-      "rationale": "Ordinary system-speed execution is covered, but the explicit external-abort case remains open under DBG-008."
+      "evidence": ["TASKS.md", "tb/integration/arm7tdmis_debug_system_speed_abort_tb.sv"],
+      "rationale": "The public-JTAG test aborts an at-speed LDR and proves Abort-mode/SPSR entry, destination suppression, re-entry cause, halt isolation, and pending-interrupt behavior."
     },
     {
       "id": "chapter-5-debug-status-write-conflict",
