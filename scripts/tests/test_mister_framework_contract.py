@@ -68,7 +68,8 @@ def _passing_reports(root: pathlib.Path) -> pathlib.Path:
     _write(
         prefix.with_suffix(".sta.rpt"),
         "TimeQuest Timing Analyzer was successful\n"
-        "clk_sys 12.500 MHz\n"
+        f"; {framework.EXPECTED_CORE_CLOCK_TARGET} ; Generated ; "
+        "80.000 ; 12.5 MHz ;\n"
         f"{unconstrained}\n",
     )
     prefix.with_suffix(".rbf").write_bytes(b"real-bitstream-fixture")
@@ -116,6 +117,32 @@ class MisterFrameworkContractTest(unittest.TestCase):
         self.assertIn("arm7tdmi_generic_soc u_soc", emu)
         self.assertIn("derive_pll_clocks", sdc)
         self.assertIn("derive_clock_uncertainty", sdc)
+        self.assertIn("HDMI_TX_CAPTURE_SCALED", sdc)
+        self.assertIn("HDMI_TX_CAPTURE_DIRECT", sdc)
+        self.assertIn(
+            "set_output_delay -clock HDMI_TX_CAPTURE_SCALED -max 1.0",
+            sdc,
+        )
+        self.assertIn(
+            "set_output_delay -clock HDMI_TX_CAPTURE_SCALED -min -0.7",
+            sdc,
+        )
+        self.assertIn("HDMI_SCLK_OUT", sdc)
+        self.assertIn("HDMI_SCLK_PIN", sdc)
+        self.assertIn(
+            "set_output_delay -clock HDMI_SCLK_OUT -max 2.0",
+            sdc,
+        )
+        self.assertIn(
+            "{HDMI_I2C_SDA HDMI_TX_INT IO_SDA SDCD_SPDIF}",
+            sdc,
+        )
+        self.assertIn(
+            "SDIO_CLK SDIO_CMD SDIO_DAT[*] SD_SPI_CS",
+            sdc,
+        )
+        self.assertNotIn("get_ports *]", sdc)
+        self.assertNotIn("get_ports {*}", sdc)
         self.assertIn("TIMEQUEST_MULTICORNER_ANALYSIS ON", qip)
         self.assertNotIn("$::quartus(qip_path)", qip)
         self.assertIn('output_clock_frequency0("12.500000 MHz")', pll)
@@ -130,6 +157,14 @@ class MisterFrameworkContractTest(unittest.TestCase):
             self.assertEqual(result["device"], "5CSEBA6U23I7")
             self.assertEqual(result["top"], "sys_top")
             self.assertEqual(result["core_clock_mhz"], 12.5)
+            self.assertEqual(
+                result["core_clock"],
+                {
+                    "target": framework.EXPECTED_CORE_CLOCK_TARGET,
+                    "period_ns": 80.0,
+                    "frequency_mhz": 12.5,
+                },
+            )
             self.assertEqual(result["resources"]["alm"], 12345)
             self.assertEqual(result["timing"]["minimum_setup_slack_ns"], 1.25)
             self.assertEqual(result["timing"]["minimum_hold_slack_ns"], 0.125)
@@ -162,6 +197,18 @@ class MisterFrameworkContractTest(unittest.TestCase):
                 "Fitter was successful",
                 "Critical Warning (999999): unsafe\nFitter was successful",
             ),
+            "ignored constraint": (
+                ".sta.rpt",
+                "TimeQuest Timing Analyzer was successful",
+                "TimeQuest Timing Analyzer was successful\n"
+                "Warning (332174): Ignored filter at Template.sdc(99): "
+                "unsafe* could not be matched with a keeper",
+            ),
+            "wrong clock hierarchy": (
+                ".sta.rpt",
+                framework.EXPECTED_CORE_CLOCK_TARGET,
+                "unrelated|pll|divclk",
+            ),
         }
         for name, (suffix, old, new) in mutations.items():
             with self.subTest(mutation=name):
@@ -175,6 +222,50 @@ class MisterFrameworkContractTest(unittest.TestCase):
                     result, errors = framework.parse_reports(output)
                     self.assertEqual(result["status"], "failed")
                     self.assertTrue(errors)
+
+    def test_report_parser_distinguishes_messages_from_table_text(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = _passing_reports(pathlib.Path(directory))
+            map_report = output / f"{framework.FRAMEWORK_PROJECT}.map.rpt"
+            map_report.write_text(
+                map_report.read_text(encoding="utf-8")
+                + "; mode ; Input ; Critical Warning ; description ;\n",
+                encoding="utf-8",
+            )
+            result, errors = framework.parse_reports(output)
+
+            self.assertEqual(errors, [])
+            self.assertEqual(result["status"], "passed")
+
+    def test_only_exact_pinned_upstream_ignored_constraints_are_waived(
+        self,
+    ) -> None:
+        waiver_lines = (
+            "Warning (332174): Ignored filter at sys_top.sdc(60): arc* "
+            "could not be matched with a clock or keeper",
+            "Warning (332174): Ignored filter at sys_top.sdc(61): arx* "
+            "could not be matched with a keeper",
+            "Warning (332174): Ignored filter at sys_top.sdc(61): ary* "
+            "could not be matched with a keeper",
+            "Warning (332049): Ignored set_false_path at "
+            "sys_top.sdc(61): Argument <from> is not an object ID",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            output = _passing_reports(pathlib.Path(directory))
+            sta_report = output / f"{framework.FRAMEWORK_PROJECT}.sta.rpt"
+            sta_report.write_text(
+                sta_report.read_text(encoding="utf-8")
+                + "\n".join(waiver_lines)
+                + "\n",
+                encoding="utf-8",
+            )
+            result, errors = framework.parse_reports(output)
+
+            self.assertEqual(errors, [])
+            self.assertEqual(
+                set(result["reviewed_upstream_waivers"]),
+                set(framework.REVIEWED_UPSTREAM_WAIVERS),
+            )
 
     def test_full_regression_and_release_archive_require_framework_evidence(
         self,

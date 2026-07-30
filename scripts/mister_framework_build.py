@@ -26,6 +26,11 @@ FRAMEWORK_PROJECT = "Template"
 EXPECTED_TOP = "sys_top"
 EXPECTED_DEVICE = "5CSEBA6U23I7"
 EXPECTED_CLOCK_MHZ = 12.5
+EXPECTED_CLOCK_PERIOD_NS = 80.0
+EXPECTED_CORE_CLOCK_TARGET = (
+    "emu|pll|pll_inst|altera_pll_i|general[0].gpll"
+    "~PLL_OUTPUT_COUNTER|divclk"
+)
 REPORT_SCHEMA = "arm7tdmis-mister-framework-v1"
 SOURCE_MANIFEST = REPO_ROOT / "fpga" / "arm7tdmi_mister.f"
 GENERIC_SOC = (
@@ -63,6 +68,25 @@ REPORT_SUFFIXES = (
     ".sta.summary",
     ".sta.rpt",
     ".rbf",
+)
+REVIEWED_UPSTREAM_WAIVERS = frozenset(
+    {
+        "sys_top.sdc:60:332174:arc*",
+        "sys_top.sdc:61:332174:arx*",
+        "sys_top.sdc:61:332174:ary*",
+        "sys_top.sdc:61:332049:set_false_path",
+    }
+)
+CRITICAL_WARNING_RE = re.compile(r"^\s*Critical Warning \(\d+\):")
+IGNORED_FILTER_RE = re.compile(
+    r"^Warning \(332174\): Ignored filter at "
+    r"(?P<file>[^(\s]+)\((?P<line>\d+)\): "
+    r"(?P<filter>.+?) could not be matched"
+)
+IGNORED_COMMAND_RE = re.compile(
+    r"^Warning \(332049\): Ignored (?P<command>\S+) at "
+    r"(?P<file>[^(\s]+)\((?P<line>\d+)\): "
+    r"Argument <from> is not an object ID"
 )
 
 
@@ -273,6 +297,7 @@ def parse_reports(output_dir: pathlib.Path) -> tuple[dict[str, Any], list[str]]:
         if required_entity not in map_report:
             errors.append(f"mapped hierarchy lacks {required_entity}")
 
+    reviewed_waivers: set[str] = set()
     for report_name, text in (
         ("flow", flow),
         ("map", map_report),
@@ -281,10 +306,29 @@ def parse_reports(output_dir: pathlib.Path) -> tuple[dict[str, Any], list[str]]:
         ("sta", sta_report),
     ):
         for line in text.splitlines():
-            if "Critical Warning" in line:
+            if CRITICAL_WARNING_RE.match(line):
                 errors.append(f"{report_name}: {line.strip()}")
-            if "Warning (332174): Ignored filter" in line:
-                errors.append(f"{report_name}: {line.strip()}")
+            if re.match(r"^Warning \(\d+\): Ignored ", line):
+                filter_match = IGNORED_FILTER_RE.match(line)
+                command_match = IGNORED_COMMAND_RE.match(line)
+                if filter_match is not None:
+                    waiver = (
+                        f"{pathlib.PurePath(filter_match.group('file')).name}:"
+                        f"{filter_match.group('line')}:332174:"
+                        f"{filter_match.group('filter')}"
+                    )
+                elif command_match is not None:
+                    waiver = (
+                        f"{pathlib.PurePath(command_match.group('file')).name}:"
+                        f"{command_match.group('line')}:332049:"
+                        f"{command_match.group('command')}"
+                    )
+                else:
+                    waiver = ""
+                if waiver not in REVIEWED_UPSTREAM_WAIVERS:
+                    errors.append(f"{report_name}: {line.strip()}")
+                else:
+                    reviewed_waivers.add(waiver)
 
     timing: list[dict[str, Any]] = []
     for path_type, raw_slack in re.findall(
@@ -319,11 +363,34 @@ def parse_reports(output_dir: pathlib.Path) -> tuple[dict[str, Any], list[str]]:
             if counts != {"setup": 0, "hold": 0}:
                 errors.append(f"{label} is not zero: {counts}")
 
-    clock_pattern = rf"{EXPECTED_CLOCK_MHZ:.3f}\s+MHz"
-    if re.search(clock_pattern, sta_report) is None:
+    clock_match = re.search(
+        rf"^\s*;\s*{re.escape(EXPECTED_CORE_CLOCK_TARGET)}\s*;"
+        r"\s*Generated\s*;\s*(\d+(?:\.\d+)?)\s*;"
+        r"\s*(\d+(?:\.\d+)?)\s+MHz\s*;",
+        sta_report,
+        re.MULTILINE,
+    )
+    core_clock = None
+    if clock_match is None:
         errors.append(
             f"generated {EXPECTED_CLOCK_MHZ:.3f} MHz core clock is absent"
         )
+    else:
+        period_ns = float(clock_match.group(1))
+        frequency_mhz = float(clock_match.group(2))
+        core_clock = {
+            "target": EXPECTED_CORE_CLOCK_TARGET,
+            "period_ns": period_ns,
+            "frequency_mhz": frequency_mhz,
+        }
+        if (
+            abs(period_ns - EXPECTED_CLOCK_PERIOD_NS) > 0.001
+            or abs(frequency_mhz - EXPECTED_CLOCK_MHZ) > 0.001
+        ):
+            errors.append(
+                "generated core clock has wrong period/frequency: "
+                f"{period_ns:.3f} ns/{frequency_mhz:.3f} MHz"
+            )
 
     resources = {
         "alm": _integer_field(fit_summary, "Logic utilization (in ALMs)"),
@@ -357,7 +424,11 @@ def parse_reports(output_dir: pathlib.Path) -> tuple[dict[str, Any], list[str]]:
         "project": FRAMEWORK_PROJECT,
         "top": top,
         "device": device,
-        "core_clock_mhz": EXPECTED_CLOCK_MHZ,
+        "core_clock_mhz": core_clock["frequency_mhz"]
+        if core_clock is not None
+        else None,
+        "core_clock": core_clock,
+        "reviewed_upstream_waivers": sorted(reviewed_waivers),
         "resources": resources,
         "timing": {
             "entries": timing,
@@ -469,6 +540,16 @@ def validate_evidence(
         or result.get("core_clock_mhz") != EXPECTED_CLOCK_MHZ
     ):
         raise ValueError("MiSTer framework result has wrong target identity")
+    if result.get("core_clock") != {
+        "target": EXPECTED_CORE_CLOCK_TARGET,
+        "period_ns": EXPECTED_CLOCK_PERIOD_NS,
+        "frequency_mhz": EXPECTED_CLOCK_MHZ,
+    }:
+        raise ValueError("MiSTer framework core clock evidence is incomplete")
+    if set(result.get("reviewed_upstream_waivers", ())) != set(
+        REVIEWED_UPSTREAM_WAIVERS
+    ):
+        raise ValueError("MiSTer framework upstream waiver inventory changed")
     timing = result.get("timing", {})
     if (
         timing.get("minimum_setup_slack_ns") is None
