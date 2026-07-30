@@ -16,10 +16,10 @@ landed since that baseline: the ARM/Thumb, exception/abort, coprocessor/CP14,
 EmbeddedICE-RT, and ETM-facing directed requirements are checked; regressions fail
 hard and publish evidence; and both FPGA characterization profiles pass checked
 Quartus flows. Current open categories are the unchecked §31 items:
-framework/PocketStation integration, formal validation,
-remaining FPGA/reproducibility/hardware work, and final release
-review/freezing. Consult each checkbox and its attached evidence before making
-a narrower claim.
+framework/PocketStation integration, selected-framework timing, pinned
+clean-checkout reproducibility, hardware bring-up, and independent
+review/final freezing. Consult each checkbox and its attached evidence before
+making a narrower claim.
 
 Do not mark a feature complete because its module/decoder exists or because `make`
 returns zero. Use the VERIFIED definition and evidence gates in `TASKS.md` §31.
@@ -58,10 +58,11 @@ Toolchain: **Verilator 5.x** for simulation and fatal `--lint-only -Wall` lint;
 **GTKWave** for optional FST viewing; **Arm GNU Toolchain 14.3.Rel1** through
 the checksum-pinned local installer for compiler-program evidence; and
 **Quartus Lite 17.0.2** for the checked Cyclone V characterization flows.
-Yosys/SymbiYosys are not currently installed. Icarus Verilog 13.0 has been
-evaluated but rejects the package syntax used by the source and is not a
-supported simulation flow. Build scripts and `.f` file lists live in
-`scripts/`; commit-message convention
+The checksum-pinned OSS CAD Suite installer supplies the mandatory
+Yosys/SymbiYosys/Boolector formal flow, which closes 14 proofs and 77
+reachability covers. Icarus Verilog 13.0 has been evaluated but rejects the
+package syntax used by the source and is not a supported simulation flow.
+Build scripts and `.f` file lists live in `scripts/`; commit-message convention
 `§N.M description …` per the working-style note below.
 
 Directed tests use hand-written, TRM-derived expected state. The checked
@@ -69,9 +70,10 @@ VAL-001 QEMU trace is the independent shared-subset differential; VAL-002
 adds a 32-seed constrained-random QEMU/ARM7-policy campaign; VAL-003 runs the
 pinned MIT `jsmolka/gba-suite` ARM and Thumb exercisers; VAL-009 separately
 executes pinned-compiler programs; VAL-010 runs the deterministic sanitizer/
-X-state wrapper soak. Remaining VAL items require formal properties and
-cycle-cross/functional-coverage closure. Do not
-describe hand-written expectations as independent differential validation.
+X-state wrapper soak. VAL-007/008 close the formal proof and reachability
+obligations; the remaining validation gate is the independent review in
+VAL-011. Do not describe hand-written expectations as independent
+differential validation.
 
 ## RTL coding discipline (load-bearing — read before writing any `.sv`)
 
@@ -97,10 +99,11 @@ These are the non-obvious traps the TRM and TASKS.md flag — internalize them b
 - **Banked registers depend on mode.** 31 GPRs + 6 SPSRs across User/FIQ/IRQ/Supervisor/Abort/Undefined/System; FIQ banks r8–r14, the others bank only r13/r14. Register read/write mapping is mode-driven and must be implemented for every mode (§3).
 - **Reset state is specific.** Supervisor mode, I=1, F=1, T=0, ARM state, PC=0x00000000 — set all of them, don't just clear PC.
 - **Bus is pipelined.** Address-class signals (ADDR/WRITE/SIZE/PROT/LOCK) are broadcast one bus cycle *ahead* of the data cycle they describe. `CLKEN` gates bus progression; treat it as a wait-state mechanism, not a clock gate.
-- **Remaining highest-risk blocks:** cross/formal validation,
-  framework/board timing, reproducible toolchain/CI, and
-  hardware/PocketStation evidence. Two-endian functional post-fit simulation
-  is already checked under FPGA-006.
+- **Remaining highest-risk blocks:** framework/board timing, reproducible
+  clean-checkout toolchain/CI, independent review, and
+  hardware/PocketStation evidence. Two-endian functional post-fit simulation,
+  exact cycle crosses, functional coverage, and formal closure are already
+  checked.
 - **Reserved coprocessor IDs.** CP14 is the Debug Communications Channel; CP15 is system control. External coprocessors must not use those IDs.
 - **TAP IDCODE.** Rev 4 r4p3 TAP ID register value is `0x7F1F0F0F` (§23).
 - **Don't invent v5+ features or hard-macrocell pins.** ARMv4T does not have `BKPT`, `BLX`, `CLZ`, or the Q flag; r4p3 does not have `MAS[1:0]` (it's `SIZE[1:0]`), `DBGRESTART`, or `DBGINSTR` (`DBGINSTRVALID` is the real, distinct signal). Software breakpoints use EmbeddedICE-RT pattern matching, not a `BKPT` opcode. Full list of forbidden additions is in TASKS.md §30.0.

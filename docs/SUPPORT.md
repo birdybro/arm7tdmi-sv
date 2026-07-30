@@ -17,7 +17,7 @@ release. [`TASKS.md`](../TASKS.md) §31 is the authoritative readiness ledger.
 | Quartus Lite 17.0.2 | Supported characterization and post-fit tool | Analysis, synthesis, fit, assembly, and four-corner TimeQuest for Cyclone V `5CSEBA6U23I7`; temporary little-/big-endian functional netlists execute architectural wrapper scoreboards |
 | GNU Make and Python 3 | Supported orchestration | Exact versions are recorded by every regression and release manifest |
 | Icarus Verilog 13.0 | Not supported | Its SystemVerilog frontend rejects package/type syntax used by this RTL |
-| Yosys/SymbiYosys and other synthesis/formal tools | Not yet verified | FPGA-004 uses the permitted independent-linter path plus structural CDC/RDC; formal closure remains VAL-007/008 |
+| Pinned OSS CAD Suite Yosys/SymbiYosys/Boolector | Supported formal flow | The checksum-verified bundle closes 14/14 required proofs and 77/77 named reachability covers; this does not claim Yosys as a supported production FPGA synthesis flow |
 | MiSTer framework project | Not yet supported as a released target | A real framework build, clock constraints, bitstream, and board evidence remain MIST-007 and FPGA-002/007 |
 | PocketStation system or software images | Not included | System integration, legal user-supplied images, reference comparison, and soak evidence remain MIST-008/009 |
 

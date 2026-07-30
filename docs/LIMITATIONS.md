@@ -6,17 +6,16 @@ and may be stricter than this summary.
 
 - No real MiSTer framework, PocketStation subsystem, copyrighted BIOS or
   software image, hardware run, or long system soak is included
-  (MIST-007 through MIST-009, FPGA-002, and FPGA-007).
-- Formal proof and independent review remain open (VAL-007, VAL-008, and
-  VAL-011). The 32-seed all-class randomized external-event campaign closes
-  VAL-005, and exhaustive 234-bin ARMv4T functional coverage closes VAL-006.
-  Exact deterministic Chapter 7
-  legal-equivalence cycle crosses close VAL-004; they do not substitute for
-  those broader gates. The checked public ARM/Thumb exercisers close VAL-003,
-  but the proprietary Arm Validation Suite has not been run. The QEMU
-  differential, 32-seed constrained-random campaign, pinned compiler-program
-  test, and 256-seed sanitizing wrapper soak close VAL-001, VAL-002, VAL-009,
-  and VAL-010 respectively.
+  (MIST-007, MIST-008, MIST-009, FPGA-002, and FPGA-007).
+- Independent evidence review remains open (VAL-011). Formal proof and
+  reachability close VAL-007/VAL-008 at 14 proofs and 77 covers. The 32-seed
+  all-class randomized external-event campaign closes VAL-005, exhaustive
+  234-bin ARMv4T functional coverage closes VAL-006, and exact deterministic
+  Chapter 7 legal-equivalence cycle crosses close VAL-004. The checked public
+  ARM/Thumb exercisers close VAL-003, but the proprietary Arm Validation Suite
+  has not been run. The QEMU differential, 32-seed constrained-random
+  campaign, pinned compiler-program test, and 256-seed sanitizing wrapper soak
+  close VAL-001, VAL-002, VAL-009, and VAL-010 respectively.
 - A fully pinned clean-checkout release toolchain remains open (FPGA-008).
   Independent Slang lint, structural CDC/RDC closure, and two-endian
   functional post-fit simulation are checked under FPGA-004/006; these are

@@ -5,7 +5,8 @@ Tables 7-3 through 7-23 to RTL and fail-hard pin-level evidence. It closes
 BUS-002/BUS-003 at the directed-evidence level and the exact legal-equivalence
 cycle crosses required by VAL-004. The separate 32-seed all-class external-
 event campaign closes VAL-005, and independent complete-domain encoding
-coverage closes VAL-006; formal closure remains the VAL-007/008 gate.
+coverage closes VAL-006. The mandatory formal phase separately closes
+VAL-007/008 with 14 proofs and 77 named reachability covers.
 
 ## Oracle and phase convention
 
