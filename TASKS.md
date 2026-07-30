@@ -13,6 +13,11 @@ source-level and test-level audit of baseline commit
 elsewhere in the repository conflicts with §31, §31 wins until the conflicting statement
 is corrected and linked to passing evidence.
 
+The 2026-07-29 revision audit re-read all 242 pages of ARM DDI 0234B r4p3
+(`bb9cd0e3f2b7e2fdca4ff961cdfc5c9c85c063842e491f8997a504d3241baa14`) and
+added the remaining manual-coverage obligations to §31.7, §31.11, and §31.12.
+Those unchecked rows are real gaps even where a neighboring subsystem row is checked.
+
 Use these status words consistently:
 
 - **VERIFIED** — the requirement has a fail-hard, self-checking test against an
@@ -2209,7 +2214,15 @@ Anchor each cycle test to an explicit TRM table:
 
 ## 30.26 AC / timing (amends §26)
 
-1. Bake the TRM Table 8-1 percentage-of-`CLK` budgets into SDC once a toolchain is chosen (TRM §8.2, pp. 216–217). Sample budgets:
+1. Disposition every TRM Table 8-1 percentage-of-`CLK` budget when a target
+   toolchain and physical boundary are chosen (TRM §8.2, pp. 216–217).
+   Table 8-1 is explicitly provisional hard-macro AC guidance, not a portable
+   promise that can be copied unchanged onto soft-core FPGA pins. A raw
+   compatibility profile must either translate each applicable percentage
+   into target-specific SDC/STA checks or document why the enclosing
+   synchronous FPGA boundary replaces that pin-level parameter. It must never
+   silently omit the row or advertise a hard-macro AC guarantee. The source
+   percentages include:
    - **Setup**: `CLKEN` 40%, `ABORT` 15%, `RDATA` 10%, `CPA/CPB` 20%, `nFIQ/nIRQ/nRESET` 10%, `CFGBIGEND` 10%, `DBGTCKEN` 40%, `DBGTDI/DBGTMS` 35%.
    - **Hold**: 0% on most inputs (clock-skew budget only).
    - **Output valid (max % of t_cyc)**: `ADDR` 90%, control (`WRITE/SIZE/PROT/LOCK`) 90%, `TRANS` 50%, `WDATA` 40%, `DBGTDO` 20%, debug control 40%, debug status 40%, coprocessor control 80%.
@@ -3045,6 +3058,19 @@ number of cycles spent in an internal FSM state.
   contract. `tb/integration/arm7tdmis_debug_pc_modify_dbgrq_tb.sv` covers the
   synchronous boundaries before, during, and after `MOV pc` and during the
   execute, data, and writeback phases of `LDR pc`.
+- [ ] **DBG-008:** Implement and verify an external Data Abort during a
+  debugger-issued system-speed memory instruction (§5.18.5). The aborted
+  access must complete with the ordinary architectural abort effects, enter
+  Abort mode before returning to debug state, preserve the debug context and
+  system-speed re-entry cause, and neither execute a following normal
+  instruction nor lose a pending interrupt. Also prove that an unrelated
+  external `ABORT` while the processor is halted on an I-cycle is ignored.
+- [ ] **DBG-009:** Resolve the contradictory prose in §5.25 about writes to
+  Debug Status against its live Figure 5-17/status-source definition. Freeze
+  the release behavior as a live read-only, write-ignored resource unless
+  stronger authoritative evidence requires a different disposition; document
+  the conflict and prove through public JTAG that writing all status bits
+  cannot corrupt TBIT, TRANS, IFEN, synchronized DBGRQ, or internal DBGACK.
 - [x] **JTAG-001:** Exhaustively verify all 16 TAP states and transitions, async
   `DBGnTRST`, Capture/Shift/Update-IR, fixed `0001` capture, all five public
   instructions, and BYPASS for every other IR encoding. Fail-hard evidence:
@@ -3595,6 +3621,14 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   PocketStation reference integration on hardware.
 - [ ] **FPGA-008:** Pin every tool/container version and make the release build
   reproducible from a clean checkout in CI.
+- [ ] **FPGA-009:** Give every Chapter 8/Table 8-1 AC parameter an explicit
+  soft-core FPGA disposition. Preserve the original percentages and
+  provisional/hard-macro scope in a revision-locked contract; map applicable
+  synchronous input/output budgets into the raw conformance profile's
+  target-specific SDC/STA checks, and identify reset, debug synchronization,
+  test-only, power, and clock parameters that are replaced or owned by the
+  containing FPGA integration. Add a fail-hard constraint/documentation test
+  so neither a Table 8 row nor its physical-scope caveat can disappear.
 
 ## 31.12 Documentation and release hygiene
 
@@ -3616,7 +3650,7 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   requirement.
   `verification/traceability.json` is the reviewed ownership map and
   `scripts/traceability_report.py` expands the canonical §31 ledger into
-  schema `arm7tdmis-traceability-v1`: all 118 requirement rows carry source,
+  schema `arm7tdmis-traceability-v1`: all 122 requirement rows carry source,
   RTL/disposition, tests/disposition, acceptance bin, ledger status, and the
   latest available regression result. Its reverse tables map every tracked RTL
   file and every tracked SystemVerilog/Python/program verification source back
@@ -3659,6 +3693,16 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   memory and JTAG paths; remaining occurrences describe real pending state or
   deliberate same-instruction deferral. `test_documentation_contract.py` prevents
   those two stale comments from returning.
+- [ ] **DOC-008:** Add a revision-locked, executable coverage inventory for
+  the complete ARM DDI 0234B r4p3 manual: all 207 numbered sections and
+  subsections, 65 numbered tables, 44 numbered figures/timing diagrams, and
+  every Appendix A signal. Record the PDF identity and give every inventory item an explicit
+  implementation/test, integration obligation, erratum correction, or
+  external/out-of-scope disposition tied back to §31. Validation must fail on
+  a changed PDF, missing or duplicate inventory item, unknown requirement,
+  missing evidence path, or unchecked implementation claim. Make the audit a
+  mandatory regression and release-evidence phase so §31 cannot again be
+  inferred complete from broad chapter-level prose.
 
 ## 31.13 Final v1.0 release gate
 

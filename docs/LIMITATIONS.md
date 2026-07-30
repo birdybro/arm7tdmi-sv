@@ -7,6 +7,12 @@ and may be stricter than this summary.
 - No real MiSTer framework, PocketStation subsystem, copyrighted BIOS or
   software image, hardware run, or long system soak is included
   (MIST-007, MIST-008, MIST-009, FPGA-002, and FPGA-007).
+- The debugger-issued system-speed Data Abort path and the §5.25 Debug Status
+  write disposition still require directed public-interface evidence
+  (DBG-008 and DBG-009).
+- The complete 242-page TRM inventory is not yet a revision-locked mandatory
+  evidence phase (DOC-008), and Chapter 8/Table 8-1 still needs an explicit
+  target-specific FPGA timing disposition (FPGA-009).
 - Independent evidence review remains open (VAL-011). Formal proof and
   reachability close VAL-007/VAL-008 at 14 proofs and 77 covers. The 32-seed
   all-class randomized external-event campaign closes VAL-005, exhaustive
