@@ -2216,12 +2216,13 @@ Anchor each cycle test to an explicit TRM table:
 
 1. Disposition every TRM Table 8-1 percentage-of-`CLK` budget when a target
    toolchain and physical boundary are chosen (TRM §8.2, pp. 216–217).
-   Table 8-1 is explicitly provisional hard-macro AC guidance, not a portable
-   promise that can be copied unchanged onto soft-core FPGA pins. A raw
+   Table 8-1 is explicitly provisional synthesized-macrocell/silicon AC
+   guidance, not a portable promise that can be copied unchanged onto
+   soft-core FPGA pins. A raw
    compatibility profile must either translate each applicable percentage
    into target-specific SDC/STA checks or document why the enclosing
    synchronous FPGA boundary replaces that pin-level parameter. It must never
-   silently omit the row or advertise a hard-macro AC guarantee. The source
+   silently omit the row or advertise a portable pin-timing guarantee. The source
    percentages include:
    - **Setup**: `CLKEN` 40%, `ABORT` 15%, `RDATA` 10%, `CPA/CPB` 20%, `nFIQ/nIRQ/nRESET` 10%, `CFGBIGEND` 10%, `DBGTCKEN` 40%, `DBGTDI/DBGTMS` 35%.
    - **Hold**: 0% on most inputs (clock-skew budget only).
@@ -3637,7 +3638,8 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   reproducible from a clean checkout in CI.
 - [ ] **FPGA-009:** Give every Chapter 8/Table 8-1 AC parameter an explicit
   soft-core FPGA disposition. Preserve the original percentages and
-  provisional/hard-macro scope in a revision-locked contract; map applicable
+  provisional synthesized-macrocell/silicon scope in a revision-locked
+  `verification/ac_timing.json` contract; map applicable
   synchronous input/output budgets into the raw conformance profile's
   target-specific SDC/STA checks, and identify reset, debug synchronization,
   test-only, power, and clock parameters that are replaced or owned by the

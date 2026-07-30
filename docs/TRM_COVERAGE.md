@@ -52,7 +52,8 @@ ASIC scan insertion; the FPGA profile deliberately provides only the named
 B Table B-2 lists legacy hard-macrocell signals that ARM7TDMI-S intentionally
 removed; recreating them would not improve r4p3 conformance.
 
-Chapter 8/Table 8-1 is retained as provisional physical hard-macro guidance.
+Chapter 8/Table 8-1 is retained as provisional synthesized-macrocell/silicon
+timing guidance rather than a portable FPGA pin guarantee.
 Its target-specific soft-FPGA disposition remains visible as FPGA-009 until
 the constraints and documentation contract close. The system-speed debug
 abort and Debug Status write ambiguity similarly remain explicit under

@@ -235,7 +235,7 @@
       ],
       "requirements": ["FPGA-009"],
       "evidence": ["TASKS.md", "fpga/arm7tdmis_conformance.sdc", "docs/PERFORMANCE.md"],
-      "rationale": "The original provisional hard-macro percentages require an explicit target-specific soft-FPGA disposition rather than an unqualified portability claim."
+      "rationale": "The original provisional synthesized-macrocell/silicon percentages require an explicit target-specific soft-FPGA disposition rather than an unqualified portability claim."
     },
     {
       "id": "appendix-a-signal-table",

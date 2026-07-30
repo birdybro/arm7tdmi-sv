@@ -48,6 +48,7 @@ jobs:
             reports/generated/logs/
             reports/generated/coverage/
             reports/generated/trm-coverage-report.json
+            reports/generated/ac-timing-report.json
             reports/generated/traceability-report.json
             reports/generated/independent-lint.json
             reports/generated/slang-*-diagnostics.json

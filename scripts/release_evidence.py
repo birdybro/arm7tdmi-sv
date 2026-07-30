@@ -1143,6 +1143,39 @@ def _validated_files(
         (trm_coverage_report.resolve(), trm_manifest_path.resolve())
     )
 
+    ac_timing_report = REPORT_ROOT / "ac-timing-report.json"
+    if "ac-timing" not in phase_names:
+        raise ValueError("regression did not run mandatory AC timing disposition")
+    if not ac_timing_report.is_file():
+        raise ValueError("AC timing disposition report is missing")
+    ac_report = json.loads(ac_timing_report.read_text(encoding="utf-8"))
+    import ac_timing
+
+    ac_timing.validate_report(
+        ac_report,
+        expected_commit=str(regression.get("git", {}).get("commit", "")),
+        require_clean=True,
+    )
+    ac_manifest_path = REPO_ROOT / "verification" / "ac_timing.json"
+    ac_manifest = json.loads(ac_manifest_path.read_text(encoding="utf-8"))
+    ac_summary = ac_timing.validate_contract(ac_manifest)
+    for field in (
+        "table_row_count",
+        "figure_count",
+        "sdc_mapped_row_count",
+        "positive_hold_row_count",
+        "replacement_signal_count",
+        "integration_owner_count",
+        "symbols",
+    ):
+        if ac_report.get(field) != ac_summary.get(field):
+            raise ValueError(
+                f"AC timing disposition report {field} does not match manifest"
+            )
+    candidates.extend(
+        (ac_timing_report.resolve(), ac_manifest_path.resolve())
+    )
+
     traceability_report = REPORT_ROOT / "traceability-report.json"
     if "traceability" not in phase_names:
         raise ValueError("regression did not run mandatory traceability")
