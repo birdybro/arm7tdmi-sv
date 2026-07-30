@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import pathlib
+import re
 import unittest
 
 
@@ -18,6 +19,36 @@ def _read(relative: str) -> str:
 
 
 class DocumentationContractTest(unittest.TestCase):
+    def test_open_blocker_summary_matches_the_canonical_ledger(self) -> None:
+        tasks = _read("TASKS.md")
+        limitations = _read("docs/LIMITATIONS.md")
+        unchecked = re.findall(r"(?m)^- \[ \] \*\*([A-Z]+-\d+):\*\*", tasks)
+        self.assertGreater(len(unchecked), 0)
+        for requirement_id in unchecked:
+            with self.subTest(requirement_id=requirement_id):
+                self.assertIn(requirement_id, limitations)
+
+        maintained_status = "\n".join(
+            _read(path)
+            for path in (
+                "README.md",
+                "AGENTS.md",
+                "docs/LIMITATIONS.md",
+                "docs/SUPPORT.md",
+                "docs/TABLE7_MATRIX.md",
+            )
+        )
+        for stale_claim in (
+            "formal closure remains",
+            "formal validation",
+            "Formal proof and independent review remain open",
+            "Formal and FPGA release gates remain open",
+            "Yosys/SymbiYosys are not currently installed",
+            "Remaining VAL items require formal",
+        ):
+            with self.subTest(stale_claim=stale_claim):
+                self.assertNotIn(stale_claim, maintained_status)
+
     def test_public_status_does_not_repeat_known_stale_claims(self) -> None:
         public_status = README.read_text(encoding="utf-8") + AGENTS.read_text(
             encoding="utf-8"
