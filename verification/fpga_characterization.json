@@ -1,11 +1,14 @@
 {
   "clock_mhz": 25,
+  "clock_scope": "canonical MiSTer wrapper and optional-feature profiles",
   "device": "5CSEBA6U23I7",
   "evidence": {
-    "commit": "1bb86ea683f6c06b3fd75306d757e1728c4f29c2",
-    "regression_phases": 180,
-    "release_archive": "reports/generated/arm7tdmis-release-evidence-1bb86ea683f6.tar.gz",
-    "source_sha256": "8801b1a70fed6219cf23994fa9c1503be7e1f83773ec496452fb95c1f353dd87"
+    "commit": "67ff42448d364081435b37647e1623b4265f63e6",
+    "commands": [
+      "make -C scripts quartus-compile",
+      "make -C scripts quartus-conformance-compile",
+      "make -C scripts quartus-option-characterization"
+    ]
   },
   "inputs": {
     "fpga/arm7tdmi_mister.f": "41774d179b2691d6e720ac698bdb028033c28b56aab0b6bf363f3f4346b8f869",
@@ -18,7 +21,7 @@
     "fpga/arm7tdmi_option_none.qsf": "e0eaca66a5e41006582f2978e4ac051bb319f378956ff8142fcc9a120b1f19b6",
     "fpga/arm7tdmi_options.sdc": "e89dd3b2f94ec4fe08c322e43879e5575402c7403dcdb737cf9d9319d63d2b5a",
     "fpga/arm7tdmis_conformance.qsf": "08233357b2100fddf61b3974c7c7726d7ed459bd23edc3b20bbd977708a8916c",
-    "fpga/arm7tdmis_conformance.sdc": "064d4ba549b2cca8a2271ffb72b28e1411be8cff01c7ae8a7fa497292dd4e8e5",
+    "fpga/arm7tdmis_conformance.sdc": "b56c53b697b445d6485ed80f54c081291dfa3b6ebb3b9072870fed0f6b775418",
     "fpga/example/arm7tdmi_mister_example_top.sv": "721f4d0aac807a2303a1a0c68e17af636734653348ee5041197f18aab1d8665f",
     "rtl/arm7tdmis_bus_pkg.sv": "3efead125009671bbc7743c0786045db3e0a5efb08ab63865d2d96fa443e2e04",
     "rtl/arm7tdmis_debug_pkg.sv": "200bc7546e6c0ec5dfad995c40e463bd4dc1317fbe264b9820fa793c0e10bbbd",
@@ -32,7 +35,7 @@
     "rtl/datapath/arm7tdmis_multiplier.sv": "69a3a17539873e002cdab0da6a9f44425bbd756f626f3ee6c564bf0430631618",
     "rtl/datapath/arm7tdmis_regfile.sv": "d3166a1fdcbdb502aa2faee933069bc4ae061ff28cd5498fec47a025def359fc",
     "rtl/datapath/arm7tdmis_shifter.sv": "efc36e3f5bc552a0c29eefd929e8d84417e3b8c02114bee3a0f6c078f16dd87f",
-    "rtl/debug/arm7tdmis_ice_rt.sv": "eb58ec5754619ea1b9da09f75405a1c6f6f5256ae107f550b3ba9796854c951a",
+    "rtl/debug/arm7tdmis_ice_rt.sv": "b63937a9930c31d2b40dec20ac656e9e4f023127fc039518900bc5e104c0f271",
     "rtl/decode/arm7tdmis_condition.sv": "963ceafcb0a1980d706e2e9e782c01d3f3101529cfb751433fdbcc7f513a07b4",
     "rtl/decode/arm7tdmis_decoder.sv": "1bef49c9cbb7ae61708ba926b42f588562a7b32b59230d3ef3248e86afea30a1",
     "rtl/decode/arm7tdmis_thumb_decoder.sv": "d7c909ec83ec71ed19043ef6326d4312d37c19169448bb4692b20ca6b9147ebc",
@@ -64,26 +67,28 @@
         "dsp": 6,
         "memory_bit": 0,
         "register": 3841
-      }
+      },
+      "target_clock_mhz": 25
     },
     "conformance": {
-      "clock_enable_registers": 3131,
-      "fmax_mhz": 27.43,
-      "minimum_hold_slack_ns": 0.158,
-      "minimum_setup_slack_ns": 3.546,
+      "clock_enable_registers": 3267,
+      "fmax_mhz": 16.5,
+      "minimum_hold_slack_ns": 0.161,
+      "minimum_setup_slack_ns": 1.904,
       "power_confidence": "Low: user provided insufficient toggle rate data",
       "power_mw": {
-        "core_dynamic": 37.13,
-        "core_static": 412.5,
-        "io": 8.67,
-        "total": 458.31
+        "core_dynamic": 24.09,
+        "core_static": 412.39,
+        "io": 8.61,
+        "total": 445.09
       },
       "resources": {
-        "alm": 5005,
+        "alm": 5038,
         "dsp": 6,
         "memory_bit": 0,
-        "register": 3799
-      }
+        "register": 3313
+      },
+      "target_clock_mhz": 16
     },
     "coprocessor": {
       "clock_enable_registers": 2316,
@@ -102,7 +107,8 @@
         "dsp": 6,
         "memory_bit": 0,
         "register": 2647
-      }
+      },
+      "target_clock_mhz": 25
     },
     "debug": {
       "clock_enable_registers": 3049,
@@ -121,7 +127,8 @@
         "dsp": 6,
         "memory_bit": 0,
         "register": 3602
-      }
+      },
+      "target_clock_mhz": 25
     },
     "none": {
       "clock_enable_registers": 2142,
@@ -140,7 +147,8 @@
         "dsp": 6,
         "memory_bit": 0,
         "register": 2538
-      }
+      },
+      "target_clock_mhz": 25
     },
     "trimmed": {
       "clock_enable_registers": 2142,
@@ -159,10 +167,11 @@
         "dsp": 6,
         "memory_bit": 0,
         "register": 2537
-      }
+      },
+      "target_clock_mhz": 25
     }
   },
-  "schema": "arm7tdmis-fpga-characterization-v1",
+  "schema": "arm7tdmis-fpga-characterization-v2",
   "status": "passed",
   "tool": "Quartus Lite 17.0.2 Build 602"
 }

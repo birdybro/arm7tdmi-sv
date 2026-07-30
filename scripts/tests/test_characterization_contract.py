@@ -22,10 +22,25 @@ class CharacterizationContractTest(unittest.TestCase):
         baseline_path = REPO_ROOT / "verification/fpga_characterization.json"
         baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
 
-        self.assertEqual(baseline["schema"], "arm7tdmis-fpga-characterization-v1")
+        self.assertEqual(baseline["schema"], "arm7tdmis-fpga-characterization-v2")
         self.assertEqual(baseline["status"], "passed")
         self.assertEqual(baseline["device"], "5CSEBA6U23I7")
         self.assertEqual(baseline["clock_mhz"], 25)
+        self.assertEqual(
+            baseline["clock_scope"],
+            "canonical MiSTer wrapper and optional-feature profiles",
+        )
+        self.assertEqual(
+            baseline["evidence"],
+            {
+                "commit": "67ff42448d364081435b37647e1623b4265f63e6",
+                "commands": [
+                    "make -C scripts quartus-compile",
+                    "make -C scripts quartus-conformance-compile",
+                    "make -C scripts quartus-option-characterization",
+                ],
+            },
+        )
 
         manifest_sources: set[str] = set()
         manifest = REPO_ROOT / "fpga/arm7tdmi_mister.f"
@@ -64,9 +79,24 @@ class CharacterizationContractTest(unittest.TestCase):
             set(profiles),
             {"trimmed", "conformance", "none", "debug", "coprocessor", "both"},
         )
+        expected_target_clocks = {
+            "trimmed": 25,
+            "conformance": 16,
+            "none": 25,
+            "debug": 25,
+            "coprocessor": 25,
+            "both": 25,
+        }
         for name, profile in profiles.items():
             with self.subTest(profile=name):
-                self.assertGreater(profile["fmax_mhz"], baseline["clock_mhz"])
+                self.assertEqual(
+                    profile["target_clock_mhz"],
+                    expected_target_clocks[name],
+                )
+                self.assertGreater(
+                    profile["fmax_mhz"],
+                    profile["target_clock_mhz"],
+                )
                 self.assertGreaterEqual(profile["minimum_setup_slack_ns"], 0)
                 self.assertGreaterEqual(profile["minimum_hold_slack_ns"], 0)
                 self.assertEqual(profile["resources"]["memory_bit"], 0)

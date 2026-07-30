@@ -8,21 +8,24 @@ with its own clocks, placement, I/O, memory, and activity.
 The immutable machine-readable snapshot is
 `verification/fpga_characterization.json`; it binds these published results
 to the SHA-256 of every RTL, project, constraint, top, and report-checker
-input used by the clean 180-phase regression at commit `1bb86ea683f6`.
+input used by the three fresh characterization flows at commit `67ff42444d0d`.
 
 ## Clock and CPU enable
 
-The checked `CLK` is 25 MHz (40 ns). There is one real clock and no generated
-or gated clock. `CPU_CE`/raw `CLKEN` may be high on every rising edge for a
-maximum 1:1 master-clock-to-CPU-advance ratio, or may insert any finite number
-of disabled edges. One enabled edge can advance at most one CPU cycle; the
-effective CPU rate is therefore `CLK frequency * enabled-edge fraction`.
+The checked canonical-wrapper `CLK` is 25 MHz (40 ns). The raw conformance
+profile is checked at 16 MHz (62.5 ns) because it applies every applicable
+Chapter 8/Table 8-1 boundary budget, including the long combinational
+`DBGRNG` response. There is one real clock and no generated or gated clock.
+`CPU_CE`/raw `CLKEN` may be high on every rising edge for a maximum 1:1
+master-clock-to-CPU-advance ratio, or may insert any finite number of disabled
+edges. One enabled edge can advance at most one CPU cycle; the effective CPU
+rate is therefore `CLK frequency * enabled-edge fraction`.
 
 The minimum reported same-clock Fmax across the slow timing models is
-27.80 MHz for the trimmed canonical-wrapper profile and 27.43 MHz for the
-raw feature-complete profile. These figures have 2.80 MHz and 2.43 MHz
-headroom over the checked 25 MHz clock, respectively. They are post-fit
-characterization results for virtual boundary pins, not a promise that a
+27.80 MHz for the trimmed canonical-wrapper profile and 16.50 MHz for the
+raw feature-complete profile. These figures have 2.80 MHz and 0.50 MHz
+headroom over their checked 25 MHz and 16 MHz clocks, respectively. They are
+post-fit characterization results for virtual boundary pins, not a promise that a
 particular board or framework will reach those rates.
 
 ## Request latency
@@ -45,14 +48,14 @@ the core and its pipelined response, as specified in
 | Profile | Fitted ALMs | Registers | Registers with clock enable | M10K / memory bits | DSP blocks | Enforced budget |
 |---|---:|---:|---:|---:|---:|---|
 | Canonical trimmed wrapper (`ENABLE_DEBUG=0`, `ENABLE_COPROCESSOR=0`) | 3,500 | 2,537 | 2,142 | 0 / 0 | 6 | 5,000 ALMs, 4,096 registers, 8 DSPs, 0 memory bits |
-| Raw feature-complete `arm7tdmis_top` | 5,005 | 3,799 | 3,131 | 0 / 0 | 6 | 7,500 ALMs, 6,000 registers, 8 DSPs, 0 memory bits |
+| Raw feature-complete `arm7tdmis_top` | 5,038 | 3,313 | 3,267 | 0 / 0 | 6 | 7,500 ALMs, 6,000 registers, 8 DSPs, 0 memory bits |
 
 The trimmed profile retains 1,500 ALMs, 1,559 registers, and two DSP blocks
-of its project budget. The raw profile retains 2,495 ALMs, 2,201 registers,
+of its project budget. The raw profile retains 2,462 ALMs, 2,687 registers,
 and two DSP blocks. Neither profile infers MLAB/M10K storage; all
 architectural banks are registers. Both infer the six DSP blocks used by the
 multiplier. Quartus reports clock-enable inference on 2,142 of 2,165
-synthesis registers in the trimmed profile and 3,131 of 3,178 in the raw
+synthesis registers in the trimmed profile and 3,267 of 3,313 in the raw
 profile.
 
 The two rows are different integration surfaces and must not be subtracted
@@ -87,12 +90,13 @@ additive cost model. The machine-readable source is
 
 ## Power estimate
 
-PowerPlay vectorless estimation at the checked 25 MHz assumptions reports:
+PowerPlay vectorless estimation at the checked profile clock assumptions
+reports:
 
 | Profile | Total | Core dynamic | Core static | I/O |
 |---|---:|---:|---:|---:|
 | Canonical trimmed wrapper | 452.41 mW | 31.29 mW | 412.45 mW | 8.67 mW |
-| Raw feature-complete | 458.31 mW | 37.13 mW | 412.50 mW | 8.67 mW |
+| Raw feature-complete (16 MHz) | 445.09 mW | 24.09 mW | 412.39 mW | 8.61 mW |
 
 The PowerPlay confidence is **Low** because no workload VCD/toggle file or
 board thermal model is supplied. The selected SoC device also emits Quartus
@@ -115,7 +119,7 @@ clocking contract.
 
 ## Reproducing characterization
 
-Run both complete checked flows from the repository root:
+Run all complete checked flows from the repository root:
 
 ```sh
 make -C scripts quartus-compile
@@ -129,7 +133,7 @@ directly; the option target applies the same checker to all four fits through
 `scripts/quartus_option_characterization.py`. Each option profile uses Quartus
 Auto Fit so a single placement that misses the common 0.25 ns synchronous
 input-hold contract is retried without weakening that boundary requirement.
-The checked snapshot records the producing release archive and hashes all
+The checked snapshot records the producing commit and commands and hashes all
 characterization inputs, so a source, constraint, project, top, or checker
 change makes `make -C scripts harness-unit` fail until fresh fit evidence is
 reviewed and deliberately published.
