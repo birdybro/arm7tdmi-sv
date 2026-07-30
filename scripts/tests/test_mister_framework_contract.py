@@ -47,7 +47,11 @@ def _passing_reports(root: pathlib.Path) -> pathlib.Path:
             )
         ),
     )
-    _write(prefix.with_suffix(".fit.rpt"), "Fitter was successful\n")
+    _write(
+        prefix.with_suffix(".fit.rpt"),
+        "Fitter was successful\n"
+        "; Fitter Initial Placement Seed ; 4 ; 1 ;\n",
+    )
     _write(prefix.with_suffix(".asm.rpt"), "Assembler was successful\n")
     _write(
         prefix.with_suffix(".sta.summary"),
@@ -104,11 +108,16 @@ class MisterFrameworkContractTest(unittest.TestCase):
                 pll_source,
                 'output_clock_frequency0("20.000000 MHz")\n',
             )
+            _write(
+                checkout / "Template.qsf",
+                "set_global_assignment -name SEED 1\n",
+            )
             framework.install_overlay(checkout)
             qip = (checkout / "files.qip").read_text(encoding="utf-8")
             emu = (checkout / "Template.sv").read_text(encoding="utf-8")
             sdc = (checkout / "Template.sdc").read_text(encoding="utf-8")
             pll = pll_source.read_text(encoding="utf-8")
+            qsf = (checkout / "Template.qsf").read_text(encoding="utf-8")
 
         for source in sources:
             self.assertIn(source.relative_to(REPO_ROOT).as_posix(), qip)
@@ -146,6 +155,7 @@ class MisterFrameworkContractTest(unittest.TestCase):
         self.assertIn("TIMEQUEST_MULTICORNER_ANALYSIS ON", qip)
         self.assertNotIn("$::quartus(qip_path)", qip)
         self.assertIn('output_clock_frequency0("12.500000 MHz")', pll)
+        self.assertIn("set_global_assignment -name SEED 4", qsf)
 
     def test_report_parser_requires_fit_timing_constraints_and_bitstream(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -156,6 +166,7 @@ class MisterFrameworkContractTest(unittest.TestCase):
             self.assertEqual(result["status"], "passed")
             self.assertEqual(result["device"], "5CSEBA6U23I7")
             self.assertEqual(result["top"], "sys_top")
+            self.assertEqual(result["fitter_seed"], 4)
             self.assertEqual(result["core_clock_mhz"], 12.5)
             self.assertEqual(
                 result["core_clock"],
@@ -208,6 +219,11 @@ class MisterFrameworkContractTest(unittest.TestCase):
                 ".sta.rpt",
                 framework.EXPECTED_CORE_CLOCK_TARGET,
                 "unrelated|pll|divclk",
+            ),
+            "wrong fitter seed": (
+                ".fit.rpt",
+                "Fitter Initial Placement Seed ; 4",
+                "Fitter Initial Placement Seed ; 3",
             ),
         }
         for name, (suffix, old, new) in mutations.items():
