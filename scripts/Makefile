@@ -56,6 +56,7 @@ COVERAGE_REPORT_DIR := ../reports/generated/coverage
 QEMU_DIFF_DIR := ../reports/generated/qemu_diff
 COMPILER_DIR := ../reports/generated/compiler
 TRACEABILITY_REPORT := ../reports/generated/traceability-report.json
+TRM_COVERAGE_REPORT := ../reports/generated/trm-coverage-report.json
 INDEPENDENT_LINT_REPORT := ../reports/generated/independent-lint.json
 CDC_RDC_REPORT := ../reports/generated/cdc-rdc.json
 POSTFIT_REPORT := ../reports/generated/postfit-report.json
@@ -141,7 +142,7 @@ INTEG_RUN_ARGS_compiler = \
         sim run wave clean help regress regress-quick regress-ci \
         coverage release-evidence \
         formal \
-        traceability random-validation-build random-validation \
+        traceability trm-coverage random-validation-build random-validation \
         random-validation-quick random-events-build random-events \
         public-suite-build public-suite \
         table7-cross functional-coverage \
@@ -475,6 +476,10 @@ traceability:
 	PYTHONPATH=. $(PYTHON) traceability_report.py --check \
 	    --output $(TRACEABILITY_REPORT)
 
+trm-coverage:
+	PYTHONPATH=. $(PYTHON) trm_coverage.py --check \
+	    --output $(TRM_COVERAGE_REPORT)
+
 # Release-facing entry point. The runner always starts clean, records the
 # complete source/tool/variant/seed manifest, executes every phase separately,
 # and atomically updates a machine-readable JSON result with per-phase logs.
@@ -586,6 +591,7 @@ help:
 	@echo "  public-suite run pinned MIT ARM and Thumb instruction exercisers"
 	@echo "  table7-cross validate all required Chapter 7 cross evidence in a full regression"
 	@echo "  functional-coverage close all ARMv4T encoding/policy bins"
+	@echo "  trm-coverage validate every r4p3 section, table, figure, and signal"
 	@echo "  formal       prove VAL-007 and reach every VAL-008 cover obligation"
 	@echo "  random-validation run 32 x 256-instruction constrained-random seeds"
 	@echo "  random-events run 32 all-class external-event seeds"

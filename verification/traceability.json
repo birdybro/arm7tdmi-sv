@@ -78,6 +78,11 @@
       "tests": ["scripts/tests/test_traceability_contract.py"],
       "source_sections": ["TASKS.md section 31.12 DOC-003"]
     },
+    "DOC-008": {
+      "rtl": ["N/A - complete TRM inventory and release evidence contract"],
+      "tests": ["scripts/trm_coverage.py", "scripts/tests/test_trm_coverage_contract.py"],
+      "source_sections": ["ARM DDI 0234B complete 242-page inventory; TASKS.md section 31.12 DOC-008"]
+    },
     "JTAG-006": {
       "rtl": ["rtl/jtag/arm7tdmis_sync_debug_port.sv"],
       "tests": ["tb/unit/sync_debug_port_tb.sv"],
@@ -204,6 +209,7 @@
     {"glob": "scripts/tests/test_*.py", "requirements": ["VER-002", "VER-005"]},
     {"glob": "scripts/tests/test_fpga_quality_contract.py", "requirements": ["FPGA-004"]},
     {"glob": "scripts/tests/test_postfit_sim_contract.py", "requirements": ["FPGA-006"]},
+    {"glob": "scripts/tests/test_trm_coverage_contract.py", "requirements": ["DOC-008"]},
     {"glob": "scripts/tests/test_constrained_random_contract.py", "requirements": ["VAL-002"]},
     {"glob": "scripts/tests/test_public_suite_*.py", "requirements": ["VAL-003"]},
     {"glob": "scripts/tests/test_soak_contract.py", "requirements": ["VAL-010"]}

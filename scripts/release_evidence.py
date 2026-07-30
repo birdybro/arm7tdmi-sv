@@ -1114,6 +1114,35 @@ def _validated_files(
         candidates.extend(
             (formal_report_path.resolve(), formal_manifest_path.resolve())
         )
+    trm_coverage_report = REPORT_ROOT / "trm-coverage-report.json"
+    if "trm-coverage" not in phase_names:
+        raise ValueError("regression did not run mandatory TRM coverage")
+    if not trm_coverage_report.is_file():
+        raise ValueError("TRM coverage report is missing")
+    trm_report = json.loads(trm_coverage_report.read_text(encoding="utf-8"))
+    import trm_coverage
+
+    trm_coverage.validate_report(
+        trm_report,
+        expected_commit=str(regression.get("git", {}).get("commit", "")),
+        require_clean=True,
+    )
+    trm_manifest_path = REPO_ROOT / "verification" / "trm_coverage.json"
+    trm_manifest = json.loads(trm_manifest_path.read_text(encoding="utf-8"))
+    trm_summary = trm_coverage.validate_manifest(trm_manifest)
+    for field in (
+        "inventory_counts",
+        "total_inventory_items",
+        "coverage_group_count",
+        "disposition_counts",
+        "groups",
+    ):
+        if trm_report.get(field) != trm_summary.get(field):
+            raise ValueError(f"TRM coverage report {field} does not match manifest")
+    candidates.extend(
+        (trm_coverage_report.resolve(), trm_manifest_path.resolve())
+    )
+
     traceability_report = REPORT_ROOT / "traceability-report.json"
     if "traceability" not in phase_names:
         raise ValueError("regression did not run mandatory traceability")

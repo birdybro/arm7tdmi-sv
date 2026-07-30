@@ -14,7 +14,8 @@ It always removes the Verilator build directory first, then runs:
 6. The pinned public ARM/Thumb suite and the 32 × 256 constrained-random
    campaign.
 7. The 256-seed sanitizer/X-state soak.
-8. The mixed-instruction smoke test and bidirectional traceability gate.
+8. The revision-locked complete ARM DDI 0234B inventory gate.
+9. The mixed-instruction smoke test and bidirectional traceability gate.
 
 ## Formal proof and reachability evidence
 
@@ -103,6 +104,11 @@ versioned artifact archive together with the corresponding clean source commit.
 The final `traceability` phase writes
 `reports/generated/traceability-report.json`; its bidirectional completeness
 and result semantics are defined in [TRACEABILITY.md](TRACEABILITY.md).
+The preceding `trm-coverage` phase writes
+`reports/generated/trm-coverage-report.json`; it locks all 207 numbered
+sections/subsections, 65 tables, 44 figures/timing diagrams, and 45 Appendix A
+signals to an explicit §31 disposition as defined in
+[TRM_COVERAGE.md](TRM_COVERAGE.md).
 The non-quick `soak` phase separately writes
 `reports/generated/soak-report.json` using schema `arm7tdmis-soak-v1`.
 The mandatory `public-suite` phase writes
@@ -195,7 +201,8 @@ After regression and coverage have both run on the same clean commit,
 clean-tree markers, and exact commit identity. It emits:
 
 - `reports/generated/release-manifest.json`, with size and SHA-256 for every
-  included regression, traceability, and coverage report, phase log, and
+  included regression, TRM-inventory, traceability, and coverage report,
+  phase log, and
   coverage database, plus the semantic
   project version, Git tree hash, regression source hash, canonical tool
   version hash, available tool-executable hashes, and specification/license

@@ -3693,7 +3693,7 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   memory and JTAG paths; remaining occurrences describe real pending state or
   deliberate same-instruction deferral. `test_documentation_contract.py` prevents
   those two stale comments from returning.
-- [ ] **DOC-008:** Add a revision-locked, executable coverage inventory for
+- [x] **DOC-008:** Add a revision-locked, executable coverage inventory for
   the complete ARM DDI 0234B r4p3 manual: all 207 numbered sections and
   subsections, 65 numbered tables, 44 numbered figures/timing diagrams, and
   every Appendix A signal. Record the PDF identity and give every inventory item an explicit
@@ -3703,6 +3703,16 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   missing evidence path, or unchecked implementation claim. Make the audit a
   mandatory regression and release-evidence phase so §31 cannot again be
   inferred complete from broad chapter-level prose.
+  `verification/trm_coverage.json` records the exact 361-item inventory and
+  nineteen nonoverlapping disposition groups. `scripts/trm_coverage.py`
+  independently reconstructs the expected numbering/signal sets, checks the
+  PDF bytes and SHA-256, validates every requirement state/evidence path, and
+  writes schema `arm7tdmis-trm-coverage-v1`.
+  `test_trm_coverage_contract.py` mutates missing/duplicate items, source
+  identity, requirement ownership, and evidence paths. `trm-coverage` runs in
+  every regression profile, and release packaging revalidates its clean
+  same-commit input hashes. `docs/TRM_COVERAGE.md` defines the disposition
+  meanings and preserves DBG-008/009 and FPGA-009 as explicit open rows.
 
 ## 31.13 Final v1.0 release gate
 

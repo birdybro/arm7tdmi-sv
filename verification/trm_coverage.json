@@ -1,0 +1,364 @@
+{
+  "schema": "arm7tdmis-trm-coverage-map-v1",
+  "source": {
+    "document": "ARM DDI 0234B",
+    "revision": "ARM7TDMI-S r4p3",
+    "path": "ARM_DDI_0234B_ARM7TDMI-S_r4p3_TRM.pdf",
+    "pages": 242,
+    "bytes": 1477711,
+    "sha256": "bb9cd0e3f2b7e2fdca4ff961cdfc5c9c85c063842e491f8997a504d3241baa14"
+  },
+  "inventory": {
+    "sections": [
+      "1.1", "1.2", "1.3", "1.4", "1.5",
+      "1.1.1", "1.1.2", "1.1.3", "1.2.1", "1.2.2", "1.4.1",
+      "1.4.2", "1.5.1", "1.5.2", "1.5.3", "1.5.4", "1.5.5",
+      "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7", "2.8",
+      "2.9", "2.10", "2.11", "2.2.1", "2.3.1", "2.3.2", "2.7.1",
+      "2.7.2", "2.7.3", "2.7.4", "2.8.1", "2.8.2", "2.8.3",
+      "2.9.1", "2.9.2", "2.9.3", "2.9.4", "2.9.5", "2.9.6",
+      "2.9.7", "2.9.8", "2.9.9", "2.9.10", "2.10.1", "2.10.2",
+      "3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.3.1",
+      "3.3.2", "3.3.3", "3.3.4", "3.3.5", "3.4.1", "3.4.2",
+      "3.4.3", "3.4.4", "3.4.5", "3.4.6", "3.5.1", "3.5.2",
+      "3.5.3", "3.5.4",
+      "4.1", "4.2", "4.3", "4.4", "4.5", "4.6", "4.7", "4.8",
+      "4.1.1", "4.4.1", "4.4.2", "4.4.3", "4.4.4", "4.4.5",
+      "4.4.6", "4.4.7", "4.5.1", "4.5.2",
+      "5.1", "5.2", "5.3", "5.4", "5.5", "5.6", "5.7", "5.8",
+      "5.9", "5.10", "5.11", "5.12", "5.13", "5.14", "5.15",
+      "5.16", "5.17", "5.18", "5.19", "5.20", "5.21", "5.22",
+      "5.23", "5.24", "5.25", "5.26", "5.27", "5.1.1", "5.2.1",
+      "5.2.2", "5.3.1", "5.3.2", "5.3.3", "5.3.4", "5.3.5",
+      "5.4.1", "5.9.1", "5.9.2", "5.10.1", "5.10.2", "5.11.1",
+      "5.11.2", "5.12.1", "5.13.1", "5.13.2", "5.13.3", "5.13.4",
+      "5.13.5", "5.14.1", "5.14.2", "5.14.3", "5.14.4", "5.14.5",
+      "5.15.1", "5.16.1", "5.16.2", "5.18.1", "5.18.2", "5.18.3",
+      "5.18.4", "5.18.5", "5.18.6", "5.19.1", "5.19.2", "5.19.3",
+      "5.20.1", "5.20.2", "5.20.3", "5.21.1", "5.21.2", "5.24.1",
+      "5.24.2", "5.24.3", "5.26.1", "5.26.2",
+      "6.1", "6.2", "6.3", "6.4", "6.5",
+      "7.1", "7.2", "7.3", "7.4", "7.5", "7.6", "7.7", "7.8",
+      "7.9", "7.10", "7.11", "7.12", "7.13", "7.14", "7.15",
+      "7.16", "7.17", "7.18", "7.19", "7.20",
+      "8.1", "8.2", "8.1.1", "8.1.2", "8.1.3", "8.1.4", "8.1.5",
+      "A.1",
+      "B.1", "B.2", "B.3", "B.4", "B.4.1", "B.4.2", "B.4.3",
+      "B.4.4", "B.4.5", "B.4.6"
+    ],
+    "tables": [
+      "1-1", "1-2", "1-3", "1-4", "1-5", "1-6", "1-7", "1-8",
+      "1-9", "1-10", "1-11", "1-12",
+      "2-1", "2-2", "2-3", "2-4",
+      "3-1", "3-2", "3-3", "3-4", "3-5", "3-6", "3-7", "3-8", "3-9",
+      "4-1", "4-2", "4-3", "4-4",
+      "5-1", "5-2", "5-3", "5-4", "5-5", "5-6", "5-7", "5-8",
+      "6-1",
+      "7-1", "7-2", "7-3", "7-4", "7-5", "7-6", "7-7", "7-8",
+      "7-9", "7-10", "7-11", "7-12", "7-13", "7-14", "7-15",
+      "7-16", "7-17", "7-18", "7-19", "7-20", "7-21", "7-22", "7-23",
+      "8-1", "A-1", "B-1", "B-2"
+    ],
+    "figures": [
+      "1-1", "1-2", "1-3", "1-4",
+      "2-1", "2-2", "2-3", "2-4", "2-5", "2-6",
+      "3-1", "3-2", "3-3", "3-4", "3-5", "3-6", "3-7",
+      "4-1", "4-2", "4-3", "4-4", "4-5",
+      "5-1", "5-2", "5-3", "5-4", "5-5", "5-6", "5-7", "5-8",
+      "5-9", "5-10", "5-11", "5-12", "5-13", "5-14", "5-15",
+      "5-16", "5-17",
+      "8-1", "8-2", "8-3", "8-4", "8-5"
+    ],
+    "signals": [
+      "ABORT", "ADDR[31:0]", "CFGBIGEND", "CLK", "CLKEN", "CPA", "CPB",
+      "CPnI", "CPnMREQ", "CPnOPC", "CPSEQ", "CPTBIT", "CPnTRANS",
+      "DBGACK", "DBGBREAK", "DBGCOMMRX", "DBGCOMMTX", "DBGEN", "DBGnEXEC",
+      "DBGEXT[1:0]", "DBGINSTRVALID", "DBGRNG[1:0]", "DBGRQ", "DBGTCKEN",
+      "DBGTDI", "DBGTDO", "DBGnTDOEN", "DBGTMS", "DBGnTRST", "DMORE",
+      "nFIQ", "nIRQ", "LOCK", "PROT[1:0]", "RDATA[31:0]", "nRESET",
+      "SCANENABLE", "SCANIN", "SCANOUT", "SIZE[1:0]", "TRANS[1:0]",
+      "VDD", "VSS", "WDATA[31:0]", "WRITE"
+    ]
+  },
+  "coverage_groups": [
+    {
+      "id": "chapter-1-architecture-and-encodings",
+      "disposition": "implemented-and-tested",
+      "selectors": [
+        {"category": "sections", "prefix": "1."},
+        {"category": "tables", "prefix": "1-"},
+        {"category": "figures", "prefix": "1-"}
+      ],
+      "requirements": ["ISA-005", "ISA-017", "VAL-006"],
+      "evidence": [
+        "rtl/decode/arm7tdmis_decoder.sv",
+        "rtl/decode/arm7tdmis_thumb_decoder.sv",
+        "verification/functional_coverage.json",
+        "docs/VERIFICATION.md"
+      ],
+      "rationale": "The programmer-visible instruction families, encoding maps, pipeline overview, and revision-4 feature deltas are covered by exhaustive ARM/Thumb decode-policy inventory and directed execution evidence."
+    },
+    {
+      "id": "chapter-2-programmers-model",
+      "disposition": "implemented-and-tested",
+      "selectors": [
+        {"category": "sections", "prefix": "2."},
+        {"category": "tables", "prefix": "2-"},
+        {"category": "figures", "prefix": "2-"}
+      ],
+      "requirements": ["ISA-001", "ISA-002", "ISA-003", "ISA-004", "EXC-011"],
+      "evidence": [
+        "rtl/datapath/arm7tdmis_regfile.sv",
+        "rtl/core/arm7tdmis_psr.sv",
+        "docs/PSR.md",
+        "docs/EXCEPTIONS.md"
+      ],
+      "rationale": "States, endian formats, registers, modes, PSRs, exceptions, interrupt latency, and reset have directed cross-product tests and maintained architectural contracts."
+    },
+    {
+      "id": "chapter-3-memory-interface",
+      "disposition": "implemented-and-tested",
+      "selectors": [
+        {"category": "sections", "prefix": "3."},
+        {"category": "tables", "prefix": "3-"},
+        {"category": "figures", "prefix": "3-"}
+      ],
+      "requirements": ["BUS-001", "BUS-002", "BUS-003", "BUS-012"],
+      "evidence": [
+        "rtl/core/arm7tdmis_core_pipelined.sv",
+        "verification/arm7tdmis_raw_bus_checker.sv",
+        "docs/RAW_BUS.md",
+        "docs/TABLE7_MATRIX.md"
+      ],
+      "rationale": "All N/S/I/C phases, address/data timing, transfer widths, endian lanes, CLKEN holds, and raw signal stability are checked at the public pins."
+    },
+    {
+      "id": "chapter-4-coprocessor-interface",
+      "disposition": "implemented-and-tested",
+      "selectors": [
+        {"category": "sections", "prefix": "4."},
+        {"category": "tables", "prefix": "4-"},
+        {"category": "figures", "prefix": "4-"}
+      ],
+      "requirements": ["CP-001", "CP-005", "CP-006", "CP-011"],
+      "evidence": [
+        "rtl/core/arm7tdmis_core_pipelined.sv",
+        "docs/COPROCESSOR.md",
+        "tb/integration/arm7tdmis_cp_pipeline_follow_tb.sv",
+        "tb/integration/arm7tdmis_cp_ldc_stc_tb.sv"
+      ],
+      "rationale": "Pipeline following, claim/busy/absent handshakes, transfer bodies, privilege indication, and multi-coprocessor integration rules have fail-hard evidence."
+    },
+    {
+      "id": "chapter-5-debug-general",
+      "disposition": "implemented-and-tested",
+      "selectors": [
+        {
+          "category": "sections",
+          "prefix": "5.",
+          "exclude": ["5.18.5", "5.25"]
+        },
+        {"category": "tables", "prefix": "5-"},
+        {
+          "category": "figures",
+          "prefix": "5-",
+          "exclude": ["5-16", "5-17"]
+        }
+      ],
+      "requirements": ["DBG-001", "DBG-003", "DBG-004", "DBG-007", "JTAG-001", "JTAG-003", "JTAG-006"],
+      "evidence": [
+        "rtl/debug/arm7tdmis_ice_rt.sv",
+        "rtl/jtag/arm7tdmis_jtag_tap.sv",
+        "docs/DEBUG.md",
+        "tb/integration/arm7tdmis_debug_inject_matrix_tb.sv"
+      ],
+      "rationale": "All Chapter 5 material except the two separately open edge cases is covered by public JTAG, comparator, entry/exit, monitor, DCC, and injected-instruction matrices."
+    },
+    {
+      "id": "chapter-5-system-speed-abort",
+      "disposition": "open-requirement",
+      "selectors": [
+        {"category": "sections", "items": ["5.18.5"]}
+      ],
+      "requirements": ["DBG-008"],
+      "evidence": ["TASKS.md", "tb/integration/arm7tdmis_debug_system_speed_tb.sv"],
+      "rationale": "Ordinary system-speed execution is covered, but the explicit external-abort case remains open under DBG-008."
+    },
+    {
+      "id": "chapter-5-debug-status-write-conflict",
+      "disposition": "open-requirement",
+      "selectors": [
+        {"category": "sections", "items": ["5.25"]},
+        {"category": "figures", "items": ["5-16", "5-17"]}
+      ],
+      "requirements": ["DBG-009"],
+      "evidence": ["TASKS.md", "docs/DEBUG.md", "rtl/debug/arm7tdmis_ice_rt.sv"],
+      "rationale": "The live status mux exists, but the manual's contradictory write sentence requires a frozen and publicly tested disposition."
+    },
+    {
+      "id": "chapter-6-etm-boundary",
+      "disposition": "integration-obligation",
+      "selectors": [
+        {"category": "sections", "prefix": "6."},
+        {"category": "tables", "prefix": "6-"}
+      ],
+      "requirements": ["ETM-001", "ETM-002"],
+      "evidence": [
+        "rtl/trace/arm7tdmis_etm7_adapter.sv",
+        "tb/unit/etm7_adapter_tb.sv",
+        "docs/TRACE.md"
+      ],
+      "rationale": "The CPU-side ETM7 mapping and execute-status contract are implemented; an ETM macrocell, trace encoder, and storage remain external by the selected profile."
+    },
+    {
+      "id": "chapter-7-cycle-timing",
+      "disposition": "implemented-and-tested",
+      "selectors": [
+        {"category": "sections", "prefix": "7."},
+        {"category": "tables", "prefix": "7-"}
+      ],
+      "requirements": ["BUS-002", "BUS-003", "VAL-004"],
+      "evidence": [
+        "verification/table7_cross.json",
+        "tb/integration/arm7tdmis_table7_core_phase_matrix_tb.sv",
+        "docs/TABLE7_MATRIX.md"
+      ],
+      "rationale": "Every summary and detailed Chapter 7 timing row is mapped to pin-level directed evidence and the mandatory legal-equivalence cross report."
+    },
+    {
+      "id": "chapter-8-provisional-ac-timing",
+      "disposition": "open-requirement",
+      "selectors": [
+        {"category": "sections", "prefix": "8."},
+        {"category": "tables", "prefix": "8-"},
+        {"category": "figures", "prefix": "8-"}
+      ],
+      "requirements": ["FPGA-009"],
+      "evidence": ["TASKS.md", "fpga/arm7tdmis_conformance.sdc", "docs/PERFORMANCE.md"],
+      "rationale": "The original provisional hard-macro percentages require an explicit target-specific soft-FPGA disposition rather than an unqualified portability claim."
+    },
+    {
+      "id": "appendix-a-signal-table",
+      "disposition": "integration-obligation",
+      "selectors": [
+        {"category": "sections", "items": ["A.1"]},
+        {"category": "tables", "items": ["A-1"]}
+      ],
+      "requirements": ["VER-009", "BUS-012", "DFT-001"],
+      "evidence": [
+        "rtl/top/arm7tdmis_top.sv",
+        "rtl/top/arm7tdmis_no_dft.sv",
+        "docs/RAW_BUS.md",
+        "docs/TRACE.md"
+      ],
+      "rationale": "Table A-1 is decomposed into the functional, ATPG, and supply groups below so each named signal has an explicit profile disposition."
+    },
+    {
+      "id": "appendix-a-functional-signals",
+      "disposition": "implemented-and-tested",
+      "selectors": [
+        {
+          "category": "signals",
+          "items": [
+            "ABORT", "ADDR[31:0]", "CFGBIGEND", "CLK", "CLKEN", "CPA", "CPB",
+            "CPnI", "CPnMREQ", "CPnOPC", "CPSEQ", "CPTBIT", "CPnTRANS",
+            "DBGACK", "DBGBREAK", "DBGCOMMRX", "DBGCOMMTX", "DBGEN",
+            "DBGnEXEC", "DBGEXT[1:0]", "DBGINSTRVALID", "DBGRNG[1:0]",
+            "DBGRQ", "DBGTCKEN", "DBGTDI", "DBGTDO", "DBGnTDOEN", "DBGTMS",
+            "DBGnTRST", "DMORE", "nFIQ", "nIRQ", "LOCK", "PROT[1:0]",
+            "RDATA[31:0]", "nRESET", "SIZE[1:0]", "TRANS[1:0]",
+            "WDATA[31:0]", "WRITE"
+          ]
+        }
+      ],
+      "requirements": ["VER-009", "BUS-012", "CP-001", "DBG-001", "ETM-001"],
+      "evidence": [
+        "rtl/top/arm7tdmis_top.sv",
+        "verification/arm7tdmis_raw_bus_checker.sv",
+        "docs/RAW_BUS.md",
+        "docs/DEBUG.md"
+      ],
+      "rationale": "All forty functional macrocell signal names are present at the raw top and assigned to bus, coprocessor, debug/JTAG, or trace assertions."
+    },
+    {
+      "id": "appendix-a-atpg-signals",
+      "disposition": "external-out-of-scope",
+      "selectors": [
+        {"category": "signals", "items": ["SCANENABLE", "SCANIN", "SCANOUT"]}
+      ],
+      "requirements": ["DFT-001"],
+      "evidence": ["rtl/top/arm7tdmis_no_dft.sv", "docs/INTEGRATION.md"],
+      "rationale": "The FPGA release profile makes no ASIC scan-insertion claim and exposes a named compatibility-only no-DFT wrapper outside the FPGA file list."
+    },
+    {
+      "id": "appendix-a-supply-rails",
+      "disposition": "external-out-of-scope",
+      "selectors": [
+        {"category": "signals", "items": ["VDD", "VSS"]}
+      ],
+      "requirements": ["FPGA-003", "MIST-005"],
+      "evidence": ["fpga/arm7tdmis_conformance.qsf", "docs/INTEGRATION.md"],
+      "rationale": "VDD and VSS are physical supply rails owned by the selected FPGA device and board, not synthesizable soft-core logic ports."
+    },
+    {
+      "id": "appendix-b-interface-equivalence",
+      "disposition": "integration-obligation",
+      "selectors": [
+        {"category": "sections", "items": ["B.1"]},
+        {"category": "tables", "items": ["B-1"]}
+      ],
+      "requirements": ["VER-009", "BUS-012", "JTAG-004"],
+      "evidence": ["rtl/top/arm7tdmis_top.sv", "docs/RAW_BUS.md", "docs/DEBUG.md"],
+      "rationale": "The soft-core names and polarities are the raw public API; hard-macro equivalents are migration guidance and do not create extra ports."
+    },
+    {
+      "id": "appendix-b-atpg",
+      "disposition": "external-out-of-scope",
+      "selectors": [
+        {"category": "sections", "items": ["B.2"]}
+      ],
+      "requirements": ["DFT-001"],
+      "evidence": ["rtl/top/arm7tdmis_no_dft.sv", "docs/INTEGRATION.md"],
+      "rationale": "ASIC ATPG insertion is excluded from the FPGA profile and cannot be inferred from the compatibility tie-off."
+    },
+    {
+      "id": "appendix-b-timing-parameters",
+      "disposition": "open-requirement",
+      "selectors": [
+        {"category": "sections", "items": ["B.3"]}
+      ],
+      "requirements": ["FPGA-009"],
+      "evidence": ["TASKS.md", "fpga/arm7tdmis_conformance.sdc"],
+      "rationale": "The Appendix B timing migration statement is part of the Chapter 8 soft-FPGA disposition required by FPGA-009."
+    },
+    {
+      "id": "appendix-b-design-considerations",
+      "disposition": "implemented-and-tested",
+      "selectors": [
+        {
+          "category": "sections",
+          "items": ["B.4", "B.4.1", "B.4.2", "B.4.3", "B.4.4", "B.4.5"]
+        }
+      ],
+      "requirements": ["BUS-001", "EXC-005", "JTAG-001", "JTAG-004"],
+      "evidence": [
+        "docs/RAW_BUS.md",
+        "docs/DEBUG.md",
+        "tb/unit/jtag_tap_tb.sv",
+        "tb/integration/arm7tdmis_interrupt_sampling_matrix_tb.sv"
+      ],
+      "rationale": "Clock polarity, synchronous JTAG convention, reduced TAP, synchronous interrupts, and first-stopped-edge address behavior are frozen and tested."
+    },
+    {
+      "id": "appendix-b-legacy-signals",
+      "disposition": "external-out-of-scope",
+      "selectors": [
+        {"category": "sections", "items": ["B.4.6"]},
+        {"category": "tables", "items": ["B-2"]}
+      ],
+      "requirements": ["VER-009", "DFT-001"],
+      "evidence": ["rtl/top/arm7tdmis_top.sv", "docs/RAW_BUS.md", "TASKS.md"],
+      "rationale": "Table B-2 explicitly lists hard-macrocell signals absent from ARM7TDMI-S; adding them would be nonconformant rather than completing the soft core."
+    }
+  ]
+}

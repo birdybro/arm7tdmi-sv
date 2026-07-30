@@ -143,6 +143,7 @@ def collect_metadata(
                 "unit",
                 "expected-failure",
                 "raw-bus-checker",
+                "trm-coverage",
                 "traceability",
             ],
             "fpga": (
@@ -349,6 +350,7 @@ def _phases(
     if not quick:
         yield _make_phase("soak", "soak")
     yield _make_phase("smoke", "run")
+    yield _make_phase("trm-coverage", "trm-coverage")
     yield _make_phase("traceability", "traceability")
 
 
