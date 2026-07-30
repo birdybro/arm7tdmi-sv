@@ -89,6 +89,17 @@ class CharacterizationContractTest(unittest.TestCase):
             ):
                 with self.subTest(document="performance", profile=name, value=value):
                     self.assertIn(value, performance)
+        for name in ("none", "debug", "coprocessor", "both"):
+            profile = profiles[name]
+            for value in (
+                f'{profile["resources"]["alm"]:,}',
+                f'{profile["resources"]["register"]:,}',
+                f'{profile["clock_enable_registers"]:,}',
+                f'{profile["fmax_mhz"]:.2f} MHz',
+                f'{profile["power_mw"]["core_dynamic"]:.2f} mW',
+            ):
+                with self.subTest(document="performance", profile=name, value=value):
+                    self.assertIn(value, performance)
 
     def test_full_flows_run_power_before_fail_hard_report_check(self) -> None:
         makefile = _read("scripts/Makefile")
@@ -121,16 +132,9 @@ class CharacterizationContractTest(unittest.TestCase):
             "5CSEBA6U23I7",
             "Quartus Lite 17.0.2",
             "25 MHz",
-            "28.79 MHz",
-            "27.24 MHz",
-            "3,491",
-            "2,512",
-            "2,109",
-            "4,889",
-            "3,823",
-            "3,099",
-            "450.07 mW",
-            "457.79 mW",
+            "5,000 ALMs",
+            "7,500 ALMs",
+            "verification/fpga_characterization.json",
             "Low",
             "vectorless",
             "not a board-power estimate",

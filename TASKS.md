@@ -3563,12 +3563,14 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   Both complete flows now run vectorless PowerPlay before
   `scripts/quartus_report_check.py`, which fails on absent Fmax, power,
   confidence, or clock-enable fields in addition to the existing fit/timing
-  gates. `docs/PERFORMANCE.md` publishes the checked 3,491-ALM/2,512-register
-  trimmed and 4,889-ALM/3,823-register full fits, 2,109/3,099
-  clock-enable registers, zero MLAB/M10K bits, six DSP blocks, budget
-  headroom, 28.79/27.24 MHz worst-model Fmax, and explicitly low-confidence
-  450.07/457.79 mW estimates. `test_characterization_contract.py` and
-  `test_quartus_report_check.py` freeze the flow and schema.
+  gates. `docs/PERFORMANCE.md` publishes the checked resources, clock-enable
+  inference, zero MLAB/M10K bits, six DSP blocks, budget headroom, worst-model
+  Fmax, and explicitly low-confidence power estimates.
+  `verification/fpga_characterization.json` binds every published profile to
+  the producing clean 180-phase release and the SHA-256 of every RTL, project,
+  constraint, top, and checker input. `test_characterization_contract.py` and
+  `test_quartus_report_check.py` freeze the flow, schema, input hashes, and
+  documentation linkage so stale characterization cannot remain checked.
 - [x] **FPGA-006:** Prove synthesis equivalence or run post-synthesis simulation for
   architectural smoke, stalls, reset, endian, exceptions, and wrapper transactions.
   `scripts/postfit_sim.py` creates isolated Quartus Lite 17.0.2 projects for

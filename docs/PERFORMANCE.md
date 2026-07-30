@@ -5,6 +5,10 @@ for an enclosing MiSTer project. All profiles target Cyclone V
 `5CSEBA6U23I7` with Quartus Lite 17.0.2 and the supplied standalone
 constraints. A framework build must repeat fit, timing, and power analysis
 with its own clocks, placement, I/O, memory, and activity.
+The immutable machine-readable snapshot is
+`verification/fpga_characterization.json`; it binds these published results
+to the SHA-256 of every RTL, project, constraint, top, and report-checker
+input used by the clean 180-phase regression at commit `1bb86ea683f6`.
 
 ## Clock and CPU enable
 
@@ -15,8 +19,8 @@ of disabled edges. One enabled edge can advance at most one CPU cycle; the
 effective CPU rate is therefore `CLK frequency * enabled-edge fraction`.
 
 The minimum reported same-clock Fmax across the slow timing models is
-28.79 MHz for the trimmed canonical-wrapper profile and 27.24 MHz for the
-raw feature-complete profile. These figures have 3.79 MHz and 2.24 MHz
+27.80 MHz for the trimmed canonical-wrapper profile and 27.43 MHz for the
+raw feature-complete profile. These figures have 2.80 MHz and 2.43 MHz
 headroom over the checked 25 MHz clock, respectively. They are post-fit
 characterization results for virtual boundary pins, not a promise that a
 particular board or framework will reach those rates.
@@ -40,15 +44,15 @@ the core and its pipelined response, as specified in
 
 | Profile | Fitted ALMs | Registers | Registers with clock enable | M10K / memory bits | DSP blocks | Enforced budget |
 |---|---:|---:|---:|---:|---:|---|
-| Canonical trimmed wrapper (`ENABLE_DEBUG=0`, `ENABLE_COPROCESSOR=0`) | 3,491 | 2,512 | 2,109 | 0 / 0 | 6 | 5,000 ALMs, 4,096 registers, 8 DSPs, 0 memory bits |
-| Raw feature-complete `arm7tdmis_top` | 4,889 | 3,823 | 3,099 | 0 / 0 | 6 | 7,500 ALMs, 6,000 registers, 8 DSPs, 0 memory bits |
+| Canonical trimmed wrapper (`ENABLE_DEBUG=0`, `ENABLE_COPROCESSOR=0`) | 3,500 | 2,537 | 2,142 | 0 / 0 | 6 | 5,000 ALMs, 4,096 registers, 8 DSPs, 0 memory bits |
+| Raw feature-complete `arm7tdmis_top` | 5,005 | 3,799 | 3,131 | 0 / 0 | 6 | 7,500 ALMs, 6,000 registers, 8 DSPs, 0 memory bits |
 
-The trimmed profile retains 1,509 ALMs, 1,584 registers, and two DSP blocks
-of its project budget. The raw profile retains 2,611 ALMs, 2,177 registers,
+The trimmed profile retains 1,500 ALMs, 1,559 registers, and two DSP blocks
+of its project budget. The raw profile retains 2,495 ALMs, 2,201 registers,
 and two DSP blocks. Neither profile infers MLAB/M10K storage; all
 architectural banks are registers. Both infer the six DSP blocks used by the
-multiplier. Quartus reports clock-enable inference on 2,109 of 2,130
-synthesis registers in the trimmed profile and 3,099 of 3,146 in the raw
+multiplier. Quartus reports clock-enable inference on 2,142 of 2,165
+synthesis registers in the trimmed profile and 3,131 of 3,178 in the raw
 profile.
 
 The two rows are different integration surfaces and must not be subtracted
@@ -62,18 +66,18 @@ setting. Only `ENABLE_DEBUG` and `ENABLE_COPROCESSOR` vary:
 
 | Profile | Debug | Coprocessor | Fitted ALMs | Registers | CE registers | Memory bits | DSPs | Worst slow-model Fmax | Core dynamic power |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `none` | 0 | 0 | 3,565 | 2,501 | 2,109 | 0 | 6 | 27.31 MHz | 26.61 mW |
-| `debug` | 1 | 0 | 4,806 | 3,162 | 3,037 | 0 | 6 | 28.32 MHz | 37.04 mW |
-| `coprocessor` | 0 | 1 | 3,711 | 2,697 | 2,283 | 0 | 6 | 27.29 MHz | 30.34 mW |
-| `both` | 1 | 1 | 4,989 | 3,349 | 3,221 | 0 | 6 | 27.51 MHz | 36.48 mW |
+| `none` | 0 | 0 | 3,499 | 2,538 | 2,142 | 0 | 6 | 27.55 MHz | 29.06 mW |
+| `debug` | 1 | 0 | 4,747 | 3,602 | 3,049 | 0 | 6 | 26.67 MHz | 34.60 mW |
+| `coprocessor` | 0 | 1 | 3,765 | 2,647 | 2,316 | 0 | 6 | 28.63 MHz | 31.51 mW |
+| `both` | 1 | 1 | 4,996 | 3,841 | 3,234 | 0 | 6 | 26.75 MHz | 38.31 mW |
 
 The isolated fitted deltas from `none` are:
 
 | Enabled option set | ALM delta | Register delta | Memory-bit delta | DSP delta | Fmax delta | Core-dynamic-power delta |
 |---|---:|---:|---:|---:|---:|---:|
-| `debug` | +1,241 | +661 | 0 | 0 | +1.01 MHz | +10.43 mW |
-| `coprocessor` | +146 | +196 | 0 | 0 | -0.02 MHz | +3.73 mW |
-| `both` | +1,424 | +848 | 0 | 0 | +0.20 MHz | +9.87 mW |
+| `debug` | +1,248 | +1,064 | 0 | 0 | -0.88 MHz | +5.54 mW |
+| `coprocessor` | +266 | +109 | 0 | 0 | +1.08 MHz | +2.45 mW |
+| `both` | +1,497 | +1,303 | 0 | 0 | -0.80 MHz | +9.25 mW |
 
 Fitter variation means the combined delta need not equal the sum of the two
 single-option deltas, and a positive Fmax delta is not an architectural
@@ -87,8 +91,8 @@ PowerPlay vectorless estimation at the checked 25 MHz assumptions reports:
 
 | Profile | Total | Core dynamic | Core static | I/O |
 |---|---:|---:|---:|---:|
-| Canonical trimmed wrapper | 450.07 mW | 28.96 mW | 412.43 mW | 8.67 mW |
-| Raw feature-complete | 457.79 mW | 36.62 mW | 412.50 mW | 8.67 mW |
+| Canonical trimmed wrapper | 452.41 mW | 31.29 mW | 412.45 mW | 8.67 mW |
+| Raw feature-complete | 458.31 mW | 37.13 mW | 412.50 mW | 8.67 mW |
 
 The PowerPlay confidence is **Low** because no workload VCD/toggle file or
 board thermal model is supplied. The selected SoC device also emits Quartus
@@ -125,6 +129,10 @@ directly; the option target applies the same checker to all four fits through
 `scripts/quartus_option_characterization.py`. Each option profile uses Quartus
 Auto Fit so a single placement that misses the common 0.25 ns synchronous
 input-hold contract is retried without weakening that boundary requirement.
+The checked snapshot records the producing release archive and hashes all
+characterization inputs, so a source, constraint, project, top, or checker
+change makes `make -C scripts harness-unit` fail until fresh fit evidence is
+reviewed and deliberately published.
 The checks fail on missing
 stages or images, unexpected top/device, resource-budget overruns, missing
 clock-enable/Fmax/power evidence, negative slack, unconstrained setup/hold

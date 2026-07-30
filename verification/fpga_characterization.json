@@ -1,0 +1,168 @@
+{
+  "clock_mhz": 25,
+  "device": "5CSEBA6U23I7",
+  "evidence": {
+    "commit": "1bb86ea683f6c06b3fd75306d757e1728c4f29c2",
+    "regression_phases": 180,
+    "release_archive": "reports/generated/arm7tdmis-release-evidence-1bb86ea683f6.tar.gz",
+    "source_sha256": "8801b1a70fed6219cf23994fa9c1503be7e1f83773ec496452fb95c1f353dd87"
+  },
+  "inputs": {
+    "fpga/arm7tdmi_mister.f": "41774d179b2691d6e720ac698bdb028033c28b56aab0b6bf363f3f4346b8f869",
+    "fpga/arm7tdmi_mister.qip": "e03091764d16d7a5cb27a8ca26f61db5d5d620da44ad862a43eae56fa819e129",
+    "fpga/arm7tdmi_mister.qsf": "c8d8d9b3fd2aa3ed6256fa4fa67667c4e0f82ad11bc963d5d23e1ac4cbc6b170",
+    "fpga/arm7tdmi_mister.sdc": "003a3c4e54960a67fe518d9e9527f8d1b7a74c5df36c9ab550553c8125e29e44",
+    "fpga/arm7tdmi_option_both.qsf": "e041a9da35943109dd58bc3fcf530d10111de04a2a24a369f688dfce096611b5",
+    "fpga/arm7tdmi_option_coprocessor.qsf": "ae9243a7750040aa7d2336246d610f4e4351748d9ec562cf468e937374156865",
+    "fpga/arm7tdmi_option_debug.qsf": "d3fcd798e586d24ce7b8df5269a90a912649ef90e24e526389b4604ff47b8139",
+    "fpga/arm7tdmi_option_none.qsf": "e0eaca66a5e41006582f2978e4ac051bb319f378956ff8142fcc9a120b1f19b6",
+    "fpga/arm7tdmi_options.sdc": "e89dd3b2f94ec4fe08c322e43879e5575402c7403dcdb737cf9d9319d63d2b5a",
+    "fpga/arm7tdmis_conformance.qsf": "08233357b2100fddf61b3974c7c7726d7ed459bd23edc3b20bbd977708a8916c",
+    "fpga/arm7tdmis_conformance.sdc": "064d4ba549b2cca8a2271ffb72b28e1411be8cff01c7ae8a7fa497292dd4e8e5",
+    "fpga/example/arm7tdmi_mister_example_top.sv": "721f4d0aac807a2303a1a0c68e17af636734653348ee5041197f18aab1d8665f",
+    "rtl/arm7tdmis_bus_pkg.sv": "3efead125009671bbc7743c0786045db3e0a5efb08ab63865d2d96fa443e2e04",
+    "rtl/arm7tdmis_debug_pkg.sv": "200bc7546e6c0ec5dfad995c40e463bd4dc1317fbe264b9820fa793c0e10bbbd",
+    "rtl/arm7tdmis_instr_pkg.sv": "a1895e39e44fa582e9ec3d75ec640c66919359f1adaa97d9c8355c901b477d65",
+    "rtl/arm7tdmis_psr_pkg.sv": "4479f6be9a009d76658775b809e0958667aa3f759f27f6a338fa4ee919909a09",
+    "rtl/arm7tdmis_types_pkg.sv": "a4839b11605ad23e782c33f40412ff837d2995e19ef613c8bb4fe13ebb0980f7",
+    "rtl/core/arm7tdmis_core_pipelined.sv": "99c5cf1a759234632549c8b864a4c8da9e78182b35b734f1182a06ed512429dd",
+    "rtl/core/arm7tdmis_psr.sv": "a70ea1b7316acadba0b0c42a68d869f7c612858c929b4e93d8f813e63c010432",
+    "rtl/core/arm7tdmis_reset_sync.sv": "732d05bab3bc4ee7033b5a96124bf3615d4e33be5038a60d4a9ad0c937dbe3a9",
+    "rtl/datapath/arm7tdmis_alu.sv": "75e9b7b8566516e71f8b296ecc55d7862e1e3c14db6583b61206c8b5d7681415",
+    "rtl/datapath/arm7tdmis_multiplier.sv": "69a3a17539873e002cdab0da6a9f44425bbd756f626f3ee6c564bf0430631618",
+    "rtl/datapath/arm7tdmis_regfile.sv": "d3166a1fdcbdb502aa2faee933069bc4ae061ff28cd5498fec47a025def359fc",
+    "rtl/datapath/arm7tdmis_shifter.sv": "efc36e3f5bc552a0c29eefd929e8d84417e3b8c02114bee3a0f6c078f16dd87f",
+    "rtl/debug/arm7tdmis_ice_rt.sv": "eb58ec5754619ea1b9da09f75405a1c6f6f5256ae107f550b3ba9796854c951a",
+    "rtl/decode/arm7tdmis_condition.sv": "963ceafcb0a1980d706e2e9e782c01d3f3101529cfb751433fdbcc7f513a07b4",
+    "rtl/decode/arm7tdmis_decoder.sv": "1bef49c9cbb7ae61708ba926b42f588562a7b32b59230d3ef3248e86afea30a1",
+    "rtl/decode/arm7tdmis_thumb_decoder.sv": "d7c909ec83ec71ed19043ef6326d4312d37c19169448bb4692b20ca6b9147ebc",
+    "rtl/jtag/arm7tdmis_jtag_tap.sv": "cf0fb51b256c1320fb847a884a3d81c0813436da0d03c11966d286815c060425",
+    "rtl/jtag/arm7tdmis_sync_debug_port.sv": "6f5f78ba86a0365991b0025ffaccdb5dc47af11ce39608ac003a488c46f8e1cb",
+    "rtl/top/arm7tdmi_mister.sv": "42d818fd5a6c57829067890ed5c6b706bb66e36f8b0b54859570fe04994ad291",
+    "rtl/top/arm7tdmi_mister_enable_done_adapter.sv": "d40f940c6c9abeb81241b5278fb18b49f2577905f15c445996748bd50c04620e",
+    "rtl/top/arm7tdmi_wishbone_adapter.sv": "c7de72096cc7992128b293e4a0a8faacaaac9282374ae93ee57e0563ebe5502a",
+    "rtl/top/arm7tdmis_top.sv": "84b67a74afed31a9af251707b2d549399c86c9942b67c9b32b27463c0d785d57",
+    "rtl/trace/arm7tdmis_etm7_adapter.sv": "1a1e3622087ba664b512850f1953636623bc8f21b8d06aec459e46734bbb8032",
+    "scripts/quartus_option_characterization.py": "83d7ddb0aaaa4f21a4f1c4827f3755ac8dd35062551802a6aab47c26bea09839",
+    "scripts/quartus_report_check.py": "ef3c4eb5cacf30f109f1b8188791538c18da78934c1e87def42d2df7834328f1"
+  },
+  "profiles": {
+    "both": {
+      "clock_enable_registers": 3234,
+      "fmax_mhz": 26.75,
+      "minimum_hold_slack_ns": 0.164,
+      "minimum_setup_slack_ns": 2.62,
+      "power_confidence": "Low: user provided insufficient toggle rate data",
+      "power_mw": {
+        "core_dynamic": 38.31,
+        "core_static": 412.51,
+        "io": 8.67,
+        "total": 459.49
+      },
+      "resources": {
+        "alm": 4996,
+        "dsp": 6,
+        "memory_bit": 0,
+        "register": 3841
+      }
+    },
+    "conformance": {
+      "clock_enable_registers": 3131,
+      "fmax_mhz": 27.43,
+      "minimum_hold_slack_ns": 0.158,
+      "minimum_setup_slack_ns": 3.546,
+      "power_confidence": "Low: user provided insufficient toggle rate data",
+      "power_mw": {
+        "core_dynamic": 37.13,
+        "core_static": 412.5,
+        "io": 8.67,
+        "total": 458.31
+      },
+      "resources": {
+        "alm": 5005,
+        "dsp": 6,
+        "memory_bit": 0,
+        "register": 3799
+      }
+    },
+    "coprocessor": {
+      "clock_enable_registers": 2316,
+      "fmax_mhz": 28.63,
+      "minimum_hold_slack_ns": 0.165,
+      "minimum_setup_slack_ns": 5.071,
+      "power_confidence": "Low: user provided insufficient toggle rate data",
+      "power_mw": {
+        "core_dynamic": 31.51,
+        "core_static": 412.45,
+        "io": 8.67,
+        "total": 452.63
+      },
+      "resources": {
+        "alm": 3765,
+        "dsp": 6,
+        "memory_bit": 0,
+        "register": 2647
+      }
+    },
+    "debug": {
+      "clock_enable_registers": 3049,
+      "fmax_mhz": 26.67,
+      "minimum_hold_slack_ns": 0.137,
+      "minimum_setup_slack_ns": 2.504,
+      "power_confidence": "Low: user provided insufficient toggle rate data",
+      "power_mw": {
+        "core_dynamic": 34.6,
+        "core_static": 412.48,
+        "io": 8.67,
+        "total": 455.75
+      },
+      "resources": {
+        "alm": 4747,
+        "dsp": 6,
+        "memory_bit": 0,
+        "register": 3602
+      }
+    },
+    "none": {
+      "clock_enable_registers": 2142,
+      "fmax_mhz": 27.55,
+      "minimum_hold_slack_ns": 0.035,
+      "minimum_setup_slack_ns": 3.708,
+      "power_confidence": "Low: user provided insufficient toggle rate data",
+      "power_mw": {
+        "core_dynamic": 29.06,
+        "core_static": 412.43,
+        "io": 8.67,
+        "total": 450.17
+      },
+      "resources": {
+        "alm": 3499,
+        "dsp": 6,
+        "memory_bit": 0,
+        "register": 2538
+      }
+    },
+    "trimmed": {
+      "clock_enable_registers": 2142,
+      "fmax_mhz": 27.8,
+      "minimum_hold_slack_ns": 0.163,
+      "minimum_setup_slack_ns": 4.025,
+      "power_confidence": "Low: user provided insufficient toggle rate data",
+      "power_mw": {
+        "core_dynamic": 31.29,
+        "core_static": 412.45,
+        "io": 8.67,
+        "total": 452.41
+      },
+      "resources": {
+        "alm": 3500,
+        "dsp": 6,
+        "memory_bit": 0,
+        "register": 2537
+      }
+    }
+  },
+  "schema": "arm7tdmis-fpga-characterization-v1",
+  "status": "passed",
+  "tool": "Quartus Lite 17.0.2 Build 602"
+}
