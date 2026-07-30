@@ -135,6 +135,7 @@ def collect_metadata(
                 "fpga-package-example",
                 "generic-soc-verilator",
                 "generic-soc-slang",
+                "generic-soc-rom-equivalence",
                 "all-public-tops-slang",
                 "structural-cdc-rdc",
                 "testbench",
@@ -289,6 +290,7 @@ def _phases(
     yield _make_phase("lint-fpga-package-example", "lint-example")
     yield _make_phase("lint-generic-soc", "lint-generic-soc")
     yield _make_phase("lint-generic-soc-slang", "lint-generic-soc-slang")
+    yield _make_phase("generic-soc-rom-check", "generic-soc-rom-check")
     yield _make_phase("lint-independent", "lint-independent")
     yield _make_phase("cdc-rdc", "cdc-rdc")
     yield _make_phase("sim-generic-soc", "sim-generic-soc")

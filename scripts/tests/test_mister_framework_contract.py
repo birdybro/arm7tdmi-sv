@@ -124,6 +124,11 @@ class MisterFrameworkContractTest(unittest.TestCase):
         self.assertIn("examples/generic_soc/arm7tdmi_generic_soc.sv", qip)
         self.assertIn("module emu", emu)
         self.assertIn("arm7tdmi_generic_soc u_soc", emu)
+        self.assertIn("TEST_STATUS", emu)
+        self.assertIn("TEST_SIGNATURE", emu)
+        self.assertIn("32'h5041_5353", emu)
+        self.assertIn("32'h4641_494c", emu)
+        self.assertIn("barcode_bit", emu)
         self.assertIn("derive_pll_clocks", sdc)
         self.assertIn("derive_clock_uncertainty", sdc)
         self.assertIn("HDMI_TX_CAPTURE_SCALED", sdc)
@@ -156,6 +161,14 @@ class MisterFrameworkContractTest(unittest.TestCase):
         self.assertNotIn("$::quartus(qip_path)", qip)
         self.assertIn('output_clock_frequency0("12.500000 MHz")', pll)
         self.assertIn("set_global_assignment -name SEED 4", qsf)
+
+        local_inputs = framework.local_inputs()
+        for path in (
+            framework.GENERIC_SOC_PROGRAM,
+            framework.GENERIC_SOC_LINKER,
+            framework.GENERIC_SOC_ROM_CHECK,
+        ):
+            self.assertIn(path, local_inputs)
 
     def test_report_parser_requires_fit_timing_constraints_and_bitstream(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

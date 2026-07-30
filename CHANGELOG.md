@@ -5,6 +5,10 @@ sign-off gate in `TASKS.md` §31.13.
 
 ## [Unreleased]
 
+- Add a source-locked ARMv4T/Thumb-1 FPGA smoke ROM with seven self-test
+  groups, backpressured `GIP`/`F` UART protocol, permanent MMIO
+  status/signature, fail-hard simulation, and a MiSTer blue/green/red
+  signature-barcode display.
 - Add a pinned official MiSTer-template `sys_top` integration and fail-hard
   Quartus 17.0.2 build gate with real HDMI/audio/I/O constraints, positive
   four-corner timing, zero unconstrained paths, and archived report/RBF hashes.

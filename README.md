@@ -69,8 +69,11 @@ The portable FPGA source package is:
 
 The checked example under
 [`examples/mister_framework/`](examples/mister_framework/) builds this
-package in a pinned official MiSTer template. It is a CPU/framework build
-qualification, not a PocketStation subsystem or physical-board result.
+package and a seven-group ARMv4T self-test ROM in a pinned official MiSTer
+template. Blue/green/red video, a 32-bit signature barcode, and LED states
+make board bring-up observable without JTAG. It is a CPU/framework build
+qualification and physical-test payload, not a PocketStation subsystem or
+claim that physical-board evidence has been captured.
 
 ## Implemented contracts
 
@@ -107,7 +110,8 @@ evidence. The §31 ledger remains authoritative if a summary conflicts with it.
 - [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md): checked Cyclone V clock,
   CPU-enable, transaction-latency, resource, Fmax, and power data.
 - [`docs/GENERIC_SOC.md`](docs/GENERIC_SOC.md): portable
-  ROM/RAM/timer/UART integration and executable program.
+  ROM/RAM/timer/UART/status integration, executable FPGA smoke program, and
+  MiSTer pass/fail display protocol.
 - [`docs/SAVESTATE.md`](docs/SAVESTATE.md): versioned architectural state
   handshake, exact physical-bank map, and deterministic restore contract.
 - [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md): concise prerelease blockers
@@ -139,6 +143,7 @@ make -C scripts run
 make -C scripts lint-example
 make -C scripts lint-generic-soc
 make -C scripts lint-generic-soc-slang
+make -C scripts generic-soc-rom-check
 make -C scripts sim-generic-soc
 make -C scripts quartus-analysis
 make -C scripts quartus-compile
@@ -180,7 +185,7 @@ scripts/
 fpga/
   portable package, constraints, characterization projects, example
 examples/generic_soc/
-  synthesizable ROM/RAM/timer/UART system and executable ARM program
+  synthesizable ROM/RAM/timer/UART/status system and ARMv4T smoke ROM
 docs/
   maintained architecture, verification, and integration contracts
 ```

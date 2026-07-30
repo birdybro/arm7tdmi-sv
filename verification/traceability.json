@@ -128,6 +128,11 @@
       "tests": ["OPEN - PocketStation reference soak evidence required"],
       "source_sections": ["TASKS.md section 31.9 MIST-009"]
     },
+    "MIST-010": {
+      "rtl": ["examples/generic_soc/arm7tdmi_generic_soc.sv", "examples/mister_framework/arm7tdmi_mister_emu.sv"],
+      "tests": ["examples/generic_soc/arm7tdmi_generic_soc_tb.sv", "scripts/check_generic_soc_rom.py", "scripts/tests/test_generic_soc_contract.py"],
+      "source_sections": ["TASKS.md section 31.9 MIST-010"]
+    },
     "VAL-001": {
       "rtl": ["rtl/core/", "rtl/top/arm7tdmis_top.sv"],
       "tests": ["verification/qemu_armv4t_reference.py", "tb/integration/arm7tdmis_qemu_diff_tb.sv"],
@@ -212,6 +217,10 @@
     {"glob": "scripts/mister_framework_build.py", "requirements": ["MIST-007", "FPGA-002"]},
     {"glob": "scripts/tests/test_mister_framework_contract.py", "requirements": ["MIST-007", "FPGA-002"]},
     {"glob": "examples/mister_framework/*", "requirements": ["MIST-007", "FPGA-002"]},
+    {"glob": "examples/mister_framework/arm7tdmi_mister_emu.sv", "requirements": ["MIST-010"]},
+    {"glob": "examples/generic_soc/*", "requirements": ["MIST-010"]},
+    {"glob": "scripts/check_generic_soc_rom.py", "requirements": ["MIST-010"]},
+    {"glob": "scripts/tests/test_generic_soc_contract.py", "requirements": ["MIST-010"]},
     {"glob": "tb/integration/arm7tdmis_table7_core_phase_matrix_tb.sv", "requirements": ["VAL-004", "BUS-002", "BUS-003"]},
     {"glob": "scripts/tests/test_table7_cross_*.py", "requirements": ["VAL-004"]},
     {"glob": "verification/random_events.py", "requirements": ["VAL-005"]},

@@ -33,6 +33,7 @@ FPGA_F    := ../fpga/arm7tdmi_mister.f
 FPGA_EXAMPLE := ../fpga/example/arm7tdmi_mister_example_top.sv
 GENERIC_SOC := ../examples/generic_soc/arm7tdmi_generic_soc.sv
 GENERIC_SOC_TB := ../examples/generic_soc/arm7tdmi_generic_soc_tb.sv
+GENERIC_SOC_ROM_OUTPUT := ../reports/generated/generic-soc-rom
 OPTION_PROJECTS := arm7tdmi_option_none arm7tdmi_option_debug \
 	arm7tdmi_option_coprocessor arm7tdmi_option_both
 
@@ -137,7 +138,8 @@ INTEG_RUN_ARGS_compiler = \
 	+PROGRAM_HEX=$(abspath $(COMPILER_DIR)/program.hex)
 
 .PHONY: all lint lint-mister lint-example \
-        lint-generic-soc lint-generic-soc-slang lint-independent \
+        lint-generic-soc lint-generic-soc-slang generic-soc-rom-check \
+        generic-soc-rom-artifacts lint-independent \
         cdc-rdc fpga-quality sim-generic-soc lint-tb \
         quartus-analysis quartus-compile \
         quartus-conformance-analysis quartus-conformance-compile \
@@ -177,6 +179,15 @@ lint-generic-soc-slang:
 	$(SLANG) --version
 	$(SLANG) --allow-use-before-declare \
 	    --top arm7tdmi_generic_soc -f $(SIM_F) $(GENERIC_SOC)
+
+generic-soc-rom-check:
+	$(PYTHON) install_arm_toolchain.py --root $(ARM_TOOLCHAIN_ROOT)
+	$(PYTHON) check_generic_soc_rom.py --toolchain $(ARM_TOOLCHAIN)
+
+generic-soc-rom-artifacts:
+	$(PYTHON) install_arm_toolchain.py --root $(ARM_TOOLCHAIN_ROOT)
+	$(PYTHON) check_generic_soc_rom.py --toolchain $(ARM_TOOLCHAIN) \
+	    --output $(GENERIC_SOC_ROM_OUTPUT)
 
 lint-independent:
 	PYTHONPATH=. $(PYTHON) independent_lint.py \
@@ -583,6 +594,8 @@ help:
 	@echo "  lint-example Verilator --lint-only on the portable FPGA example"
 	@echo "  lint-generic-soc Verilator lint on the ROM/RAM/timer/UART example"
 	@echo "  lint-generic-soc-slang Slang compile of the generic SoC example"
+	@echo "  generic-soc-rom-check prove ARM source equals the synthesized ROM"
+	@echo "  generic-soc-rom-artifacts retain ELF/binary/disassembly under reports/"
 	@echo "  lint-independent Slang zero-warning compile of all public tops"
 	@echo "  cdc-rdc      structural single-clock/synchronizer/reset audit"
 	@echo "  fpga-quality run independent lint and CDC/RDC gates"

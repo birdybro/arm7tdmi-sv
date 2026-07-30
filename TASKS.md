@@ -3320,14 +3320,25 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   so the API is not accidentally PocketStation-specific. Compile it with at least two
   supported open-source FPGA tool/simulator flows where practical.
   `examples/generic_soc/arm7tdmi_generic_soc.sv` is a synthesizable,
-  hierarchy-free system using only the canonical wrapper. Its embedded
-  repository-authored ARM program verifies RAM before exercising a
-  backpressured UART and timer IRQ under randomized CPU enables in
-  `arm7tdmi_generic_soc_tb.sv`. Verilator lint/simulation and the independent
-  Slang 11.0 frontend are mandatory regression phases; CI verifies the pinned
-  Slang archive hash. `docs/GENERIC_SOC.md` freezes the memory map, peripheral
-  semantics, clock ownership, program, tool versions, and commands, while
-  `scripts/tests/test_generic_soc_contract.py` enforces the complete contract.
+  hierarchy-free system using only the canonical wrapper. Its 812-byte
+  repository-authored ARMv4T/Thumb-1 ROM runs seven self-check groups covering
+  mixed-width memory lanes, conditions/flags/shifts, short/long multiply,
+  block transfer/stack/call-return, locked SWP, BX interworking, and timer IRQ
+  entry/return. It publishes `RUN!` progress and permanent `PASS`/`FAIL`
+  status/signature registers, emits `GIP` or `F` through a backpressured UART,
+  and is observed under randomized CPU enables in
+  `arm7tdmi_generic_soc_tb.sv`. `scripts/check_generic_soc_rom.py` uses the
+  checksum-installed Arm GNU 14.3.Rel1 toolchain to prove every assembled
+  byte equals the synthesizable ROM (203 words, SHA-256
+  `ee9c06bc1720ce9e4f9f57da3e162acdfc0e42df403766f6d98bbeb9249c4900`);
+  Verilator lint/simulation, this equivalence check, and the independent Slang
+  11.0 frontend are mandatory regression phases. The real MiSTer `emu` renders
+  blue/running, green/pass, or red/fail video plus a 32-bit signature barcode
+  and LED states without hierarchy or JTAG. `docs/GENERIC_SOC.md` freezes the
+  memory map, software groups, result protocol, tool versions, commands, and
+  board interpretation, while `scripts/tests/test_generic_soc_contract.py`
+  enforces the complete contract. Physical execution evidence remains
+  FPGA-007.
 - [x] **MIST-011:** Publish maximum CPU rate, master-clock/CE ratios, latency rules,
   resource budget, required memories/DSPs, reset duration, endian configuration, and
   optional-feature costs.

@@ -26,16 +26,26 @@ module emu (
     logic [9:0]   video_h_q;
     logic [8:0]   video_v_q;
     logic [26:0]  activity_q;
-    logic [7:0]   uart_last_q;
     logic         uart_valid;
     logic [7:0]   uart_data;
     logic         timer_irq;
+    logic [31:0]  test_status;
+    logic [31:0]  test_signature;
 
     wire reset_request = RESET | status[0] | buttons[1] | !pll_locked;
     wire reset_n = reset_release_q[1];
     wire video_active = video_h_q < 10'd640 && video_v_q < 9'd400;
     wire hsync = !(video_h_q >= 10'd656 && video_h_q < 10'd752);
     wire vsync = !(video_v_q >= 9'd412 && video_v_q < 9'd414);
+    wire test_pass = test_status == 32'h5041_5353;
+    wire test_fail = test_status == 32'h4641_494c;
+    wire barcode_region = video_active && video_v_q < 9'd32
+                        && video_h_q < 10'd512;
+    wire barcode_bit = test_signature[5'd31 - video_h_q[8:4]];
+    wire [7:0] status_red = test_fail ? 8'he0
+                            : test_pass ? 8'h18 : 8'h10;
+    wire [7:0] status_green = test_pass ? 8'he0 : 8'h18;
+    wire [7:0] status_blue = (test_pass || test_fail) ? 8'h18 : 8'he0;
 
     pll pll (
         .refclk   (CLK_50M),
@@ -67,7 +77,6 @@ module emu (
             video_h_q  <= 10'd0;
             video_v_q  <= 9'd0;
             activity_q <= 27'd0;
-            uart_last_q <= 8'h00;
         end else begin
             activity_q <= activity_q + 27'd1;
             if (video_h_q == 10'd799) begin
@@ -79,8 +88,6 @@ module emu (
             end else begin
                 video_h_q <= video_h_q + 10'd1;
             end
-            if (uart_valid)
-                uart_last_q <= uart_data;
         end
     end
 
@@ -91,7 +98,9 @@ module emu (
         .UART_TX_READY (1'b1),
         .UART_TX_VALID (uart_valid),
         .UART_TX_DATA  (uart_data),
-        .TIMER_IRQ     (timer_irq)
+        .TIMER_IRQ     (timer_irq),
+        .TEST_STATUS   (test_status),
+        .TEST_SIGNATURE(test_signature)
     );
 
     assign CLK_VIDEO = clk_sys;
@@ -101,9 +110,19 @@ module emu (
     assign VGA_DE = video_active;
     assign VGA_HS = hsync;
     assign VGA_VS = vsync;
-    assign VGA_R = video_active ? {uart_last_q[7:5], video_h_q[4:0]} : 8'h00;
-    assign VGA_G = video_active ? {uart_last_q[4:2], video_v_q[4:0]} : 8'h00;
-    assign VGA_B = video_active ? {uart_last_q[1:0], video_h_q[5:0]} : 8'h00;
+    // Blue means the ROM is running, green is the permanent PASS state, and
+    // red is the permanent FAIL state. The top 32x16-pixel cells display
+    // TEST_SIGNATURE MSB-first as a white/dark barcode for photographed
+    // board evidence and failure diagnosis without JTAG.
+    assign VGA_R = !video_active ? 8'h00
+                   : barcode_region ? (barcode_bit ? 8'hff : 8'h08)
+                   : status_red;
+    assign VGA_G = !video_active ? 8'h00
+                   : barcode_region ? (barcode_bit ? 8'hff : 8'h08)
+                   : status_green;
+    assign VGA_B = !video_active ? 8'h00
+                   : barcode_region ? (barcode_bit ? 8'hff : 8'h08)
+                   : status_blue;
     assign VGA_F1 = 1'b0;
     assign VGA_SL = 2'b00;
     assign VGA_SCALER = 1'b0;
@@ -112,7 +131,9 @@ module emu (
     assign HDMI_BLACKOUT = 1'b0;
     assign HDMI_BOB_DEINT = 1'b0;
 
-    assign LED_USER = activity_q[24] | timer_irq;
+    assign LED_USER = test_pass ? 1'b1
+                      : test_fail ? activity_q[20]
+                      : activity_q[23] | timer_irq;
     assign LED_POWER = 2'b00;
     assign LED_DISK = 2'b00;
     assign BUTTONS = 2'b00;
@@ -190,7 +211,9 @@ module emu (
         UART_RXD,
         UART_DSR,
         USER_IN,
-        OSD_STATUS
+        OSD_STATUS,
+        uart_valid,
+        uart_data
 `ifdef MISTER_FB
         ,
         FB_VBL,

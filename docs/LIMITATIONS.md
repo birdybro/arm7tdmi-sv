@@ -7,7 +7,10 @@ and may be stricter than this summary.
 - No PocketStation subsystem, copyrighted BIOS or software image, physical
   hardware run, or long system soak is included (MIST-008, MIST-009, and
   FPGA-007). The pinned official MiSTer template build and its real framework
-  timing closure are checked under MIST-007 and FPGA-002.
+  timing closure are checked under MIST-007 and FPGA-002. Its embedded
+  seven-group ARMv4T smoke ROM has permanent video/LED/signature results and
+  source-to-synthesized-ROM equivalence, but has not been photographed or
+  otherwise captured on a physical board.
 - The complete 242-page TRM inventory and Chapter 8/Table 8-1 target-specific
   FPGA timing disposition are checked mandatory evidence phases (DOC-008 and
   FPGA-009). Their source percentages remain provisional macrocell guidance,

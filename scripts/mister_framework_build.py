@@ -37,6 +37,13 @@ SOURCE_MANIFEST = REPO_ROOT / "fpga" / "arm7tdmi_mister.f"
 GENERIC_SOC = (
     REPO_ROOT / "examples" / "generic_soc" / "arm7tdmi_generic_soc.sv"
 )
+GENERIC_SOC_PROGRAM = (
+    REPO_ROOT / "examples" / "generic_soc" / "program.S"
+)
+GENERIC_SOC_LINKER = (
+    REPO_ROOT / "examples" / "generic_soc" / "linker.ld"
+)
+GENERIC_SOC_ROM_CHECK = REPO_ROOT / "scripts" / "check_generic_soc_rom.py"
 EMU_SOURCE = (
     REPO_ROOT
     / "examples"
@@ -164,6 +171,9 @@ def local_inputs() -> list[pathlib.Path]:
             *manifest_sources(),
             SOURCE_MANIFEST,
             GENERIC_SOC,
+            GENERIC_SOC_PROGRAM,
+            GENERIC_SOC_LINKER,
+            GENERIC_SOC_ROM_CHECK,
             EMU_SOURCE,
             CORE_SDC,
             pathlib.Path(__file__).resolve(),

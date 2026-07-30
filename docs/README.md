@@ -23,9 +23,9 @@ because they agree with each other.
 - **[SAVESTATE.md](SAVESTATE.md)** — opt-in versioned CPU state schema,
   quiescence handshake, exact word map, restore rules, and whole-system
   snapshot responsibilities.
-- **[GENERIC_SOC.md](GENERIC_SOC.md)** — synthesizable ROM/RAM/timer/UART
-  example, memory map, executable ARM program, and independent open-source
-  frontend commands.
+- **[GENERIC_SOC.md](GENERIC_SOC.md)** — synthesizable
+  ROM/RAM/timer/UART/status example, seven-group ARMv4T smoke ROM,
+  source-to-RTL equivalence, and MiSTer video/LED result protocol.
 - **[RAW_BUS.md](RAW_BUS.md)** — raw `arm7tdmis_top` address/response edge
   convention, N/S/I/C history, CLKEN/ABORT sampling, endian lanes,
   LOCK/DMORE promises, Chapter 7 interpretation, and reusable checker.

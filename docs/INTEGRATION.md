@@ -305,6 +305,13 @@ reviewed upstream-only optional constraint diagnostics, and a nonempty RBF.
 The machine-readable report records all report and bitstream hashes for
 release archiving.
 
+That `emu` runs the checked generic-SoC ARMv4T smoke ROM. It exposes a
+blue/running, green/pass, or red/fail display, a 32-cell MSB-first signature
+barcode, and distinct running/pass/fail `LED_USER` behavior. The program,
+seven test groups, status/signature values, source-to-ROM equivalence gate,
+RBF location, and physical interpretation are specified in
+[GENERIC_SOC.md](GENERIC_SOC.md).
+
 ## Evidence and current limits
 
 `make -C scripts lint-mister` elaborates this wrapper as the synthesis top.
@@ -347,6 +354,7 @@ architectural boundary between the two Thumb BL halfwords.
 The following are intentionally not claimed by this version of the wrapper:
 
 - a PocketStation subsystem or BIOS/software bundle;
+- execution/capture of the supplied smoke RBF on physical MiSTer hardware;
 - physical MiSTer/PocketStation board evidence.
 
 Those remain visible release blockers in `TASKS.md` rather than implicit
