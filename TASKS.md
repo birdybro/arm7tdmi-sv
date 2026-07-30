@@ -3267,8 +3267,8 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   checks are release-regression phases. The trimmed example also has the
   fail-hard fit/timing characterization recorded under FPGA-003.
   `fpga/arm7tdmis_conformance.{qsf,sdc}` separately preserves and fits every
-  raw debug, JTAG, coprocessor, trace, endian, and bus boundary. A real
-  framework build remains MIST-007.
+  raw debug, JTAG, coprocessor, trace, endian, and bus boundary. The real
+  framework build is checked separately under MIST-007.
 - [x] **MIST-006:** Add a versioned architectural state export/import handshake for
   MiSTer save states. Include all visible registers, banked registers, CPSR/SPSRs,
   pipeline and any in-flight bus/debug state (including a snapshot between Thumb BL

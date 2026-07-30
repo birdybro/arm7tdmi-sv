@@ -162,9 +162,8 @@ source identity before creating a checksummed archive. Generated evidence is
 intentionally ignored by Git and uploaded as a CI/release artifact.
 
 A successful directed regression is necessary but not sufficient for v1.0.
-Selected-framework FPGA timing, framework/PocketStation integration,
-clean-checkout reproducibility, hardware, and independent-review items in §31
-remain release blockers.
+PocketStation integration/soak, clean-checkout reproducibility, physical
+hardware, and independent-review items in §31 remain release blockers.
 
 ## Repository layout
 
