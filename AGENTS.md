@@ -14,10 +14,10 @@ The exact current blockers are the unchecked requirements in §31; do not copy t
 historical baseline table in §31.1 forward as current state. Substantial fixes have
 landed since that baseline: the ARM/Thumb, exception/abort, coprocessor/CP14,
 EmbeddedICE-RT, and ETM-facing directed requirements are checked; regressions fail
-hard and publish evidence; and both FPGA characterization profiles pass checked
-Quartus flows. Current open categories are the unchecked §31 items:
-Chapter 8 FPGA timing disposition, framework/PocketStation
-integration, selected-framework timing, pinned clean-checkout
+hard and publish evidence; both FPGA characterization profiles pass checked
+Quartus flows; and Chapter 8 has a complete target-specific AC timing
+disposition. Current open categories are the unchecked §31 items:
+framework/PocketStation integration, selected-framework timing, pinned clean-checkout
 reproducibility, hardware bring-up, and independent review/final freezing.
 Consult each checkbox and its attached evidence before making a narrower
 claim.
@@ -100,8 +100,8 @@ These are the non-obvious traps the TRM and TASKS.md flag — internalize them b
 - **Banked registers depend on mode.** 31 GPRs + 6 SPSRs across User/FIQ/IRQ/Supervisor/Abort/Undefined/System; FIQ banks r8–r14, the others bank only r13/r14. Register read/write mapping is mode-driven and must be implemented for every mode (§3).
 - **Reset state is specific.** Supervisor mode, I=1, F=1, T=0, ARM state, PC=0x00000000 — set all of them, don't just clear PC.
 - **Bus is pipelined.** Address-class signals (ADDR/WRITE/SIZE/PROT/LOCK) are broadcast one bus cycle *ahead* of the data cycle they describe. `CLKEN` gates bus progression; treat it as a wait-state mechanism, not a clock gate.
-- **Remaining highest-risk blocks:** Chapter 8/framework/board timing,
-  reproducible clean-checkout toolchain/CI, independent review, and
+- **Remaining highest-risk blocks:** Framework/board timing, reproducible
+  clean-checkout toolchain/CI, independent review, and
   hardware/PocketStation evidence. Two-endian functional post-fit simulation,
   exact cycle crosses, functional coverage, and formal closure are already
   checked.

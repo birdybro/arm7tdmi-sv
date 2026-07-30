@@ -140,6 +140,7 @@ class AcTimingContractTest(unittest.TestCase):
         self.assertIn("arm7tdmis-ac-timing-v1", docs)
         self.assertIn("make -C scripts ac-timing", docs)
         self.assertIn("verification/ac_timing.json", tasks)
+        self.assertIn("- [x] **FPGA-009:**", tasks)
 
 
 if __name__ == "__main__":

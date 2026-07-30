@@ -27,7 +27,16 @@ class TrmCoverageContractTest(unittest.TestCase):
         )
         self.assertEqual(summary["total_inventory_items"], 361)
         self.assertEqual(sum(summary["disposition_counts"].values()), 361)
-        self.assertGreater(summary["disposition_counts"]["open-requirement"], 0)
+        self.assertEqual(
+            summary["disposition_counts"],
+            {
+                "implemented-and-tested": 343,
+                "external-out-of-scope": 8,
+                "integration-obligation": 10,
+                "erratum-corrected": 0,
+                "open-requirement": 0,
+            },
+        )
 
     def test_missing_duplicate_unknown_and_unchecked_claims_fail(self) -> None:
         missing = copy.deepcopy(self.manifest)
@@ -86,6 +95,7 @@ class TrmCoverageContractTest(unittest.TestCase):
         self.assertIn("arm7tdmis-trm-coverage-v1", docs)
         self.assertIn("make -C scripts trm-coverage", docs)
         self.assertIn("- [x] **DOC-008:**", tasks)
+        self.assertIn("- [x] **FPGA-009:**", tasks)
 
 
 if __name__ == "__main__":

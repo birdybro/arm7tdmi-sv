@@ -32,7 +32,7 @@ The status words used here have the §31 meanings:
 | External coprocessor and CP14 | **VERIFIED** for §31.6: absent/ready/busy/abandonment, MCR/MRC/CDP/LDC/STC timing, CP14 DCC and Debug Abort Status, corrected errata 14/15 policy, and absence of internal CP15 are tested. |
 | EmbeddedICE-RT, JTAG, and trace boundary | **VERIFIED** for §31.7/§31.8, including debugger-issued system-speed aborts, the §5.25 Debug Status `RO/WI` conflict disposition, the project-specific same-clock virtual-TCK transport, and the ARM-side ETM7 boundary. Asynchronous pod/GDB execution and an ETM macrocell are outside the selected CPU-boundary profile and are not claimed. |
 | FPGA/MiSTer package | **PARTIAL**. The canonical valid/ready wrapper, versioned save states, two public bus adapters, option profiles, synchronized reset/CDC contract, structural CDC/RDC audit, independent all-top Slang lint, DMA arbitration, portable QIP/file lists, and two checked Quartus 17.0.2 flows exist. A real framework build, PocketStation integration, and hardware evidence remain open. |
-| Release evidence | **PARTIAL**. Regressions fail hard; an independent 77-retirement QEMU differential, 32 × 256 constrained-random campaign, 32-seed all-class external-event campaign, pinned public suite and GCC ARM/Thumb/interworking execution, a 256-seed sanitizer/X-state soak, exact Chapter 7 legal-equivalence cross coverage, exhaustive encoding/policy required-bin closure, an exhaustive whole-TRM inventory, 14 formal proofs, 77 formal covers, bidirectional requirement/source traceability, machine-readable reports, mutation tests, and a hashed evidence archive exist. Chapter 8 disposition, independent review, and real-framework/board/system release gates remain open. |
+| Release evidence | **PARTIAL**. Regressions fail hard; an independent 77-retirement QEMU differential, 32 × 256 constrained-random campaign, 32-seed all-class external-event campaign, pinned public suite and GCC ARM/Thumb/interworking execution, a 256-seed sanitizer/X-state soak, exact Chapter 7 legal-equivalence cross coverage, exhaustive encoding/policy required-bin closure, an exhaustive whole-TRM inventory, complete Chapter 8 AC timing disposition, 14 formal proofs, 77 formal covers, bidirectional requirement/source traceability, machine-readable reports, mutation tests, and a hashed evidence archive exist. Independent review and real-framework/board/system release gates remain open. |
 
 No unchecked §31 requirement is implied by a checked neighboring row. In
 particular, this repository is not yet advertised as a drop-in, issue-free
@@ -160,9 +160,9 @@ source identity before creating a checksummed archive. Generated evidence is
 intentionally ignored by Git and uploaded as a CI/release artifact.
 
 A successful directed regression is necessary but not sufficient for v1.0.
-The unchecked debug edge cases, Chapter 8/selected-framework FPGA timing,
-framework/PocketStation integration, clean-checkout reproducibility, hardware,
-and independent-review items in §31 remain release blockers.
+Selected-framework FPGA timing, framework/PocketStation integration,
+clean-checkout reproducibility, hardware, and independent-review items in §31
+remain release blockers.
 
 ## Repository layout
 

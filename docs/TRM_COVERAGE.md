@@ -54,10 +54,12 @@ removed; recreating them would not improve r4p3 conformance.
 
 Chapter 8/Table 8-1 is retained as provisional synthesized-macrocell/silicon
 timing guidance rather than a portable FPGA pin guarantee.
-Its target-specific soft-FPGA disposition remains visible as FPGA-009 until
-the constraints and documentation contract close. The system-speed debug
-abort and Debug Status write ambiguity similarly remain explicit under
-DBG-008 and DBG-009 rather than being hidden by the complete inventory.
+FPGA-009 closes its target-specific soft-FPGA disposition with a locked
+37-row/five-figure contract, active raw-profile SDC mapping, mutation tests,
+and four-corner fitted evidence; the full row-by-row result is in
+[AC_TIMING.md](AC_TIMING.md). The system-speed debug abort and Debug Status
+write ambiguity are likewise closed under DBG-008 and DBG-009 with dedicated
+directed evidence rather than being hidden by the complete inventory.
 
 ## Reproducing the audit
 

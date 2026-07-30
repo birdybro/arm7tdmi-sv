@@ -3636,7 +3636,7 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   PocketStation reference integration on hardware.
 - [ ] **FPGA-008:** Pin every tool/container version and make the release build
   reproducible from a clean checkout in CI.
-- [ ] **FPGA-009:** Give every Chapter 8/Table 8-1 AC parameter an explicit
+- [x] **FPGA-009:** Give every Chapter 8/Table 8-1 AC parameter an explicit
   soft-core FPGA disposition. Preserve the original percentages and
   provisional synthesized-macrocell/silicon scope in a revision-locked
   `verification/ac_timing.json` contract; map applicable
@@ -3645,6 +3645,19 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   test-only, power, and clock parameters that are replaced or owned by the
   containing FPGA integration. Add a fail-hard constraint/documentation test
   so neither a Table 8 row nor its physical-scope caveat can disappear.
+  The contract locks the exact 242-page PDF identity, all 37 Table 8-1 rows,
+  all five Chapter 8 figures, the Figure 8-4 naming conflict, Appendix B.3,
+  and explicit clock/reset/debug/DFT/power ownership. `scripts/ac_timing.py`
+  independently reconstructs the table, validates every source percentage
+  and signal group, and requires an exact active SDC marker/command for all
+  37 rows; `test_ac_timing_contract.py` mutates row order, values, scope,
+  figure membership, ownership, and constraints to prove fail-closed
+  behavior. The raw `5CSEBA6U23I7` profile translates the applicable source
+  fractions at 16 MHz without adding an architectural cycle and passes
+  four-corner fitted TimeQuest with minimum 1.904 ns setup and 0.161 ns hold
+  slack. `docs/AC_TIMING.md` publishes the complete row-by-row disposition;
+  the `ac-timing` phase is mandatory in every regression and its clean
+  same-commit report is revalidated and archived by release evidence.
 
 ## 31.12 Documentation and release hygiene
 
@@ -3728,7 +3741,8 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   identity, requirement ownership, and evidence paths. `trm-coverage` runs in
   every regression profile, and release packaging revalidates its clean
   same-commit input hashes. `docs/TRM_COVERAGE.md` defines the disposition
-  meanings and preserves DBG-008/009 and FPGA-009 as explicit open rows.
+  meanings and previously preserved DBG-008/009 and FPGA-009 as explicit
+  open rows until their dedicated evidence closed them.
 
 ## 31.13 Final v1.0 release gate
 

@@ -108,6 +108,11 @@
       "tests": ["scripts/postfit_sim.py", "scripts/tests/test_postfit_sim_contract.py", "tb/postfit/arm7tdmi_postfit_tb.sv", "verification/intel_cyclonev_postfit_primitives.sv"],
       "source_sections": ["TASKS.md section 31.11 FPGA-006 fitted-netlist contract"]
     },
+    "FPGA-009": {
+      "rtl": ["fpga/arm7tdmis_conformance.sdc"],
+      "tests": ["scripts/ac_timing.py", "scripts/tests/test_ac_timing_contract.py", "verification/ac_timing.json", "docs/AC_TIMING.md"],
+      "source_sections": ["ARM DDI 0234B Chapter 8, Table 8-1, Figures 8-1 through 8-5, and Appendix B.3"]
+    },
     "MIST-007": {
       "rtl": ["rtl/top/arm7tdmi_mister.sv", "fpga/"],
       "tests": ["OPEN - real MiSTer framework build evidence required"],
@@ -222,6 +227,9 @@
     {"glob": "scripts/tests/test_fpga_quality_contract.py", "requirements": ["FPGA-004"]},
     {"glob": "scripts/tests/test_postfit_sim_contract.py", "requirements": ["FPGA-006"]},
     {"glob": "scripts/tests/test_trm_coverage_contract.py", "requirements": ["DOC-008"]},
+    {"glob": "scripts/ac_timing.py", "requirements": ["FPGA-009"]},
+    {"glob": "scripts/tests/test_ac_timing_contract.py", "requirements": ["FPGA-009"]},
+    {"glob": "verification/ac_timing.json", "requirements": ["FPGA-009"]},
     {"glob": "scripts/tests/test_constrained_random_contract.py", "requirements": ["VAL-002"]},
     {"glob": "scripts/tests/test_public_suite_*.py", "requirements": ["VAL-003"]},
     {"glob": "scripts/tests/test_soak_contract.py", "requirements": ["VAL-010"]}

@@ -227,15 +227,21 @@
     },
     {
       "id": "chapter-8-provisional-ac-timing",
-      "disposition": "open-requirement",
+      "disposition": "implemented-and-tested",
       "selectors": [
         {"category": "sections", "prefix": "8."},
         {"category": "tables", "prefix": "8-"},
         {"category": "figures", "prefix": "8-"}
       ],
       "requirements": ["FPGA-009"],
-      "evidence": ["TASKS.md", "fpga/arm7tdmis_conformance.sdc", "docs/PERFORMANCE.md"],
-      "rationale": "The original provisional synthesized-macrocell/silicon percentages require an explicit target-specific soft-FPGA disposition rather than an unqualified portability claim."
+      "evidence": [
+        "verification/ac_timing.json",
+        "scripts/ac_timing.py",
+        "scripts/tests/test_ac_timing_contract.py",
+        "fpga/arm7tdmis_conformance.sdc",
+        "docs/AC_TIMING.md"
+      ],
+      "rationale": "The complete revision-locked contract preserves the provisional synthesized-macrocell/silicon scope, gives all 37 rows and five figures an explicit soft-FPGA disposition, and binds every applicable target budget to fail-hard fitted constraints."
     },
     {
       "id": "appendix-a-signal-table",
@@ -323,13 +329,17 @@
     },
     {
       "id": "appendix-b-timing-parameters",
-      "disposition": "open-requirement",
+      "disposition": "implemented-and-tested",
       "selectors": [
         {"category": "sections", "items": ["B.3"]}
       ],
       "requirements": ["FPGA-009"],
-      "evidence": ["TASKS.md", "fpga/arm7tdmis_conformance.sdc"],
-      "rationale": "The Appendix B timing migration statement is part of the Chapter 8 soft-FPGA disposition required by FPGA-009."
+      "evidence": [
+        "verification/ac_timing.json",
+        "fpga/arm7tdmis_conformance.sdc",
+        "docs/AC_TIMING.md"
+      ],
+      "rationale": "The Appendix B.3 area-versus-external-timing migration statement is preserved as a physical-scope caveat and enforced by the Chapter 8 soft-FPGA contract."
     },
     {
       "id": "appendix-b-design-considerations",
