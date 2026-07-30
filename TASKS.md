@@ -3073,12 +3073,18 @@ number of cycles spent in an internal FSM state.
   IRQ through the aborted access, enabling it only before a real RESTART and
   requiring the IRQ vector/mode afterward. No RTL change was needed; the
   previously untested ordinary abort path already met §5.18.5.
-- [ ] **DBG-009:** Resolve the contradictory prose in §5.25 about writes to
+- [x] **DBG-009:** Resolve the contradictory prose in §5.25 about writes to
   Debug Status against its live Figure 5-17/status-source definition. Freeze
   the release behavior as a live read-only, write-ignored resource unless
   stronger authoritative evidence requires a different disposition; document
   the conflict and prove through public JTAG that writing all status bits
   cannot corrupt TBIT, TRANS, IFEN, synchronized DBGRQ, or internal DBGACK.
+  `docs/DEBUG.md` records the selected `RO/WI` policy and its source
+  hierarchy. `arm7tdmis_ice_rt.sv` deliberately excludes `0x01` from the
+  writable register cases and always muxes the five Figure 5-17 sources.
+  `arm7tdmis_debug_status_tb.sv` writes all-zero and all-one payloads through
+  public chain 2 in both a CLKEN-stalled active transfer and debug halt,
+  requiring all five live bits plus the RAZ upper bits after each write.
 - [x] **JTAG-001:** Exhaustively verify all 16 TAP states and transitions, async
   `DBGnTRST`, Capture/Shift/Update-IR, fixed `0001` capture, all five public
   instructions, and BYPASS for every other IR encoding. Fail-hard evidence:

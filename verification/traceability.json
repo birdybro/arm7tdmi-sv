@@ -88,6 +88,11 @@
       "tests": ["tb/integration/arm7tdmis_debug_system_speed_abort_tb.sv"],
       "source_sections": ["ARM DDI 0234B section 5.18.5 system-speed abort behavior"]
     },
+    "DBG-009": {
+      "rtl": ["rtl/debug/arm7tdmis_ice_rt.sv"],
+      "tests": ["tb/integration/arm7tdmis_debug_status_tb.sv", "docs/DEBUG.md"],
+      "source_sections": ["ARM DDI 0234B section 5.25 and Figures 5-16/5-17; project RO/WI conflict disposition"]
+    },
     "JTAG-006": {
       "rtl": ["rtl/jtag/arm7tdmis_sync_debug_port.sv"],
       "tests": ["tb/unit/sync_debug_port_tb.sv"],
@@ -204,6 +209,7 @@
     {"glob": "verification/random_events.py", "requirements": ["VAL-005"]},
     {"glob": "tb/integration/arm7tdmis_random_event_matrix_tb.sv", "requirements": ["VAL-005"]},
     {"glob": "tb/integration/arm7tdmis_debug_system_speed_abort_tb.sv", "requirements": ["DBG-008"]},
+    {"glob": "tb/integration/arm7tdmis_debug_status_tb.sv", "requirements": ["DBG-002", "DBG-009"]},
     {"glob": "scripts/tests/test_random_event_contract.py", "requirements": ["VAL-005"]},
     {"glob": "verification/functional_coverage.py", "requirements": ["VAL-006"]},
     {"glob": "verification/functional_coverage.json", "requirements": ["VAL-006"]},

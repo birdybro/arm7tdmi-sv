@@ -83,6 +83,19 @@ Read of addr 0x01 returns a synthesized value, not the RAM slot:
 Debug Control bit 0 can force the external `DBGACK` pin, but does not alter
 Debug Status bit 0.
 
+The opening sentence of TRM §5.25 says that a write writes the status bits,
+but the remainder of the same section assigns all five bits to live signal
+sources, and Figure 5-17 wires those sources directly into the status view.
+It defines neither storage nor any effect for a written value. The release
+therefore resolves the internal contradiction as a live read-only,
+write-ignored (`RO/WI`) register. This is an explicit compatibility policy,
+not a claim that the contradictory sentence describes hidden state: chain-2
+writes to `0x01` are accepted at the scan transport and have no architectural
+effect. `tb/integration/arm7tdmis_debug_status_tb.sv` writes both all-zero and
+all-one payloads during a stalled active transfer and during debug halt, then
+requires every bit and every reserved upper position to remain the current
+live value.
+
 ## Watchpoint comparators
 
 Two units (WP0 and WP1). Each has Addr/Data/Ctrl value+mask register pairs. Match logic per TRM §30.22.2 uses **XNOR-with-mask**, not AND-with-mask:

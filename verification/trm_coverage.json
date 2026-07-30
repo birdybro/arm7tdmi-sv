@@ -172,7 +172,7 @@
         "docs/DEBUG.md",
         "tb/integration/arm7tdmis_debug_inject_matrix_tb.sv"
       ],
-      "rationale": "All Chapter 5 material except the two separately open edge cases is covered by public JTAG, comparator, entry/exit, monitor, DCC, and injected-instruction matrices."
+      "rationale": "The general Chapter 5 material is covered by public JTAG, comparator, entry/exit, monitor, DCC, and injected-instruction matrices; the two formerly open edge cases are separately dispositioned below."
     },
     {
       "id": "chapter-5-system-speed-abort",
@@ -186,14 +186,14 @@
     },
     {
       "id": "chapter-5-debug-status-write-conflict",
-      "disposition": "open-requirement",
+      "disposition": "implemented-and-tested",
       "selectors": [
         {"category": "sections", "items": ["5.25"]},
         {"category": "figures", "items": ["5-16", "5-17"]}
       ],
       "requirements": ["DBG-009"],
-      "evidence": ["TASKS.md", "docs/DEBUG.md", "rtl/debug/arm7tdmis_ice_rt.sv"],
-      "rationale": "The live status mux exists, but the manual's contradictory write sentence requires a frozen and publicly tested disposition."
+      "evidence": ["TASKS.md", "docs/DEBUG.md", "rtl/debug/arm7tdmis_ice_rt.sv", "tb/integration/arm7tdmis_debug_status_tb.sv"],
+      "rationale": "The conflict is frozen as RO/WI because all five defined sources are live Figure 5-17 signals. Public chain-2 zero/one writes prove that no payload corrupts any live or reserved status bit."
     },
     {
       "id": "chapter-6-etm-boundary",

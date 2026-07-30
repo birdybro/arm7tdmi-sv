@@ -13,11 +13,10 @@ MiSTer/PocketStation system.
 The exact current blockers are the unchecked requirements in §31; do not copy the
 historical baseline table in §31.1 forward as current state. Substantial fixes have
 landed since that baseline: the ARM/Thumb, exception/abort, coprocessor/CP14,
-most EmbeddedICE-RT, and ETM-facing directed requirements are checked; regressions fail
+EmbeddedICE-RT, and ETM-facing directed requirements are checked; regressions fail
 hard and publish evidence; and both FPGA characterization profiles pass checked
 Quartus flows. Current open categories are the unchecked §31 items:
-Debug Status write behavior, Chapter 8 FPGA timing disposition,
-framework/PocketStation
+Chapter 8 FPGA timing disposition, framework/PocketStation
 integration, selected-framework timing, pinned clean-checkout
 reproducibility, hardware bring-up, and independent review/final freezing.
 Consult each checkbox and its attached evidence before making a narrower

@@ -7,9 +7,6 @@ and may be stricter than this summary.
 - No real MiSTer framework, PocketStation subsystem, copyrighted BIOS or
   software image, hardware run, or long system soak is included
   (MIST-007, MIST-008, MIST-009, FPGA-002, and FPGA-007).
-- The §5.25 Debug Status write disposition still requires directed
-  public-interface evidence (DBG-009). The debugger-issued system-speed Data
-  Abort path is checked under DBG-008.
 - The complete 242-page TRM inventory is a checked mandatory evidence phase
   (DOC-008), but Chapter 8/Table 8-1 still needs an explicit target-specific
   FPGA timing disposition (FPGA-009).

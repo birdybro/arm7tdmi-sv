@@ -155,8 +155,11 @@ module arm7tdmis_ice_rt
                 WP1_ADDR_VAL, WP1_ADDR_MASK,
                 WP1_DATA_VAL, WP1_DATA_MASK:
                     regs[scan_addr] <= scan_wdata[31:0];
-                // Debug Status and DCC are live resources. Every other
-                // address is reserved by Table 5-1 and ignores writes.
+                // Debug Status and DCC are live resources. The §5.25
+                // opening write sentence conflicts with its live-source
+                // definitions/Figure 5-17; DBG-009 freezes status as WI by
+                // deliberately omitting DEBUG_STAT_ADDR here. Every other
+                // address is reserved by Table 5-1 and also ignores writes.
                 default: ;
             endcase
         end
@@ -284,11 +287,12 @@ module arm7tdmis_ice_rt
     logic watchpoint_halt_pre;
     logic breakpoint_fetch_pre;
 
-    // §30.22.5: Debug Status Register (addr 0x01) is read-only and
-    // exposes live signals — TBIT, TRANS[1], IFEN, synchronous external
-    // DBGRQ, and internal DBGACKI. The force-DBGACK control bit affects
-    // only the external pin. Override the regs[] read for this address so
-    // the debugger sees current state rather than whatever was written.
+    // §30.22.5 / DBG-009: Debug Status Register (addr 0x01) is a live
+    // read-only/write-ignored resource exposing TBIT, TRANS[1], IFEN,
+    // synchronous external DBGRQ, and internal DBGACKI. The force-DBGACK
+    // control bit affects only the external pin. Override the regs[] read
+    // for this address so the debugger sees current state and no scan
+    // payload can substitute stored state for the Figure 5-17 sources.
     wire [4:0] dbg_status = {
         watch_tbit,         // [4] TBIT
         core_trans1,        // [3] live core TRANS[1]
