@@ -37,7 +37,7 @@ module emu (
     wire hsync = !(video_h_q >= 10'd656 && video_h_q < 10'd752);
     wire vsync = !(video_v_q >= 9'd412 && video_v_q < 9'd414);
 
-    pll u_pll (
+    pll pll (
         .refclk   (CLK_50M),
         .rst      (1'b0),
         .outclk_0 (clk_sys),

@@ -68,7 +68,7 @@ def _passing_reports(root: pathlib.Path) -> pathlib.Path:
     _write(
         prefix.with_suffix(".sta.rpt"),
         "TimeQuest Timing Analyzer was successful\n"
-        "clk_sys 20.000 MHz\n"
+        "clk_sys 12.500 MHz\n"
         f"{unconstrained}\n",
     )
     prefix.with_suffix(".rbf").write_bytes(b"real-bitstream-fixture")
@@ -98,10 +98,16 @@ class MisterFrameworkContractTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             checkout = pathlib.Path(directory)
+            pll_source = checkout / "rtl" / "pll" / "pll_0002.v"
+            _write(
+                pll_source,
+                'output_clock_frequency0("20.000000 MHz")\n',
+            )
             framework.install_overlay(checkout)
             qip = (checkout / "files.qip").read_text(encoding="utf-8")
             emu = (checkout / "Template.sv").read_text(encoding="utf-8")
             sdc = (checkout / "Template.sdc").read_text(encoding="utf-8")
+            pll = pll_source.read_text(encoding="utf-8")
 
         for source in sources:
             self.assertIn(source.relative_to(REPO_ROOT).as_posix(), qip)
@@ -112,6 +118,7 @@ class MisterFrameworkContractTest(unittest.TestCase):
         self.assertIn("derive_clock_uncertainty", sdc)
         self.assertIn("TIMEQUEST_MULTICORNER_ANALYSIS ON", qip)
         self.assertNotIn("$::quartus(qip_path)", qip)
+        self.assertIn('output_clock_frequency0("12.500000 MHz")', pll)
 
     def test_report_parser_requires_fit_timing_constraints_and_bitstream(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -122,7 +129,7 @@ class MisterFrameworkContractTest(unittest.TestCase):
             self.assertEqual(result["status"], "passed")
             self.assertEqual(result["device"], "5CSEBA6U23I7")
             self.assertEqual(result["top"], "sys_top")
-            self.assertEqual(result["core_clock_mhz"], 20.0)
+            self.assertEqual(result["core_clock_mhz"], 12.5)
             self.assertEqual(result["resources"]["alm"], 12345)
             self.assertEqual(result["timing"]["minimum_setup_slack_ns"], 1.25)
             self.assertEqual(result["timing"]["minimum_hold_slack_ns"], 0.125)
