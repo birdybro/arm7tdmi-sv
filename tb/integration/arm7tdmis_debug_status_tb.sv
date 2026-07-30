@@ -1,14 +1,17 @@
-// DBG-002 public-interface regression for the EmbeddedICE-RT Debug Status
-// register. TRM §5.25 defines bit 3 as the live core TRANS[1] signal, not
-// the privilege qualifier PROT[1].
+// DBG-002/DBG-009 public-interface regression for the EmbeddedICE-RT Debug
+// Status register. TRM §5.25 defines bit 3 as the live core TRANS[1] signal,
+// not the privilege qualifier PROT[1]. Its opening write sentence conflicts
+// with the live sources in the rest of §5.25 and Figure 5-17; this release
+// freezes the register as read-only/write-ignored.
 //
 // The test reads status through the real TAP and 38-bit scan chain 2 in two
 // deliberately discriminating states:
 //   1. a CLKEN-stalled active memory request, where TRANS[1] is HIGH;
 //   2. debug halt, where TRANS is I (00) but PROT[1] remains privileged.
 //
-// Both reads must report the public TRANS[1] value and the full scan response
-// must carry the requested EmbeddedICE-RT register address.
+// In both states the test writes all zeroes and all ones before reading. The
+// response must remain the live value after each opposing payload, and the
+// full scan response must carry the requested EmbeddedICE-RT register address.
 
 `timescale 1ns/1ps
 
@@ -159,9 +162,16 @@ module arm7tdmis_debug_status_tb
         chain2_request(5'h01, response);
     endtask
 
+    task automatic write_debug_status(input logic [31:0] data);
+        shift_dr(38, chain2_serial_in(1'b1, 5'h01, data),
+                 ignored_scan);
+    endtask
+
     int unsigned errors = 0;
     logic [37:0] active_status;
     logic [37:0] halted_status;
+    logic [4:0] active_expected;
+    logic [4:0] halted_expected;
     bit found_active;
     bit found_halt;
 
@@ -190,11 +200,21 @@ module arm7tdmis_debug_status_tb
             $display("[debug_status] FAIL no active memory transaction observed");
             errors = errors + 1;
         end else begin
+            active_expected = {CPTBIT, 1'b1, 1'b1, 1'b0, 1'b0};
+            write_debug_status(32'h0000_0000);
             read_debug_status(active_status);
             if (active_status[37:32] !== {1'b0, 5'h01}
-                || active_status[4:0] !== {CPTBIT, 1'b1, 1'b1, 1'b0, 1'b0}) begin
-                $display("[debug_status] FAIL active response header/status=%02x/%02x",
-                         active_status[37:32], active_status[4:0]);
+                || active_status[31:0] !== {27'h0, active_expected}) begin
+                $display("[debug_status] FAIL active response after zero write header/status=%02x/%08x",
+                         active_status[37:32], active_status[31:0]);
+                errors = errors + 1;
+            end
+            write_debug_status(32'hFFFF_FFFF);
+            read_debug_status(active_status);
+            if (active_status[37:32] !== {1'b0, 5'h01}
+                || active_status[31:0] !== {27'h0, active_expected}) begin
+                $display("[debug_status] FAIL active response after one write header/status=%02x/%08x",
+                         active_status[37:32], active_status[31:0]);
                 errors = errors + 1;
             end
         end
@@ -210,8 +230,6 @@ module arm7tdmis_debug_status_tb
                 break;
             end
         end
-        DBGRQ = 1'b0;
-        repeat (4) @(posedge CLK); // clear synchronized DBGRQ status
 
         if (!found_halt) begin
             $display("[debug_status] FAIL DBGRQ did not enter debug halt");
@@ -222,15 +240,27 @@ module arm7tdmis_debug_status_tb
                          TRANS, PROT);
                 errors = errors + 1;
             end
+            halted_expected = {CPTBIT, 1'b0, 1'b0, 1'b1, 1'b1};
+            write_debug_status(32'h0000_0000);
             read_debug_status(halted_status);
             if (halted_status[37:32] !== {1'b0, 5'h01}
-                || halted_status[4:0] !== {CPTBIT, 1'b0, 1'b0, 1'b0, 1'b1}) begin
-                $display("[debug_status] FAIL halted response header/status=%02x/%02x (TRANS=%02b PROT=%02b)",
-                         halted_status[37:32], halted_status[4:0],
+                || halted_status[31:0] !== {27'h0, halted_expected}) begin
+                $display("[debug_status] FAIL halted response after zero write header/status=%02x/%08x (TRANS=%02b PROT=%02b)",
+                         halted_status[37:32], halted_status[31:0],
+                         TRANS, PROT);
+                errors = errors + 1;
+            end
+            write_debug_status(32'hFFFF_FFFF);
+            read_debug_status(halted_status);
+            if (halted_status[37:32] !== {1'b0, 5'h01}
+                || halted_status[31:0] !== {27'h0, halted_expected}) begin
+                $display("[debug_status] FAIL halted response after one write header/status=%02x/%08x (TRANS=%02b PROT=%02b)",
+                         halted_status[37:32], halted_status[31:0],
                          TRANS, PROT);
                 errors = errors + 1;
             end
         end
+        DBGRQ = 1'b0;
 
         if (errors != 0)
             $fatal(1, "[debug_status] FAIL (%0d errors)", errors);
