@@ -131,6 +131,31 @@ class CharacterizationContractTest(unittest.TestCase):
                 with self.subTest(document="performance", profile=name, value=value):
                     self.assertIn(value, performance)
 
+        conformance = profiles["conformance"]
+        for value in (
+            f'{conformance["target_clock_mhz"]} MHz',
+            f'{conformance["resources"]["alm"]:,}',
+            f'{conformance["resources"]["register"]:,}',
+            f'+{conformance["minimum_setup_slack_ns"]:.3f} ns',
+            f'+{conformance["minimum_hold_slack_ns"]:.3f} ns',
+        ):
+            with self.subTest(
+                document="integration",
+                profile="conformance",
+                value=value,
+            ):
+                self.assertIn(value, integration)
+        for stale_value in (
+            "uses the same clock and input-window assumptions",
+            "5,005 ALMs",
+            "3,799 registers",
+            "+3.546 ns",
+            "+0.158 ns",
+            "producing clean 180-phase release",
+        ):
+            with self.subTest(stale_value=stale_value):
+                self.assertNotIn(stale_value, integration + tasks)
+
     def test_full_flows_run_power_before_fail_hard_report_check(self) -> None:
         makefile = _read("scripts/Makefile")
         self.assertIn("QUARTUS_POW ?= quartus_pow", makefile)

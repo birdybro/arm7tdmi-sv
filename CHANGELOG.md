@@ -40,7 +40,7 @@ sign-off gate in `TASKS.md` §31.13.
 - Close 234 ARMv4T encoding, Thumb-format, reserved, and implementation-policy
   bins using complete-domain enumeration plus hashed execution evidence, with
   zero uncovered release bins and specification-cited exclusions.
-- Complete the remaining independent validation, formal, toolchain,
+- Complete the remaining independent review, clean toolchain,
   MiSTer-framework, PocketStation, and hardware requirements in `TASKS.md`.
 - Freeze v1.0 only after every release-gate statement has durable evidence.
 

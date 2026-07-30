@@ -287,10 +287,12 @@ The supplied SDC assumes a timing-verified 25 MHz standalone `CLK` and a
 0.25-to-5 ns synchronous input arrival window. A containing MiSTer project
 must replace boundary delays and the clock period with its selected framework
 constraints while retaining equivalent reset/CDC treatment.
-The raw conformance profile uses the same clock and input-window assumptions.
-Its checked Quartus Lite 17.0.2 result is 5,005 ALMs, 3,799 registers, six
-DSPs, no memory bits, +3.546 ns minimum setup slack, and +0.158 ns minimum hold
-slack.
+The raw conformance profile uses a conservative 16 MHz clock and maps the
+applicable Table 8-1 capture-edge percentages into its synchronous boundary
+delays, with a 0.25 ns target-skew hold margin on nominal zero-hold inputs.
+Its checked Quartus Lite 17.0.2 result is 5,038 ALMs, 3,313 registers, six
+DSPs, no memory bits, +1.904 ns minimum setup slack, and +0.161 ns minimum
+hold slack.
 
 ## Evidence and current limits
 

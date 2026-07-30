@@ -3608,10 +3608,11 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   inference, zero MLAB/M10K bits, six DSP blocks, budget headroom, worst-model
   Fmax, and explicitly low-confidence power estimates.
   `verification/fpga_characterization.json` binds every published profile to
-  the producing clean 180-phase release and the SHA-256 of every RTL, project,
-  constraint, top, and checker input. `test_characterization_contract.py` and
-  `test_quartus_report_check.py` freeze the flow, schema, input hashes, and
-  documentation linkage so stale characterization cannot remain checked.
+  the producing clean commit, exact characterization commands, and SHA-256 of
+  every RTL, project, constraint, top, and checker input.
+  `test_characterization_contract.py` and `test_quartus_report_check.py`
+  freeze the flow, schema, input hashes, and cross-document metrics so stale
+  characterization cannot remain checked.
 - [x] **FPGA-006:** Prove synthesis equivalence or run post-synthesis simulation for
   architectural smoke, stalls, reset, endian, exceptions, and wrapper transactions.
   `scripts/postfit_sim.py` creates isolated Quartus Lite 17.0.2 projects for

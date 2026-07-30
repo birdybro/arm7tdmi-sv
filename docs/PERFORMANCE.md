@@ -25,8 +25,8 @@ The minimum reported same-clock Fmax across the slow timing models is
 27.80 MHz for the trimmed canonical-wrapper profile and 16.50 MHz for the
 raw feature-complete profile. These figures have 2.80 MHz and 0.50 MHz
 headroom over their checked 25 MHz and 16 MHz clocks, respectively. They are
-post-fit characterization results for virtual boundary pins, not a promise that a
-particular board or framework will reach those rates.
+post-fit characterization results for virtual boundary pins, not a promise
+that a particular board or framework will reach those rates.
 
 ## Request latency
 
