@@ -18,7 +18,7 @@ release. [`TASKS.md`](../TASKS.md) §31 is the authoritative readiness ledger.
 | GNU Make and Python 3 | Supported orchestration | Exact versions are recorded by every regression and release manifest |
 | Icarus Verilog 13.0 | Not supported | Its SystemVerilog frontend rejects package/type syntax used by this RTL |
 | Pinned OSS CAD Suite Yosys/SymbiYosys/Boolector | Supported formal flow | The checksum-verified bundle closes 14/14 required proofs and 77/77 named reachability covers; this does not claim Yosys as a supported production FPGA synthesis flow |
-| MiSTer framework project | Not yet supported as a released target | A real framework build, clock constraints, bitstream, and board evidence remain MIST-007 and FPGA-002/007 |
+| Official MiSTer template integration | Supported build-qualified target | Pinned upstream commit/tree, `sys_top`, 12.500 MHz CPU PLL clock, complete fitted constraints, positive four-corner timing, resources, and hashed RBF are checked; physical-board qualification remains FPGA-007 |
 | PocketStation system or software images | Not included | System integration, legal user-supplied images, reference comparison, and soak evidence remain MIST-008/009 |
 
 Only the two documented API version-1 surfaces are public compatibility

@@ -5,6 +5,9 @@ sign-off gate in `TASKS.md` §31.13.
 
 ## [Unreleased]
 
+- Add a pinned official MiSTer-template `sys_top` integration and fail-hard
+  Quartus 17.0.2 build gate with real HDMI/audio/I/O constraints, positive
+  four-corner timing, zero unconstrained paths, and archived report/RBF hashes.
 - Add an opt-in schema-1.0 architectural save-state handshake to the MiSTer
   wrapper, with exact quiescence, all physical register banks, deterministic
   replay, and Thumb BL-boundary restore evidence.
@@ -40,8 +43,8 @@ sign-off gate in `TASKS.md` §31.13.
 - Close 234 ARMv4T encoding, Thumb-format, reserved, and implementation-policy
   bins using complete-domain enumeration plus hashed execution evidence, with
   zero uncovered release bins and specification-cited exclusions.
-- Complete the remaining independent review, clean toolchain,
-  MiSTer-framework, PocketStation, and hardware requirements in `TASKS.md`.
+- Complete the remaining independent review, clean toolchain, PocketStation,
+  and physical-hardware requirements in `TASKS.md`.
 - Freeze v1.0 only after every release-gate statement has durable evidence.
 
 ## [0.9.0-dev] - 2026-07-29

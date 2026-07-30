@@ -3286,9 +3286,29 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   stalled store, reads/mutates/restores every word, proves identical accepted
   request traces and RAM results across two restores, and imports the exact
   Thumb BL prefix/suffix boundary to check target and LR.
-- [ ] **MIST-007:** Integrate into a real MiSTer framework build targeting the selected
+- [x] **MIST-007:** Integrate into a real MiSTer framework build targeting the selected
   Cyclone V device. Archive the exact framework commit, build command, timing report,
   resource report, and generated bitstream hash.
+  `examples/mister_framework/arm7tdmi_mister_emu.sv` integrates the canonical
+  wrapper and generic SoC into the official
+  `MiSTer-devel/Template_MiSTer` project pinned at commit
+  `69b8a2acc6d84dd313b5abcba6a17155287ed3d8` and tree
+  `b8b642eae80716da93754a3e778a5daa3313350b`. A clean
+  `make -C scripts mister-framework` invokes
+  `quartus_sh --flow compile Template` with Quartus Lite 17.0.2, top
+  `sys_top`, device `5CSEBA6U23I7`, exact 12.500 MHz core clock, and pinned
+  fitter seed 4. The checked fit uses 14,001 ALMs, 21,480 registers,
+  384,521 memory bits, 39 DSP blocks, and three PLLs; four-corner TimeQuest
+  reports +0.312 ns minimum setup, +0.075 ns minimum hold, and zero in every
+  unconstrained setup/hold category. The 2,665,604-byte `Template.rbf` has
+  SHA-256
+  `b071a4bcff9779bc8b6973e55fff0cc4297ab88806855865cf6cf931ffd0429b`.
+  Schema `arm7tdmis-mister-framework-v1` records the exact source commit,
+  source hash, upstream identity, tool, command, timing/resources, reviewed
+  upstream constraint diagnostics, and hashes the build log, map/fit/STA/
+  assembly reports, summaries, and RBF. Full regression requires this phase;
+  `scripts/release_evidence.py` revalidates every field and file hash and
+  includes them in the commit-addressed evidence archive.
 - [ ] **MIST-008:** Create a PocketStation reference system using legally supplied/
   user-provided BIOS and software images. Implement or stub the documented SRAM, flash,
   interrupt, timer, LCD, sound, and I/O behavior sufficiently to boot; check milestone

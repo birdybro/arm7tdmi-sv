@@ -57,7 +57,7 @@ class TrmCoverageContractTest(unittest.TestCase):
             trm_coverage.validate_manifest(unknown)
 
         unchecked = copy.deepcopy(self.manifest)
-        unchecked["coverage_groups"][0]["requirements"] = ["MIST-007"]
+        unchecked["coverage_groups"][0]["requirements"] = ["MIST-008"]
         with self.assertRaisesRegex(ValueError, "unchecked requirement"):
             trm_coverage.validate_manifest(unchecked)
 

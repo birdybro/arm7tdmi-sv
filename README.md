@@ -31,8 +31,8 @@ The status words used here have the §31 meanings:
 | Raw bus and cycle behavior | **VERIFIED** for §31.5. Endian lanes, CLKEN/ABORT behavior, LOCK/DMORE, redirects, exception cycles, every Chapter 7 family, and reusable protocol assertions are linked to full-phase or specialized scoreboards. |
 | External coprocessor and CP14 | **VERIFIED** for §31.6: absent/ready/busy/abandonment, MCR/MRC/CDP/LDC/STC timing, CP14 DCC and Debug Abort Status, corrected errata 14/15 policy, and absence of internal CP15 are tested. |
 | EmbeddedICE-RT, JTAG, and trace boundary | **VERIFIED** for §31.7/§31.8, including debugger-issued system-speed aborts, the §5.25 Debug Status `RO/WI` conflict disposition, the project-specific same-clock virtual-TCK transport, and the ARM-side ETM7 boundary. Asynchronous pod/GDB execution and an ETM macrocell are outside the selected CPU-boundary profile and are not claimed. |
-| FPGA/MiSTer package | **PARTIAL**. The canonical valid/ready wrapper, versioned save states, two public bus adapters, option profiles, synchronized reset/CDC contract, structural CDC/RDC audit, independent all-top Slang lint, DMA arbitration, portable QIP/file lists, and two checked Quartus 17.0.2 flows exist. A real framework build, PocketStation integration, and hardware evidence remain open. |
-| Release evidence | **PARTIAL**. Regressions fail hard; an independent 77-retirement QEMU differential, 32 × 256 constrained-random campaign, 32-seed all-class external-event campaign, pinned public suite and GCC ARM/Thumb/interworking execution, a 256-seed sanitizer/X-state soak, exact Chapter 7 legal-equivalence cross coverage, exhaustive encoding/policy required-bin closure, an exhaustive whole-TRM inventory, complete Chapter 8 AC timing disposition, 14 formal proofs, 77 formal covers, bidirectional requirement/source traceability, machine-readable reports, mutation tests, and a hashed evidence archive exist. Independent review and real-framework/board/system release gates remain open. |
+| FPGA/MiSTer package | **PARTIAL**. The canonical valid/ready wrapper, versioned save states, two public bus adapters, option profiles, synchronized reset/CDC contract, structural CDC/RDC audit, independent all-top Slang lint, DMA arbitration, portable QIP/file lists, two checked standalone Quartus 17.0.2 flows, and a pinned, fully constrained official MiSTer-framework bitstream build exist. PocketStation integration and physical hardware evidence remain open. |
+| Release evidence | **PARTIAL**. Regressions fail hard; an independent 77-retirement QEMU differential, 32 × 256 constrained-random campaign, 32-seed all-class external-event campaign, pinned public suite and GCC ARM/Thumb/interworking execution, a 256-seed sanitizer/X-state soak, exact Chapter 7 legal-equivalence cross coverage, exhaustive encoding/policy required-bin closure, an exhaustive whole-TRM inventory, complete Chapter 8 AC timing disposition, 14 formal proofs, 77 formal covers, bidirectional requirement/source traceability, a real-framework fit/STA/RBF report, machine-readable reports, mutation tests, and a hashed evidence archive exist. Independent review and board/system release gates remain open. |
 
 No unchecked §31 requirement is implied by a checked neighboring row. In
 particular, this repository is not yet advertised as a drop-in, issue-free
@@ -67,8 +67,10 @@ The portable FPGA source package is:
 - checked standalone and raw-conformance characterization projects under
   [`fpga/`](fpga/).
 
-These files are an integration package, not a complete MiSTer framework or
-PocketStation subsystem.
+The checked example under
+[`examples/mister_framework/`](examples/mister_framework/) builds this
+package in a pinned official MiSTer template. It is a CPU/framework build
+qualification, not a PocketStation subsystem or physical-board result.
 
 ## Implemented contracts
 

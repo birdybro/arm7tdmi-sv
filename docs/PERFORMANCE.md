@@ -1,14 +1,24 @@
 # FPGA performance and integration budget
 
-This is the checked version `0.9.0-dev` characterization, not a guarantee
-for an enclosing MiSTer project. All profiles target Cyclone V
-`5CSEBA6U23I7` with Quartus Lite 17.0.2 and the supplied standalone
-constraints. A framework build must repeat fit, timing, and power analysis
-with its own clocks, placement, I/O, memory, and activity.
+This is the checked version `0.9.0-dev` characterization. All profiles target
+Cyclone V `5CSEBA6U23I7` with Quartus Lite 17.0.2. The standalone profiles
+use their supplied virtual-boundary constraints; the separate official
+MiSTer-template result uses its real framework clocks, placement, and I/O.
 The immutable machine-readable snapshot is
 `verification/fpga_characterization.json`; it binds these published results
 to the SHA-256 of every RTL, project, constraint, top, and report-checker
 input used by the three fresh characterization flows at commit `67ff42444d0d`.
+
+The pinned official MiSTer template at commit
+`69b8a2acc6d84dd313b5abcba6a17155287ed3d8` builds `sys_top` with a
+12.500 MHz core clock and fitter seed 4. Its checked full-project result is
+14,001 ALMs, 21,480 registers, 384,521 memory bits, 39 DSP blocks, and three
+PLLs, with +0.312 ns minimum setup and +0.075 ns minimum hold slack across
+four corners. This includes the complete framework, not just the CPU, so its
+resources are not comparable to the standalone rows below. The build report
+and 2,665,604-byte RBF (SHA-256
+`b071a4bcff9779bc8b6973e55fff0cc4297ab88806855865cf6cf931ffd0429b`)
+are validated and archived by the release-evidence flow.
 
 ## Clock and CPU enable
 

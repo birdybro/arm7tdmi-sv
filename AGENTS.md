@@ -15,10 +15,11 @@ historical baseline table in §31.1 forward as current state. Substantial fixes 
 landed since that baseline: the ARM/Thumb, exception/abort, coprocessor/CP14,
 EmbeddedICE-RT, and ETM-facing directed requirements are checked; regressions fail
 hard and publish evidence; both FPGA characterization profiles pass checked
-Quartus flows; and Chapter 8 has a complete target-specific AC timing
-disposition. Current open categories are the unchecked §31 items:
-framework/PocketStation integration, selected-framework timing, pinned clean-checkout
-reproducibility, hardware bring-up, and independent review/final freezing.
+Quartus flows; Chapter 8 has a complete target-specific AC timing
+disposition; and the pinned official MiSTer framework fits, times, and emits
+a checked RBF. Current open categories are the unchecked §31 items:
+PocketStation integration/soak, pinned clean-checkout reproducibility,
+hardware bring-up, and independent review/final freezing.
 Consult each checkbox and its attached evidence before making a narrower
 claim.
 

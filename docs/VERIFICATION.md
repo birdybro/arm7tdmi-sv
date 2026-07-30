@@ -201,9 +201,10 @@ After regression and coverage have both run on the same clean commit,
 clean-tree markers, and exact commit identity. It emits:
 
 - `reports/generated/release-manifest.json`, with size and SHA-256 for every
-  included regression, TRM-inventory, traceability, and coverage report,
-  phase log, and
-  coverage database, plus the semantic
+  included regression, TRM-inventory, traceability, coverage, and (when the
+  mandatory full-regression phase runs) MiSTer-framework report, every
+  map/fit/STA/assembly artifact and RBF, phase log, and coverage database,
+  plus the semantic
   project version, Git tree hash, regression source hash, canonical tool
   version hash, available tool-executable hashes, and specification/license
   hashes;

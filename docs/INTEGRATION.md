@@ -294,6 +294,17 @@ Its checked Quartus Lite 17.0.2 result is 5,038 ALMs, 3,313 registers, six
 DSPs, no memory bits, +1.904 ns minimum setup slack, and +0.161 ns minimum
 hold slack.
 
+`make -C scripts mister-framework` additionally checks the package in the
+official `MiSTer-devel/Template_MiSTer` project pinned at commit
+`69b8a2acc6d84dd313b5abcba6a17155287ed3d8`. It injects the public package,
+the repository's `emu` integration, and the real-boundary SDC without
+modifying the cached upstream checkout, then compiles `sys_top` for
+`5CSEBA6U23I7`. The report gate requires the exact 12.500 MHz CPU PLL clock
+and fitter seed 4, complete timing coverage, positive four-corner slack,
+reviewed upstream-only optional constraint diagnostics, and a nonempty RBF.
+The machine-readable report records all report and bitstream hashes for
+release archiving.
+
 ## Evidence and current limits
 
 `make -C scripts lint-mister` elaborates this wrapper as the synthesis top.
@@ -336,7 +347,7 @@ architectural boundary between the two Thumb BL halfwords.
 The following are intentionally not claimed by this version of the wrapper:
 
 - a PocketStation subsystem or BIOS/software bundle;
-- MiSTer framework integration, fitted/timed, or on-board evidence.
+- physical MiSTer/PocketStation board evidence.
 
 Those remain visible release blockers in `TASKS.md` rather than implicit
 features of the canonical memory handshake.
