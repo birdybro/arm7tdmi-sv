@@ -123,6 +123,32 @@ weaken either group.
   target-specific 0–5 ns output window. No ARM percentage is invented for
   signals absent from Table 8-1.
 
+## Selected MiSTer framework timing
+
+The real framework integration makes a separate, board-specific timing
+choice. It targets the official MiSTer `Template_MiSTer` project on
+`5CSEBA6U23I7`, with the core PLL producing an exact 12.500 MHz / 80.000 ns
+`clk_sys`. [`examples/mister_framework/Template.sdc`](../examples/mister_framework/Template.sdc)
+layers these constraints on the framework's own SDC:
+
+- derived PLL clocks and uncertainty for all framework domains;
+- both 148.54 MHz scaled-video and 12.5 MHz direct-video capture clocks at
+  the HDMI DDIO output, including the forwarded-clock inversion and only the
+  two inactive clock-mux cross-pair exceptions;
+- ADV7513 video setup/hold requirements of 1.0/0.7 ns;
+- audio MCLK, the framework's divide-by-16 I2S clock, and ADV7513
+  I2S/LRCLK setup/hold requirements of 2.0/2.0 ns; and
+- exact, enumerated exceptions for asynchronous open-drain/status inputs and
+  non-clocked board/status outputs, with no catch-all port wildcard.
+
+A clean Quartus Lite 17.0.2 four-corner fit at fitter seed 4 reports
++0.312 ns minimum setup and +0.075 ns minimum hold slack. All five TimeQuest
+unconstrained categories—clocks, input ports, input-port paths, output ports,
+and output-port paths—are zero for setup and hold. The checked parser permits
+only the four exact optional-filter diagnostics already present in the pinned
+upstream `sys_top.sdc`; any additional ignored constraint or critical warning
+fails the build.
+
 ## Reproducing the contract
 
 Run:
@@ -130,6 +156,7 @@ Run:
 ```sh
 make -C scripts ac-timing
 make -C scripts quartus-conformance-compile
+make -C scripts mister-framework
 ```
 
 The first command validates all 37 rows, all five figures, the exact PDF
@@ -138,4 +165,5 @@ physical-scope caveat, integration ownership, and the corresponding active
 SDC commands. It writes `reports/generated/ac-timing-report.json` with schema
 `arm7tdmis-ac-timing-v1`. The second runs fitted TimeQuest analysis; the
 existing report checker rejects negative setup/hold slack and unconstrained
-paths.
+paths. The third performs the pinned official-framework compile and applies
+the stricter real-framework report checks described above.

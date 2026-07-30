@@ -3551,15 +3551,24 @@ FR002-PRDC-002719 7.0, not only the four that still affect r4p3:
   synchronous inputs, and contains no chip-wrapper DFT pins.
   `scripts/tests/test_sdc_contract.py` checks those invariants and separately
   checks the canonical FPGA wrapper's real clock/async boundary.
-- [ ] **FPGA-002:** Choose exact MiSTer/Cyclone V part and board clock. Constrain all
+- [x] **FPGA-002:** Choose exact MiSTer/Cyclone V part and board clock. Constrain all
   real clocks, generated enables/interfaces, I/O delays, async controls, reset recovery/
   removal, and legitimate CDC paths. Report zero unconstrained endpoints.
-  The portable trimmed characterization now targets `5CSEBA6U23I7`, uses one
-  representative global clock at 25 MHz, constrains a documented 0.25-to-5 ns
-  synchronous input window and all output boundaries, false-paths only reset and
-  two-flop asynchronous event inputs, and reports zero unconstrained setup/hold
-  endpoints. This does not close the task: the selected real MiSTer framework's
-  PLL clocks, generated clocks, and complete top-level I/O still need constraints.
+  The selected official MiSTer template targets `5CSEBA6U23I7`; its PLL supplies
+  the CPU's exact 12.500 MHz / 80.000 ns `clk_sys`. The integration SDC derives
+  the framework PLL clocks, models both runtime-selected HDMI launch/capture
+  pairs, the forwarded DDIO clock, audio MCLK and divided I2S clock, and the
+  ADV7513 video and audio setup/hold requirements. It enumerates each genuinely
+  asynchronous open-drain/status input and each non-clocked board/status output
+  instead of using a wildcard waiver. The clean Quartus Lite 17.0.2 four-corner
+  fit at fitter seed 4 reports +0.312 ns minimum setup and +0.075 ns minimum
+  hold slack, with zero unconstrained clocks, input ports, input-port paths,
+  output ports, and output-port paths. `scripts/mister_framework_build.py`
+  rejects a wrong core clock hierarchy/frequency, wrong seed, negative slack,
+  critical warning, unexpected ignored constraint, any nonzero unconstrained
+  category, or missing bitstream; its mutation tests are mandatory in
+  `make -C scripts harness-unit`. `docs/AC_TIMING.md` separates these real-board
+  constraints from the TRM's provisional synthesized-macrocell percentages.
 - [x] **FPGA-003:** Run clean Quartus analysis/synthesis, fit, TimeQuest at all required
   corners, and assembly for both conformance and trimmed MiSTer profiles. Treat critical
   warnings as failures.
